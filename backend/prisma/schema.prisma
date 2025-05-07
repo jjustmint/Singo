@@ -1,0 +1,37 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  user_id  Int     @id(map: "user_id") @default(autoincrement())
+  username String  @unique @db.VarChar(50)
+  password String
+  user_key String? @db.VarChar(50)
+}
+
+model song {
+  song_id          Int                @id @default(autoincrement())
+  title            String
+  key_signature    String             @db.VarChar(50)
+  audio_data       Bytes
+  is_original      Boolean?           @default(false)
+  parent_song_id   Int?
+  vocal_only       Bytes?
+  song             song?              @relation("songTosong", fields: [parent_song_id], references: [song_id], onDelete: Cascade, onUpdate: NoAction)
+  other_song       song[]             @relation("songTosong")
+  songaudioversion songaudioversion[]
+}
+
+model songaudioversion {
+  version_id   Int    @id @default(autoincrement())
+  song_id      Int?
+  version_type String @db.VarChar(50)
+  audio_data   Bytes
+  song         song?  @relation(fields: [song_id], references: [song_id], onDelete: Cascade, onUpdate: NoAction)
+}
