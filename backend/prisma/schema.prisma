@@ -13,51 +13,50 @@ model User {
   username  String      @unique @db.VarChar(50)
   password  String
   user_key  String?     @db.VarChar(50)
+  photo     String?     @db.VarChar
   recording recording[]
 }
 
 model song {
-  song_id          Int                @id @default(autoincrement())
-  title            String
-  key_signature    String             @db.VarChar(50)
-  audio_data       Bytes
-  is_original      Boolean?           @default(false)
-  parent_song_id   Int?
-  vocal_only       Bytes?
-  recording        recording[]
-  song             song?              @relation("songTosong", fields: [parent_song_id], references: [song_id], onDelete: Cascade, onUpdate: NoAction)
-  other_song       song[]             @relation("songTosong")
-  songaudioversion songaudioversion[]
+  song_id        Int             @id @default(autoincrement())
+  title          String
+  key_signature  String          @db.VarChar(50)
+  is_original    Boolean?        @default(false)
+  parent_song_id Int?
+  lyrics         String?
+  audio_version  audio_version[]
+  song           song?           @relation("songTosong", fields: [parent_song_id], references: [song_id], onDelete: Cascade, onUpdate: NoAction)
+  other_song     song[]          @relation("songTosong")
 }
 
-model songaudioversion {
-  version_id   Int    @id @default(autoincrement())
-  song_id      Int?
-  version_type String @db.VarChar(50)
-  audio_data   Bytes
-  song         song?  @relation(fields: [song_id], references: [song_id], onDelete: Cascade, onUpdate: NoAction)
+model recording {
+  record_id       Int            @id @default(autoincrement())
+  user_id         Int?
+  key             String?        @db.VarChar(50)
+  user_audio_path String         @db.VarChar
+  accuracy_score  Float?
+  created_at      DateTime?      @default(now()) @db.Timestamp(6)
+  version_id      Int?
+  mistakes        mistakes[]
+  User            User?          @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+  audio_version   audio_version? @relation(fields: [version_id], references: [version_id], onDelete: NoAction, onUpdate: NoAction, map: "recording_version_id_fk")
 }
 
-model missedpart {
-  missed_id       Int        @id @default(autoincrement())
+model audio_version {
+  version_id    Int         @id(map: "songaudioversion_pkey") @default(autoincrement())
+  song_id       Int?
+  instru_path   String      @db.VarChar(50)
+  ori_path      String?     @db.VarChar
+  key_signature String      @db.VarChar(50)
+  song          song?       @relation(fields: [song_id], references: [song_id], onDelete: Cascade, onUpdate: NoAction, map: "songaudioversion_song_id_fkey")
+  recording     recording[]
+}
+
+model mistakes {
+  missed_id       Int        @id(map: "missedpart_pkey") @default(autoincrement())
   recording_id    Int?
   timestamp_start Float?
   timestamp_end   Float?
   lyric_snippet   String?
-  recording       recording? @relation(fields: [recording_id], references: [recording_id], onDelete: Cascade, onUpdate: NoAction)
-}
-
-model recording {
-  recording_id        Int          @id @default(autoincrement())
-  user_id             Int?
-  song_id             Int?
-  detected_key        String?      @db.VarChar(50)
-  adjusted_key        String?      @db.VarChar(50)
-  adjusted_audio_data Bytes?
-  user_audio_data     Bytes
-  accuracy_score      Float?
-  created_at          DateTime?    @default(now()) @db.Timestamp(6)
-  missedpart          missedpart[]
-  song                song?        @relation(fields: [song_id], references: [song_id], onUpdate: NoAction)
-  User                User?        @relation(fields: [user_id], references: [user_id], onDelete: Cascade, onUpdate: NoAction)
+  recording       recording? @relation(fields: [recording_id], references: [record_id], onDelete: Cascade, onUpdate: NoAction, map: "missedpart_recording_id_fkey")
 }

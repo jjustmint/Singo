@@ -1,7 +1,10 @@
+import { Data } from './../../../node_modules/hono/dist/types/context.d';
 import { Context } from "hono"
 import { ConstructResponse } from "../../utils/responseConstructor"
 import { RegisterPayload } from "../../types/payload/auth/register"
 import * as userModel from "../../models/user.model"
+
+const UPLOAD_BASE_PATH = process.env.UPLOAD_BASE_PATH || 'data/uploads/users';
 
 const RegisterController = async (c: Context) => {
     try {
@@ -16,6 +19,9 @@ const RegisterController = async (c: Context) => {
         const hashedPassword = await Bun.password.hash(body.password);
 
         const newUser = await userModel.createNewUser(body.username, hashedPassword);
+
+        const userId = newUser.user_id;
+        userModel.createUserFolder(userId);
 
         return c.json(ConstructResponse(true, "Successfully Create new user", newUser), 201)
         
