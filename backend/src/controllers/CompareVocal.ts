@@ -1,11 +1,8 @@
+import { updateScore, uploadMistakes } from './../models/CompareVocal';
 import { Context } from "hono"
 import { ConstructResponse } from "../utils/responseConstructor"
-import { exec } from "child_process"
-import { promisify } from "util"
-import { CompareVocalPayload, FindSongIdPayload } from "../types/CompareVocal"
+import { FindSongIdPayload } from "../types/CompareVocal"
 import { findUserRecordPath, findVersionPath } from "../models/CompareVocal"
-
-const execAsync = promisify(exec)
 
 export const CompareVocalController = async (c: Context) => {
     try{
@@ -31,16 +28,17 @@ export const CompareVocalController = async (c: Context) => {
             })
         })
         const result = await response.json()
+        await updateScore(body.recordId, result?.data?.finalScore)
+        await uploadMistakes(body.recordId, result?.data?.mistakes)
 
         if (!response.ok || !result.success) {
             return c.json(
                 ConstructResponse(false, result.message || "Error from compare API", 400)
             )
         }
-
         // Success response
         return c.json(
-            ConstructResponse(true, result, 200)
+            ConstructResponse(true, "success at updating score", result.data)
         )
     }catch (e) {
         console.error("Execution error:", e)

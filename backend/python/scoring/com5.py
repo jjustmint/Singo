@@ -67,15 +67,23 @@ def compute_timing_penalty(path, sr, hop_length=512, max_allowed_delay=0.8, pena
 def detect_mistake_points(original_chroma, user_chroma, path, sr, hop_length=512, min_gap=0.25, energy_threshold=0.15, semitone_threshold=1):
     mistakes = []
     current_mistake = None
-    max_energy = np.max(np.sum(user_chroma, axis=0))
-    dynamic_threshold = max_energy * energy_threshold
+
+    max_energy_user = np.max(np.sum(user_chroma, axis=0))
+    max_energy_orig = np.max(np.sum(original_chroma, axis=0))
+    dynamic_threshold_user = max_energy_user * energy_threshold
+    dynamic_threshold_orig = max_energy_orig * energy_threshold
 
     for orig_idx, user_idx in path:
         if orig_idx >= original_chroma.shape[1] or user_idx >= user_chroma.shape[1]:
             continue
 
-        energy = np.sum(user_chroma[:, user_idx])
+        energy_user = np.sum(user_chroma[:, user_idx])
+        energy_orig = np.sum(original_chroma[:, orig_idx])
         time = user_idx * hop_length / sr
+
+        # 🎤 Skip frames where both are silent (no vocals)
+        if energy_user < dynamic_threshold_user and energy_orig < dynamic_threshold_orig:
+            continue  
 
         orig_note_idx = np.argmax(original_chroma[:, orig_idx])
         user_note_idx = np.argmax(user_chroma[:, user_idx])
@@ -84,13 +92,15 @@ def detect_mistake_points(original_chroma, user_chroma, path, sr, hop_length=512
         user_midi = 60 + user_note_idx
         semitone_diff = abs(orig_midi - user_midi)
 
-        if energy < dynamic_threshold:
+        # Mistake conditions
+        if energy_user < dynamic_threshold_user and energy_orig > dynamic_threshold_orig:
             reason = "missing"
         elif semitone_diff >= semitone_threshold and not is_harmonic(orig_midi, user_midi):
             reason = "off-key"
         else:
             reason = None
 
+        # Same logic as before to merge continuous mistakes
         if reason:
             if current_mistake and current_mistake['reason'] == reason:
                 current_mistake['end_time'] = time
@@ -148,8 +158,14 @@ async def compare(request: CompareRequest):
         # Mistake detection
         mistakes = []
         for mistake in detect_mistake_points(original_chroma, user_chroma, path, sr1):
-            duration = mistake['duration']
-            reason = mistake['reason']
+            reason = mistake["reason"]
+            duration = mistake["duration"]
+            # pitch_diff = mistake["pitch_diff"]
+            # penalty = mistake["penalty"]
+
+            # You need to already track timestamp when mistake happens
+            start_time = mistake.get("start_time", 0)   # 👈 use your alignment timestamp
+            end_time = start_time + duration
 
             if reason == 'missing':
                 pitch_diff = 0.0
@@ -164,6 +180,8 @@ async def compare(request: CompareRequest):
 
             mistakes.append({
                 "reason": reason,
+                "start_time": round(start_time, 2),  # 👈 keep timestamp
+                "end_time": round(end_time, 2),      # 👈 add end time
                 "duration": duration,
                 "pitch_diff": round(pitch_diff, 2),
                 "penalty": round(penalty, 2)

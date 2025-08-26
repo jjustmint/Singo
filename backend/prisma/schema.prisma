@@ -57,6 +57,7 @@ model mistakes {
   recording_id    Int?
   timestamp_start Float?
   timestamp_end   Float?
-  lyric_snippet   String?
+  reason          String?    @db.VarChar(255)
+  pitch_diff      Int?
   recording       recording? @relation(fields: [recording_id], references: [record_id], onDelete: Cascade, onUpdate: NoAction, map: "missedpart_recording_id_fkey")
 }
