@@ -1,12 +1,12 @@
 import { Hono } from "hono";
-import { PrivateController } from "../controllers/test/private";
 import { jwtMiddleware } from "../middlewares/jwt";
 import { UpdateKeyController } from "../controllers/updateKey";
+import { CompareVocalController } from "../controllers/CompareVocal";
 
 
 const privateRouter = new Hono()
 
-privateRouter.get("/hehe", jwtMiddleware, PrivateController)
-privateRouter.post("/updatekey", jwtMiddleware, UpdateKeyController )
+privateRouter.get("/updatekey", jwtMiddleware, UpdateKeyController )
+privateRouter.post("/comparevocal", jwtMiddleware, CompareVocalController);
 
 export { privateRouter }
