@@ -1,4 +1,6 @@
+import path = require('path');
 import { prisma } from '../'
+import * as fs from 'fs';
 
 export const getByUsername = async (username: string) => {
     const data = await prisma.user.findFirst({
@@ -21,7 +23,7 @@ export const createNewUser = async (username: string, password: string) => {
     return newUser
 }
 
-export const updateKey = async (userId: number, key: string) => {
+export const updateKey = async (userId: number, key: any) => {
     const updatedUser = await prisma.user.update({
       where: {
         user_id: userId,
@@ -31,5 +33,18 @@ export const updateKey = async (userId: number, key: string) => {
       },
     });
   
-    return updatedUser;
+    return updatedUser.user_key;
   };  
+
+  export const createUserFolder = (userId: number) => {
+    const basePath = path.resolve('data/uploads/users');
+    const userFolderPath = path.join(basePath, String(userId));
+  
+    if (!fs.existsSync(userFolderPath)) {
+      fs.mkdirSync(userFolderPath, { recursive: true });
+      console.log(`Created folder: ${userFolderPath}`);
+    } else {
+      console.log(`Folder already exists: ${userFolderPath}`);
+    }
+  };
+  
