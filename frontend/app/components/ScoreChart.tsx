@@ -1,65 +1,77 @@
 import React from "react";
-import { View, Text, Image, StyleSheet, TouchableOpacity } from "react-native";
-import { AntDesign } from "@expo/vector-icons";
+import { View, Text } from "react-native";
+import { Feather } from "@expo/vector-icons";
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
 
-interface Props {
-  title: string;
-  artist: string;
-  image: string;
-}
-
-const Recent: React.FC<Props> = ({ title, artist, image }) => {
+export default function ScoreChart() {
   return (
-    <View style={styles.container}>
-      <Text style={styles.header}>Recent</Text>
-      <View style={styles.card}>
-        <Image source={{ uri: "https://i.ytimg.com/vi/eCZDaH0WvPU/maxresdefault.jpg" }} style={styles.image} />
-        <View style={styles.overlay}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.artist}>{artist}</Text>
+    <View
+      style={{
+        flexDirection: "row",
+        justifyContent: "center",
+        alignItems: "flex-end",
+        marginTop: 10,
+      }}
+    >
+      {/* 2nd place */}
+      <View style={{ alignItems: "center", marginHorizontal: 10 }}>
+        <FontAwesome6 name="medal" size={24} color="#C0C0C0" />
+        <Text style={{ color: "white", fontWeight: "bold", fontSize: 35, marginBottom: 4 }}>
+          2
+        </Text>
+        <View
+          style={{
+            width: 80,
+            height: 140,
+            borderRadius: 12,
+            backgroundColor: "#8b5cf6",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <Text style={{ fontSize: 20, fontWeight: "bold", color: "white" }}>420</Text>
+        </View>
+      </View>
+
+      {/* 1st place */}
+      <View style={{ alignItems: "center", marginHorizontal: 10 }}>
+      <FontAwesome6 name="crown" size={30} color="#facc15" />
+        <Text style={{ color: "#FFD700", fontWeight: "bold", fontSize: 50, marginBottom: 4 }}>
+          1
+        </Text>
+        <View
+          style={{
+            width: 80,
+            height: 180,
+            borderRadius: 12,
+            backgroundColor: "#ec4899",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <Text style={{ fontSize: 20, fontWeight: "bold", color: "white" }}>500</Text>
+        </View>
+      </View>
+
+      {/* 3rd place */}
+      <View style={{ alignItems: "center", marginHorizontal: 10 }}>
+      <FontAwesome6 name="medal" size={24} color="#CD7F32" />
+        <Text style={{ color: "white", fontWeight: "bold", fontSize: 25, marginBottom: 4 }}>
+          3
+        </Text>
+        <View
+          style={{
+            width: 80,
+            height: 100,
+            borderRadius: 12,
+            backgroundColor: "#3b82f6",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <Text style={{ fontSize: 20, fontWeight: "bold", color: "white" }}>350</Text>
         </View>
       </View>
     </View>
   );
-};
-
-const styles = StyleSheet.create({
-  container: {
-    marginTop: 20,
-  },
-  header: {
-    color: "#fff",
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  card: {
-    position: "relative",
-  },
-  image: {
-    width: "100%",
-    height: 188,
-    borderRadius: 12,
-  },
-  overlay: {
-    position: "absolute",
-    bottom: 10,
-    left: 10,
-  },
-  title: {
-    color: "#fff",
-    fontSize: 32,
-    fontWeight: "bold",
-  },
-  artist: {
-    color: "#ddd",
-    fontSize: 24,
-  },
-  actions: {
-    flexDirection: "row",
-    marginTop: 8,
-    gap: 16,
-  },
-});
-
-export default Recent;
+}
