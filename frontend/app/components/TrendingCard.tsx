@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -6,8 +6,17 @@ import {
   TouchableOpacity,
   StyleSheet,
   FlatList,
-} from 'react-native';
-import { FontAwesome } from '@expo/vector-icons';
+} from "react-native";
+import { FontAwesome } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import { StackNavigationProp } from "@react-navigation/stack";
+
+type RootStackParamList = {
+  MainTabs: undefined;
+  ChooseKey: { song: { id: string; songName: string; artist: string; image: string } };
+};
+
+type NavigationProp = StackNavigationProp<RootStackParamList>;
 
 interface Song {
   id: string;
@@ -19,76 +28,40 @@ interface Song {
 // Mock Data
 const mockSongs: Song[] = [
   {
-    id: '1',
-    image: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg',
-    songName: 'Shape of You',
-    artist: 'Ed Sheeran',
+    id: "1",
+    image: "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg",
+    songName: "Shape of You",
+    artist: "Ed Sheeran",
   },
   {
-    id: '2',
-    image: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg',
-    songName: 'Blinding Lights',
-    artist: 'The Weeknd',
+    id: "2",
+    image: "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg",
+    songName: "Blinding Lights",
+    artist: "The Weeknd",
   },
   {
-    id: '3',
-    image: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg',
-    songName: 'Levitating',
-    artist: 'Dua Lipa',
-  },
-  {
-    id: '4',
-    image: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg',
-    songName: 'Bad Guy',
-    artist: 'Billie Eilish',
-  },
-  {
-    id: '5',
-    image: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg',
-    songName: 'Peaches',
-    artist: 'Justin Bieber',
-  },
-  {
-    id: '6',
-    image: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg',
-    songName: 'Stay',
-    artist: 'The Kid LAROI',
-  },
-  {
-    id: '7',
-    image: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg',
-    songName: 'Industry Baby',
-    artist: 'Lil Nas X',
-  },
-  {
-    id: '8',
-    image: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg',
-    songName: 'Easy On Me',
-    artist: 'Adele',
-  },
-  {
-    id: '9',
-    image: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg',
-    songName: 'Heat Waves',
-    artist: 'Glass Animals',
-  },
-  {
-    id: '10',
-    image: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg',
-    songName: 'As It Was',
-    artist: 'Harry Styles',
+    id: "3",
+    image: "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg",
+    songName: "Another Song",
+    artist: "Another Artist",
   },
 ];
 
 const TrendingCard: React.FC<{ song: Song }> = ({ song }) => {
   const [isPlaying, setIsPlaying] = useState(false);
+  const navigation = useNavigation<NavigationProp>();
 
-  const togglePlay = () => {
+  const togglePlay = (e: any) => {
+    e.stopPropagation(); // Prevent triggering handlePress
     setIsPlaying(!isPlaying);
   };
 
+  const handlePress = () => {
+    navigation.navigate("ChooseKey", { song });
+  };
+
   return (
-    <View style={styles.card}>
+    <TouchableOpacity style={styles.card} onPress={handlePress}>
       <Image source={{ uri: song.image }} style={styles.image} />
       <View style={styles.rightContainer}>
         <View style={styles.textContainer}>
@@ -100,10 +73,14 @@ const TrendingCard: React.FC<{ song: Song }> = ({ song }) => {
           </Text>
         </View>
         <TouchableOpacity style={styles.iconButton} onPress={togglePlay}>
-          <FontAwesome name={isPlaying ? 'pause' : 'play'} size={16} color="#5E72FC" />
+          <FontAwesome
+            name={isPlaying ? "pause" : "play"}
+            size={16}
+            color="#5E72FC"
+          />
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 
@@ -120,8 +97,8 @@ const TrendingList: React.FC = () => {
 
 const styles = StyleSheet.create({
   card: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    flexDirection: "row",
+    alignItems: "flex-start",
     padding: 10,
     marginVertical: 10,
     elevation: 1,
@@ -134,34 +111,34 @@ const styles = StyleSheet.create({
   },
   rightContainer: {
     flex: 1,
-    justifyContent: 'space-between',
-    flexDirection: 'column',
+    justifyContent: "space-between",
+    flexDirection: "column",
     height: 96,
-    position: 'relative',
+    position: "relative",
   },
   textContainer: {
     marginBottom: 10,
   },
   songName: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
+    fontWeight: "bold",
+    color: "#fff",
   },
   artist: {
     fontSize: 14,
-    color: '#bbb',
+    color: "#bbb",
     marginTop: 2,
   },
   iconButton: {
-    position: 'absolute',
+    position: "absolute",
     right: 0,
     bottom: 0,
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 50,
     width: 44,
     height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     elevation: 2,
   },
 });

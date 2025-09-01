@@ -31,7 +31,7 @@ export default function Home() {
             top: 0,
             left: 0,
             right: 0,
-            bottom: 0, // ✅ full screen
+            bottom: 0,
             overflow: "hidden",
             zIndex: 0,
           }}

@@ -3,6 +3,8 @@ import { View } from "react-native";
 import Home from "./page/Home";
 import Leaderboard from "./page/leaderboard";
 import BottomNav from "./components/BottomNav";
+import Profile from "./page/Profile";
+import ChooseKey from "./page/ChooseKey";
 
 export type TabKey = "home" | "stats" | "profile";
 
@@ -16,7 +18,7 @@ export default function Index() {
       case "stats":
         return <Leaderboard />;
       case "profile":
-        return <Profile />;
+        return <ChooseKey />;
       default:
         return <Home />;
     }
