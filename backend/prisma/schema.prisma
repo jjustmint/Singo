@@ -21,7 +21,6 @@ model song {
   song_id        Int             @id @default(autoincrement())
   title          String
   key_signature  String          @db.VarChar(50)
-  is_original    Boolean?        @default(false)
   parent_song_id Int?
   lyrics         String?
   audio_version  audio_version[]
