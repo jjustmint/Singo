@@ -13,4 +13,4 @@ export type Mistake = {
     start_time: number
     end_time: number
     pitch_diff: number
-  }
+}
