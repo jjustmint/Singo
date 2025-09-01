@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   SafeAreaView,
   ActivityIndicator,
+  ImageBackground,
+  ScrollView,
 } from "react-native";
 import { Audio } from "expo-av";
 import Slider from "@react-native-community/slider";
@@ -22,7 +24,7 @@ const fetchSongData = async () => {
           "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg",
         title: "BIRDS OF THE FEATHER",
         artist: "Billie Eilish",
-        duration: 210, // in seconds (3:30)
+        duration: 210, // seconds
         audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
         lyrics: [
           "I want you to stay",
@@ -48,8 +50,8 @@ export default function MusicPlayer() {
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [position, setPosition] = useState(0); // seconds
-  const [duration, setDuration] = useState(0); // seconds
+  const [position, setPosition] = useState(0);
+  const [duration, setDuration] = useState(0);
 
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [recordingUri, setRecordingUri] = useState<string | null>(null);
@@ -69,7 +71,6 @@ export default function MusicPlayer() {
     };
   }, []);
 
-  // --- Play / Pause Function ---
   const togglePlay = async () => {
     if (!sound) {
       const { sound: newSound } = await Audio.Sound.createAsync(
@@ -94,14 +95,12 @@ export default function MusicPlayer() {
     }
   };
 
-  // --- Seek with Slider ---
   const onSeek = async (value: number) => {
     if (sound) {
-      await sound.setPositionAsync(value * 1000); // sec → ms
+      await sound.setPositionAsync(value * 1000);
     }
   };
 
-  // --- Recording Logic ---
   const startRecording = async () => {
     try {
       await Audio.requestPermissionsAsync();
@@ -126,7 +125,6 @@ export default function MusicPlayer() {
     setRecording(null);
   };
 
-  // --- Format Time Helper ---
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
     const mins = Math.floor(seconds / 60);
@@ -143,70 +141,93 @@ export default function MusicPlayer() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Album & Song Info */}
-      <View style={styles.header}>
-        <Image source={{ uri: song.image }} style={styles.albumArt} />
-        <View style={{ marginLeft: 12 }}>
-          <Text style={styles.songTitle}>{song.title}</Text>
-          <Text style={styles.artist}>{song.artist}</Text>
+    <ImageBackground
+      source={{ uri: song.image }}
+      style={styles.bgImage}
+      resizeMode="cover"
+      blurRadius={15}
+    >
+      {/* Overlay */}
+      <View style={styles.overlay} />
+
+      <SafeAreaView style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Image source={{ uri: song.image }} style={styles.albumArt} />
+          <View style={{ marginLeft: 12 }}>
+            <Text style={styles.songTitle}>{song.title}</Text>
+            <Text style={styles.artist}>{song.artist}</Text>
+          </View>
         </View>
-      </View>
 
-      {/* Lyrics */}
-      <View style={styles.lyricsContainer}>
-        {song.lyrics.map((line: string, index: number) => (
-          <Text key={index} style={styles.lyrics}>
-            {line}
-          </Text>
-        ))}
-      </View>
-
-      {/* Progress Bar with Slider */}
-      <View style={styles.progressContainer}>
-        <Slider
-          style={{ flex: 1 }}
-          minimumValue={0}
-          maximumValue={duration}
-          value={position}
-          onSlidingComplete={onSeek}
-          minimumTrackTintColor="#fff"
-          maximumTrackTintColor="#ccc"
-          thumbTintColor="#fff"
-        />
-        <View style={styles.timeContainer}>
-          <Text style={styles.time}>{formatTime(position)}</Text>
-          <Text style={styles.time}>{formatTime(duration)}</Text>
+        {/* Lyrics */}
+        <View style={styles.lyricsWrapper}>
+          <ScrollView 
+          contentContainerStyle={styles.lyricsContainer}
+          showsVerticalScrollIndicator={false}
+          >
+            {song.lyrics.map((line: string, index: number) => (
+              <Text key={index} style={styles.lyrics}>
+                {line}
+              </Text>
+            ))}
+          </ScrollView>
         </View>
-      </View>
 
-      {/* Control Buttons */}
-      <View style={styles.controls}>
-        <TouchableOpacity onPress={togglePlay}>
-          <Ionicons
-            name={isPlaying ? "pause" : "play"}
-            size={36}
-            color="white"
+        {/* Slider */}
+        <View style={styles.progressContainer}>
+          <Slider
+            style={{ flex: 1 }}
+            minimumValue={0}
+            maximumValue={duration}
+            value={position}
+            onSlidingComplete={onSeek}
+            minimumTrackTintColor="#fff"
+            maximumTrackTintColor="#ccc"
+            thumbTintColor="#fff"
           />
-        </TouchableOpacity>
+          <View style={styles.timeContainer}>
+            <Text style={styles.time}>{formatTime(position)}</Text>
+            <Text style={styles.time}>{formatTime(duration)}</Text>
+          </View>
+        </View>
 
-        <TouchableOpacity
-          style={styles.micButton}
-          onPress={recording ? stopRecording : startRecording}
-        >
-          <Ionicons name="mic" size={36} color="white" />
-        </TouchableOpacity>
+        {/* Controls */}
+        <View style={styles.controls}>
+          <TouchableOpacity onPress={togglePlay}>
+            <Ionicons
+              name={isPlaying ? "pause" : "play"}
+              size={36}
+              color="white"
+            />
+          </TouchableOpacity>
 
-        <MaterialIcons name="done" size={28} color="white" />
-      </View>
-    </SafeAreaView>
+          <TouchableOpacity
+            style={styles.micButton}
+            onPress={recording ? stopRecording : startRecording}
+          >
+            <Ionicons name="mic" size={36} color="white" />
+          </TouchableOpacity>
+
+          <MaterialIcons name="done" size={28} color="white" />
+        </View>
+      </SafeAreaView>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
+  bgImage: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
   container: {
     flex: 1,
-    backgroundColor: "#8a2be2", // replace with expo-linear-gradient if needed
     alignItems: "center",
     padding: 20,
   },
@@ -216,8 +237,8 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   albumArt: {
-    width: 60,
-    height: 60,
+    width: 80,
+    height: 80,
     borderRadius: 8,
   },
   songTitle: {
@@ -229,19 +250,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#ddd",
   },
+  lyricsWrapper: {
+    flex: 1,
+    justifyContent: "center", // vertical center
+    width: "90%",
+    marginTop: 40,
+  },
   lyricsContainer: {
-    marginTop: 30,
-    alignItems: "center",
+    alignItems: "flex-start", // align text to right
+    paddingHorizontal: 20,
   },
   lyrics: {
     color: "white",
-    fontSize: 16,
-    textAlign: "center",
-    lineHeight: 24,
+    fontSize: 20,
+    textAlign: "left", 
+    lineHeight: 28,
+    marginVertical: 4,
   },
   progressContainer: {
-    width: "100%",
-    marginTop: 40,
+    width: "80%",
+    marginTop: 30,
   },
   timeContainer: {
     flexDirection: "row",
@@ -250,13 +278,15 @@ const styles = StyleSheet.create({
   time: {
     color: "white",
     fontSize: 12,
+    marginTop: 6,
   },
   controls: {
     flexDirection: "row",
     justifyContent: "space-between",
-    width: "70%",
-    marginTop: 40,
+    width: "80%",
+    marginTop: 30,
     alignItems: "center",
+    marginBottom: 80,
   },
   micButton: {
     backgroundColor: "#6c5ce7",
@@ -266,4 +296,3 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
 });
-

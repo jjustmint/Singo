@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import { View } from "react-native";
 import Home from "./page/Home";
-import Leaderboard from "./page/leaderboard";
+import Leaderboard from "../app/page/Leaderboard";
 import BottomNav from "./components/BottomNav";
 import Profile from "./page/Profile";
-import ChooseKey from "./page/ChooseKey";
+import ChooseKey from "../app/page/ChooseKey";
+import MusicPlayer from "./page/MusicPlayer";
 
 export type TabKey = "home" | "stats" | "profile";
 
@@ -18,7 +19,7 @@ export default function Index() {
       case "stats":
         return <Leaderboard />;
       case "profile":
-        return <ChooseKey />;
+        return <MusicPlayer />;
       default:
         return <Home />;
     }
