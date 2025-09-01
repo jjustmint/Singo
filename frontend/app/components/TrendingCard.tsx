@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   FlatList,
+  Pressable,
 } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -52,7 +53,7 @@ const TrendingCard: React.FC<{ song: Song }> = ({ song }) => {
   const navigation = useNavigation<NavigationProp>();
 
   const togglePlay = (e: any) => {
-    e.stopPropagation(); // Prevent triggering handlePress
+    e.stopPropagation(); 
     setIsPlaying(!isPlaying);
   };
 
