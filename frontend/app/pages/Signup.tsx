@@ -16,7 +16,7 @@ import {
   Kanit_500Medium,
   Kanit_700Bold,
 } from "@expo-google-fonts/kanit";
-import { useNavigation } from "@react-navigation/native";
+import { useRouter } from "expo-router";
 
 const SignupScreen: React.FC = () => {
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -24,13 +24,44 @@ const SignupScreen: React.FC = () => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
-  const navigation = useNavigation();
+  const router = useRouter();
 
   const [fontsLoaded] = useFonts({
     Kanit_400Regular,
     Kanit_500Medium,
     Kanit_700Bold,
   });
+
+  // Function to handle signup
+  const handleSignup = async () => {
+    if (!username || !password || !confirmPassword) {
+      return alert("Please fill in all fields");
+    }
+    if (password !== confirmPassword) {
+      return alert("Passwords do not match");
+    }
+
+    try {
+      const response = await fetch("http://10.4.153.66:8000/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+      console.log("Signup response:", data);
+
+      if (response.ok) {
+        alert("Signup successful! You can now login.");
+        router.push("/pages/Login");
+      } else {
+        alert(data.message || `Signup failed (status ${response.status})`);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("Network error");
+    }
+  };
 
   if (!fontsLoaded) {
     return (
@@ -50,7 +81,7 @@ const SignupScreen: React.FC = () => {
       <View style={styles.formContainer}>
         <TouchableOpacity
           style={styles.backArrow}
-        //   onPress={() => navigation.navigate("")} ROUTE
+          onPress={() => router.back()} // Back button navigation
         >
           <Ionicons name="arrow-back" size={28} color="#5A5DFF" />
         </TouchableOpacity>
@@ -110,7 +141,7 @@ const SignupScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.signupButton}>
+        <TouchableOpacity style={styles.signupButton} onPress={handleSignup}>
           <Text style={styles.signupButtonText}>Sign up</Text>
         </TouchableOpacity>
 
@@ -118,7 +149,7 @@ const SignupScreen: React.FC = () => {
           <Text style={{ color: "#666", fontFamily: "Kanit_500Medium" }}>
             Already have an account?{" "}
           </Text>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push("/pages/Login")}>
             <Text
               style={[
                 styles.linkText,
@@ -156,11 +187,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#F7F7F7",
   },
   backArrow: {
-  marginBottom: 20,
-  width: 32,
-  height: 32,
-  justifyContent: "center",
-  alignItems: "center",
+    marginBottom: 20,
+    width: 32,
+    height: 32,
+    justifyContent: "center",
+    alignItems: "center",
   },
   signupText: {
     fontSize: 48,

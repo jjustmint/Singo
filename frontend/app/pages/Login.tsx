@@ -7,21 +7,58 @@ import {
   StyleSheet,
   SafeAreaView,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, Feather } from "@expo/vector-icons";
-import { useFonts, Kanit_400Regular, Kanit_500Medium, Kanit_700Bold } from "@expo-google-fonts/kanit";
+import {
+  useFonts,
+  Kanit_400Regular,
+  Kanit_500Medium,
+  Kanit_700Bold,
+} from "@expo-google-fonts/kanit";
+import { useRouter } from "expo-router";
 
 const LoginScreen: React.FC = () => {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const router = useRouter(); // expo-router
 
   const [fontsLoaded] = useFonts({
     Kanit_400Regular,
     Kanit_500Medium,
     Kanit_700Bold,
   });
+
+  const handleLogin = async () => {
+    if (!username || !password) {
+      return Alert.alert("Please enter username and password");
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch("http://10.4.153.66:8000/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        Alert.alert("Login successful!");
+        router.push("/"); // or your main app screen relative path
+      } else {
+        Alert.alert(data.message || "Login failed");
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (!fontsLoaded) {
     return (
@@ -62,7 +99,9 @@ const LoginScreen: React.FC = () => {
             value={password}
             onChangeText={setPassword}
           />
-          <TouchableOpacity onPress={() => setPasswordVisible(!passwordVisible)}>
+          <TouchableOpacity
+            onPress={() => setPasswordVisible(!passwordVisible)}
+          >
             <Feather
               name={passwordVisible ? "eye" : "eye-off"}
               size={20}
@@ -72,19 +111,33 @@ const LoginScreen: React.FC = () => {
         </View>
 
         <TouchableOpacity style={styles.forgotPassword}>
-          <Text style={[styles.linkText, { textDecorationLine: "underline" }]}>Forgot password</Text>
+          <Text style={[styles.linkText, { textDecorationLine: "underline" }]}>
+            Forgot password
+          </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.loginButton}>
-          <Text style={styles.loginButtonText}>Login</Text>
+        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
+          {loading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.loginButtonText}>Login</Text>
+          )}
         </TouchableOpacity>
 
         <View style={styles.signUp}>
           <Text style={{ color: "#666", fontFamily: "Kanit_500Medium" }}>
             Don’t have an account?{" "}
           </Text>
-          <TouchableOpacity>
-            <Text style={[styles.linkText, { fontFamily: "Kanit_500Medium", textDecorationLine: "underline" }]}>
+          <TouchableOpacity onPress={() => router.push("/pages/Signup")}>
+            <Text
+              style={[
+                styles.linkText,
+                {
+                  fontFamily: "Kanit_500Medium",
+                  textDecorationLine: "underline",
+                },
+              ]}
+            >
               Sign up
             </Text>
           </TouchableOpacity>
@@ -97,10 +150,7 @@ const LoginScreen: React.FC = () => {
 export default LoginScreen;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#eee",
-  },
+  container: { flex: 1, backgroundColor: "#eee" },
   topSection: {
     flex: 1.2,
     justifyContent: "center",
