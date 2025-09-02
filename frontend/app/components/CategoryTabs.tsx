@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, FlatList } from 'react-native';
 
-const categories = ['All', 'New Release', 'Trending','Top Rated'];
+const categories = ['New Release', 'Trending','Top Rated'];
 
-const CategoryTabs = () => {
-  const [selected, setSelected] = useState('All');
+interface CategoryTabsProps {
+  scrollToSection: (category: string) => void;
+}
+
+const CategoryTabs: React.FC<CategoryTabsProps> = ({ scrollToSection }) => {
+  const [selected, setSelected] = useState('New Release');
 
   return (
     <View style={{ marginVertical: 10, paddingHorizontal: 20 }}>
@@ -17,7 +21,10 @@ const CategoryTabs = () => {
           const isSelected = item === selected;
           return (
             <TouchableOpacity
-              onPress={() => setSelected(item)}
+              onPress={() => {
+                setSelected(item);
+                scrollToSection(item); // Call the scrollToSection function
+              }}
               style={{
                 backgroundColor: isSelected ? '#6C63FF' : '#333',
                 borderRadius: 20,

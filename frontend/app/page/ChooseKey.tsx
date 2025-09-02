@@ -5,9 +5,11 @@ import {
   StyleSheet,
   ImageBackground,
   TouchableOpacity,
+  FlatList,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from "@react-navigation/native";
 
 interface Song {
   id: string;
@@ -25,6 +27,8 @@ const ChooseKey = () => {
   });
   const [keys, setKeys] = useState<string[]>(["A", "B", "C", "D", "E", "F", "G"]);
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  const navigation = useNavigation();
 
   // Fetch keys from backend
   useEffect(() => {
@@ -51,9 +55,20 @@ const ChooseKey = () => {
   };
 
   const handleConfirm = () => {
-    alert("Selected Key: " + keys[currentIndex]);
-    // navigate to next screen or send selection to backend
+    navigation.navigate("MusicPlayer", { songId: song.id });
   };
+
+  const renderSong = ({ item }: { item: Song }) => (
+    <View>
+      <Text>{item.title}</Text>
+    </View>
+  );
+
+  const songs = [
+    { song_id: "1", title: "Song 1" },
+    { song_id: "2", title: "Song 2" },
+    { song_id: "3", title: "Song 3" },
+  ];
 
   return (
     <ImageBackground source={{ uri: song.cover }} style={styles.bg}>
@@ -90,6 +105,15 @@ const ChooseKey = () => {
       </View>
       <Text style={styles.suggested}>Suggested</Text>
       
+      {/* Song List */}
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <FlatList
+          data={songs}
+          keyExtractor={(item) => item.song_id.toString()}
+          renderItem={renderSong}
+        />
+      </View>
+
       {/* Confirm Button */}
       <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
         <Feather name="check" size={32} color="#3A6DFF" />

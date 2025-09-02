@@ -1,10 +1,10 @@
-import React from "react";
+import React, { useRef } from "react";
 import {
   View,
   Text,
   Image,
   Dimensions,
-  FlatList,
+  ScrollView,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
@@ -16,13 +16,28 @@ import TopRateTabs from "../components/TopRateTabs";
 const { width } = Dimensions.get("window");
 
 export default function Home() {
+  const scrollViewRef = useRef<ScrollView>(null); // Properly type the ref
 
-  const sections = [{ key: "content" }];
+  const scrollToSection = (section: "New Release" | "Trending" | "Top Rated") => { // Add explicit type for 'section'
+    if (scrollViewRef.current) {
+      scrollViewRef.current.scrollTo({
+        y:
+          section === "New Release"
+            ? 0 // Adjust this value to the Y-offset of the "New Release" section
+            : section === "Trending"
+            ? 300 // Adjust this value to the Y-offset of the "Trending" section
+            : section === "Top Rated"
+            ? 900 // Adjust this value to the Y-offset of the "Top Rated" section
+            : 0,
+        animated: true,
+      });
+    }
+  };
 
   return (
     <SafeAreaView
       style={{ flex: 1, backgroundColor: "#131313" }}
-      edges={["left", "right"]} 
+      edges={["left", "right"]}
     >
       <View style={{ flex: 1, position: "relative" }}>
         <View
@@ -82,88 +97,82 @@ export default function Home() {
           />
         </View>
 
-        {/* Use FlatList as wrapper instead of ScrollView */}
-        <FlatList
-          data={sections}
-          keyExtractor={(item) => item.key}
-          contentContainerStyle={{ paddingBottom: 150 }}
-          renderItem={() => (
-            <View style={{ zIndex: 2 }}>
-              {/* Profile */}
-              <View style={{ padding: 20, marginTop: 50 }}>
-                <View style={{ flexDirection: "row", alignItems: "center" }}>
-                  <Image
-                    source={{
-                      uri: "https://static.vecteezy.com/system/resources/previews/024/966/233/non_2x/businesswoman-portrait-beautiful-woman-in-business-suit-employee-of-business-institution-in-uniform-lady-office-worker-woman-business-avatar-profile-picture-illustration-vector.jpg",
-                    }}
-                    style={{
-                      width: 70,
-                      height: 70,
-                      borderRadius: 40,
-                      marginRight: 10,
-                    }}
-                  />
-                  <Text
-                    style={{
-                      fontSize: 24,
-                      fontWeight: "bold",
-                      color: "white",
-                      left: 30,
-                    }}
-                  >
-                    Hi! Pathompong
-                  </Text>
-                </View>
-              </View>
-
-              <CategoryTabs />
-
-              <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
+        <ScrollView ref={scrollViewRef} contentContainerStyle={{ paddingBottom: 150 }}>
+          <View style={{ zIndex: 2 }}>
+            {/* Profile */}
+            <View style={{ padding: 20, marginTop: 50 }}>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Image
+                  source={{
+                    uri: "https://static.vecteezy.com/system/resources/previews/024/966/233/non_2x/businesswoman-portrait-beautiful-woman-in-business-suit-employee-of-business-institution-in-uniform-lady-office-worker-woman-business-avatar-profile-picture-illustration-vector.jpg",
+                  }}
+                  style={{
+                    width: 70,
+                    height: 70,
+                    borderRadius: 40,
+                    marginRight: 10,
+                  }}
+                />
                 <Text
                   style={{
-                    color: "white",
-                    fontSize: 22,
+                    fontSize: 24,
                     fontWeight: "bold",
+                    color: "white",
+                    left: 30,
                   }}
                 >
-                  New Release
+                  Hi! Pathompong
                 </Text>
-              </View>
-              <NewReleaseTabs />
-
-              <View style={{ paddingHorizontal: 20 }}>
-                <Text
-                  style={{
-                    color: "white",
-                    fontSize: 22,
-                    fontWeight: "bold",
-                  }}
-                >
-                  Trending
-                </Text>
-              </View>
-              <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
-                <TrendingCard />
-              </View>
-
-              {/* Top Rate */}
-              <View style={{ paddingHorizontal: 20 }}>
-                <Text
-                  style={{
-                    color: "white",
-                    fontSize: 22,
-                    fontWeight: "bold",
-                  }}
-                >
-                  Top Rate
-                </Text>
-              </View>
-              <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
-                <TopRateTabs />
               </View>
             </View>
-          )}
-        />
+
+            <CategoryTabs scrollToSection={scrollToSection} />
+
+            <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
+              <Text
+                style={{
+                  color: "white",
+                  fontSize: 22,
+                  fontWeight: "bold",
+                }}
+              >
+                New Release
+              </Text>
+            </View>
+            <NewReleaseTabs />
+
+            <View style={{ paddingHorizontal: 20 }}>
+              <Text
+                style={{
+                  color: "white",
+                  fontSize: 22,
+                  fontWeight: "bold",
+                }}
+              >
+                Trending
+              </Text>
+            </View>
+            <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
+              <TrendingCard />
+            </View>
+
+            {/* Top Rate */}
+            <View style={{ paddingHorizontal: 20 }}>
+              <Text
+                style={{
+                  color: "white",
+                  fontSize: 22,
+                  fontWeight: "bold",
+                }}
+              >
+                Top Rate
+              </Text>
+            </View>
+            <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
+              <TopRateTabs />
+            </View>
+          </View>
+        </ScrollView>
       </View>
     </SafeAreaView>
   );

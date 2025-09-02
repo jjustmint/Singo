@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   FlatList,
-  Pressable,
 } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -53,16 +52,16 @@ const TrendingCard: React.FC<{ song: Song }> = ({ song }) => {
   const navigation = useNavigation<NavigationProp>();
 
   const togglePlay = (e: any) => {
-    e.stopPropagation(); 
+    e.stopPropagation();
     setIsPlaying(!isPlaying);
   };
 
-  const handlePress = () => {
-    navigation.navigate("ChooseKey", { song });
+  const handleCardPress = () => {
+    navigation.navigate("ChooseKey", { song }); // Ensure this navigates to ChooseKey with song data
   };
 
   return (
-    <TouchableOpacity style={styles.card} onPress={handlePress}>
+    <TouchableOpacity style={styles.card} onPress={handleCardPress}>
       <Image source={{ uri: song.image }} style={styles.image} />
       <View style={styles.rightContainer}>
         <View style={styles.textContainer}>

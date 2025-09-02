@@ -3,6 +3,10 @@ export type RootStackParamList = {
     ChooseKey: { song: { id: string; songName: string; artist: string; image: string } };
     SettingScreen: undefined;
     SignIn: undefined;
-  };
-  
-  export type TabKey = "home" | "stats" | "chooseKey" | "profile";
+    Home: undefined;
+    Leaderboard: undefined;
+    Profile: undefined;
+};
+
+export type TabKey = "home" | "stats" | "profile";
+

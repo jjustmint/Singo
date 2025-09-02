@@ -9,10 +9,14 @@ import {
   ActivityIndicator,
   ImageBackground,
   ScrollView,
+  Animated,
+  Easing,
 } from "react-native";
 import { Audio } from "expo-av";
 import Slider from "@react-native-community/slider";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 // --- Mock API call ---
 const fetchSongData = async () => {
@@ -56,6 +60,11 @@ export default function MusicPlayer() {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [recordingUri, setRecordingUri] = useState<string | null>(null);
 
+  const [countdown, setCountdown] = useState<number | null>(null); // Countdown state
+
+  const [animationValue] = useState(new Animated.Value(0)); // State for animation
+  const [volume, setVolume] = useState(0); // State for volume
+
   useEffect(() => {
     (async () => {
       const data: any = await fetchSongData();
@@ -71,6 +80,59 @@ export default function MusicPlayer() {
     };
   }, []);
 
+  // Ensure countdown starts only after loading is complete
+  useEffect(() => {
+    if (!loading && countdown === null) {
+      setCountdown(3); // Start countdown after loading
+    }
+  }, [loading]);
+
+  // Optimize countdown rendering to prevent blinking
+  useEffect(() => {
+    if (countdown !== null) {
+      const interval = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev !== null && prev <= 1) {
+            clearInterval(interval);
+            if (prev === 1) {
+              startRecording(); // Start recording when countdown ends
+            }
+            return null; // Stop the countdown
+          }
+          return prev! - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(interval); // Cleanup interval on unmount
+    }
+  }, [countdown]);
+
+  // Function to start the animation
+  const startAnimation = () => {
+    console.log("Starting animation...");
+    animationValue.setValue(0);
+    Animated.timing(animationValue, {
+      toValue: 1,
+      duration: 1000,
+      useNativeDriver: true,
+    }).start(() => {
+      console.log("Animation completed");
+    });
+  };
+
+  // Start the animation when recording starts
+  useEffect(() => {
+    if (recording) {
+      console.log("Recording started, triggering animation");
+      startAnimation();
+    } else {
+      console.log("Recording stopped, stopping animation");
+      animationValue.stopAnimation(() => {
+        console.log("Animation has been stopped successfully");
+      });
+    }
+  }, [recording]);
+
   const togglePlay = async () => {
     if (!sound) {
       const { sound: newSound } = await Audio.Sound.createAsync(
@@ -84,6 +146,7 @@ export default function MusicPlayer() {
           setPosition(status.positionMillis / 1000);
           setDuration(status.durationMillis / 1000);
           setIsPlaying(status.isPlaying);
+          setVolume(status.volume); // Update volume
         }
       });
     } else {
@@ -102,18 +165,24 @@ export default function MusicPlayer() {
   };
 
   const startRecording = async () => {
-    try {
-      await Audio.requestPermissionsAsync();
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      setRecording(recording);
-    } catch (err) {
-      console.error("Failed to start recording", err);
+    if (countdown === null) {
+      try {
+        console.log("Requesting microphone permissions...");
+        await Audio.requestPermissionsAsync();
+        console.log("Setting audio mode...");
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+        });
+        console.log("Creating recording...");
+        const { recording } = await Audio.Recording.createAsync(
+          Audio.RecordingOptionsPresets.HIGH_QUALITY
+        );
+        console.log("Recording created successfully");
+        setRecording(recording);
+      } catch (err) {
+        console.error("Failed to start recording", err);
+      }
     }
   };
 
@@ -123,6 +192,49 @@ export default function MusicPlayer() {
     const uri = recording.getURI();
     setRecordingUri(uri);
     setRecording(null);
+
+    // Save the recording as a .wav file
+    const wavFilePath = `${FileSystem.documentDirectory}recording.wav`;
+    await FileSystem.copyAsync({ from: uri, to: wavFilePath });
+    console.log(`Recording saved as .wav file at: ${wavFilePath}`);
+
+    // Simulate sending the file for verification
+    sendRecordingForVerification(wavFilePath);
+
+    // Share the recording
+    shareRecording(wavFilePath);
+  };
+
+  const shareRecording = async (filePath: string) => {
+    if (await Sharing.isAvailableAsync()) {
+      try {
+        await Sharing.shareAsync(filePath);
+        console.log('Recording shared successfully');
+      } catch (error) {
+        console.error('Failed to share recording:', error);
+      }
+    } else {
+      console.log('Sharing is not available on this device');
+    }
+  };
+
+  const sendRecordingForVerification = async (filePath: string) => {
+    try {
+      console.log(`Sending recording for verification: ${filePath}`);
+      // Replace with actual upload logic if needed
+      const response = await fetch('https://example.com/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'audio/wav',
+        },
+        body: await FileSystem.readAsStringAsync(filePath, {
+          encoding: FileSystem.EncodingType.Base64,
+        }),
+      });
+      console.log('Upload response:', await response.json());
+    } catch (error) {
+      console.error('Failed to send recording for verification:', error);
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -132,11 +244,32 @@ export default function MusicPlayer() {
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
 
+  // Animated bar styles
+  const animatedBarStyle = {
+    transform: [
+      {
+        scaleY: animationValue.interpolate({
+          inputRange: [0, 1],
+          outputRange: [1, 3],
+        }),
+      },
+    ],
+  };
+
+  // Render the MusicPlayer layout immediately with a loading indicator
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color="white" />
-      </SafeAreaView>
+      <ImageBackground
+        source={{ uri: "https://via.placeholder.com/150" }} // Placeholder image
+        style={styles.bgImage}
+        resizeMode="cover"
+        blurRadius={15}
+      >
+        <View style={styles.overlay} />
+        <SafeAreaView style={[styles.container, { justifyContent: "center" }]}>
+          <ActivityIndicator size="large" color="#fff" />
+        </SafeAreaView>
+      </ImageBackground>
     );
   }
 
@@ -211,7 +344,24 @@ export default function MusicPlayer() {
 
           <MaterialIcons name="done" size={28} color="white" />
         </View>
+
+        {/* Animated Visualization */}
+        <View style={styles.animationContainer}>
+          {[...Array(5)].map((_, index) => (
+            <Animated.View
+              key={index}
+              style={[styles.animatedBar, animatedBarStyle]}
+            />
+          ))}
+        </View>
       </SafeAreaView>
+
+      {/* Render the countdown as an overlay on top of the MusicPlayer content */}
+      {countdown !== null && (
+        <View style={styles.countdownOverlay}>
+          <Text style={styles.countdownText}>{countdown}</Text>
+        </View>
+      )}
     </ImageBackground>
   );
 }
@@ -294,5 +444,28 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     justifyContent: "center",
     alignItems: "center",
+  },
+  animationContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 20,
+  },
+  animatedBar: {
+    width: 10,
+    height: 50,
+    backgroundColor: "#6c5ce7",
+    marginHorizontal: 5,
+  },
+  countdownOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  countdownText: {
+    fontSize: 100,
+    color: "white",
+    fontWeight: "bold",
   },
 });
