@@ -17,6 +17,7 @@ import {
   Kanit_700Bold,
 } from "@expo-google-fonts/kanit";
 import { useRouter } from "expo-router";
+import { SignUpApi } from "@/api/auth/signin";
 
 const SignupScreen: React.FC = () => {
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -42,20 +43,13 @@ const SignupScreen: React.FC = () => {
     }
 
     try {
-      const response = await fetch("http://localhost:8000/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
+      const signupResponse = await SignUpApi(username, password);
 
-      const data = await response.json();
-      console.log("Signup response:", data);
-
-      if (response.ok) {
+      if (signupResponse.success) {
         alert("Signup successful! You can now login.");
         router.push("/pages/Login");
       } else {
-        alert(data.message || `Signup failed (status ${response.status})`);
+        alert(signupResponse.message || `Signup failed (status ${signupResponse.message})`);
       }
     } catch (error) {
       console.error(error);
