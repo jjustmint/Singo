@@ -1,9 +1,10 @@
 import axios, { AxiosInstance } from 'axios';
 import { getAuthToken } from './cookies';
+import { GlobalConstant } from '@/constant';
 // import { getCookieValue } from '@/utils/cookie';
 
 const Axios: AxiosInstance = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_BASE,
+    baseURL: GlobalConstant.API_URL,
     validateStatus: (s) => s >= 200 && s <= 500,
     headers: {
         'Content-Type': 'application/json; charset=utf-8',

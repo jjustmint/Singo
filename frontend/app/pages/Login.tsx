@@ -50,13 +50,13 @@ const LoginScreen: React.FC = () => {
       if (loginResponse.success) {
         Alert.alert("Login successful!");
         setAuthToken(loginResponse.data); // Store token in cookies
-        router.push("/"); // or your main app screen relative path
+        router.push("/page/Home"); // or your main app screen relative path
       } else {
         Alert.alert(loginResponse.message || "Login failed");
       }
     } catch (e) {
       console.error(e);
-      Alert.alert("Network error");
+      Alert.alert("Network error" + e);
     } finally {
       setLoading(false);
     }
@@ -150,7 +150,7 @@ const LoginScreen: React.FC = () => {
           {/* Sign up */}
           <View style={styles.signupRow}>
             <Text style={styles.signupText}>Don’t have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate("Signup")}>
+            <TouchableOpacity onPress={() => navigation.navigate("/Signup")}>
               <Text style={[styles.link, { textDecorationLine: "underline" }]}>
                 Sign up
               </Text>
