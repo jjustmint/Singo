@@ -126,7 +126,7 @@ export default function Home() {
               </View>
             </View>
 
-            <CategoryTabs scrollToSection={scrollToSection} />
+            <CategoryTabs scrollToSection={(category: string) => scrollToSection(category as "New Release" | "Trending" | "Top Rated")} />
 
             <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
               <Text

@@ -1,24 +1,38 @@
 import React from "react";
 import { View, Text, Image, StyleSheet, TouchableOpacity } from "react-native";
 import { AntDesign } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 
-interface Props {
+interface HistoryItem {
+  id: string;
   title: string;
   artist: string;
   image: string;
 }
 
-const Recent: React.FC<Props> = ({ title, artist, image }) => {
+const Recent: React.FC<{ data?: HistoryItem[] }> = ({ data = [] }) => {
+  const navigation = useNavigation();
+
+  const handleCardPress = () => {
+    navigation.navigate("Summary"); // Navigate to Summary without passing parameters
+  };
+
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Recent</Text>
-      <View style={styles.card}>
-        <Image source={{ uri: "https://i.ytimg.com/vi/eCZDaH0WvPU/maxresdefault.jpg" }} style={styles.image} />
-        <View style={styles.overlay}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.artist}>{artist}</Text>
-        </View>
-      </View>
+      {data.map((item) => (
+        <TouchableOpacity
+          key={item.id}
+          onPress={() => handleCardPress()}
+          style={styles.card}
+        >
+          <Image source={{ uri: item.image }} style={styles.image} />
+          <View style={styles.overlay}>
+            <Text style={styles.title}>{item.title}</Text>
+            <Text style={styles.artist}>{item.artist}</Text>
+          </View>
+        </TouchableOpacity>
+      ))}
     </View>
   );
 };
