@@ -10,6 +10,7 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from "@react-navigation/native";
+import { get } from "react-native/Libraries/TurboModule/TurboModuleRegistry";
 
 interface Song {
   id: string;
@@ -25,7 +26,7 @@ const ChooseKey = () => {
     artist: "Billie Eilish",
     cover: "https://i1.sndcdn.com/artworks-BHI8P4kbIiY67cXS-K2kVZA-t500x500.jpg",
   });
-  const [keys, setKeys] = useState<string[]>(["A", "B", "C", "D", "E", "F", "G"]);
+  const [keys, setKeys] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const navigation = useNavigation();
@@ -34,17 +35,37 @@ const ChooseKey = () => {
   useEffect(() => {
     const fetchKeys = async () => {
       try {
-        // Example: replace with your backend API call
-        // const res = await fetch("https://your-api.com/keys?songId=" + song.id);
-        // const data = await res.json();
-        // setKeys(data.keys);
-        // setCurrentIndex(data.suggestedIndex);
+        getKey(2);
       } catch (error) {
         console.log("Error fetching keys:", error);
       }
     };
     fetchKeys();
   }, []);
+
+  const getKey = async (song_id: number) =>{
+    try {
+      const response = await fetch("http://192.168.1.100:8000/private/getsongkey", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ song_id: song_id })
+      })
+      const data = await response.json();
+      setKeys(data.key_signature);
+      console.log("Fetched keys:", data.key_signature);
+      if (data.success) {
+        return data.key_signature;
+      } else {
+        console.error("Failed to fetch key:", data.message);
+        return null;
+      }
+    } catch (error) {
+      console.error("Error fetching key:", error);
+      return null;
+    }
+  }
 
   const handleNext = () => {
     if (currentIndex < keys.length - 1) setCurrentIndex(currentIndex + 1);

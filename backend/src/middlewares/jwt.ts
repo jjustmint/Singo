@@ -5,8 +5,13 @@ import { ConstructResponse } from "../utils/responseConstructor"
 
 const jwtMiddleware = async (c: Context, next: Next) => {
     try {
-        const token = getCookie(c, 'token')
-        if (!token) return c.json(ConstructResponse(false, "Not Allowed"), 405)
+        const tokenAuth = c.req.header('Authorization')
+
+        if (!tokenAuth || !tokenAuth.startsWith('Bearer ')) {
+            return c.json(ConstructResponse(false, "Invalid token format"), 403)
+        }
+
+        const token = tokenAuth.split(' ')[1]
 
         const JWT_SECRET = Bun.env.JWT_SECRET
 

@@ -16,7 +16,7 @@ export const UpdateKeyController = async (c: Context) => {
       const forwardForm = new FormData();
       forwardForm.append("file", file, file.name);
   
-      const res = await fetch("http://localhost:8081/keydetect", {
+      const res = await fetch("http://localhost:8083/keydetect", {
         method: "POST",
         body: forwardForm,
       });

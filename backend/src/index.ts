@@ -9,7 +9,7 @@ const app = new Hono()
 app.use(logger())
 
 app.use(cors({
-  origin: [""], // Your frontend URL
+  origin: ["http://localhost:8081"], // Your frontend URL
   credentials: true
 }))
 

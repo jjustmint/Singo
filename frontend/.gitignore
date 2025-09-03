@@ -40,3 +40,4 @@ app-example
 /ios/
 /android/
 node_modules/
+yarn.lock

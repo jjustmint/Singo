@@ -21,6 +21,8 @@ import {
   Kanit_700Bold,
 } from "@expo-google-fonts/kanit";
 import { useRouter } from "expo-router";
+import { setAuthToken } from "@/util/cookies";
+import { LoginApi } from "@/api/auth/login";
 import { useNavigation } from "@react-navigation/native";
 
 const LoginScreen: React.FC = () => {
@@ -43,21 +45,18 @@ const LoginScreen: React.FC = () => {
     }
     setLoading(true);
     try {
-      const response = await fetch("http://localhost:8000/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-      const data = await response.json();
-      if (data.success) {
+      const loginResponse = await LoginApi(username, password);
+
+      if (loginResponse.success) {
         Alert.alert("Login successful!");
-        router.push("/"); // change to your main screen
+        setAuthToken(loginResponse.data); // Store token in cookies
+        router.push("/page/Home"); // or your main app screen relative path
       } else {
-        Alert.alert(data.message || "Login failed");
+        Alert.alert(loginResponse.message || "Login failed");
       }
     } catch (e) {
       console.error(e);
-      Alert.alert("Network error");
+      Alert.alert("Network error" + e);
     } finally {
       setLoading(false);
     }
@@ -151,7 +150,7 @@ const LoginScreen: React.FC = () => {
           {/* Sign up */}
           <View style={styles.signupRow}>
             <Text style={styles.signupText}>Don’t have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate("Signup")}>
+            <TouchableOpacity onPress={() => navigation.navigate("/Signup")}>
               <Text style={[styles.link, { textDecorationLine: "underline" }]}>
                 Sign up
               </Text>
