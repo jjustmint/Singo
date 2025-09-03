@@ -8,6 +8,8 @@ import BottomNav from "./components/BottomNav";
 import ChooseKey from "./page/ChooseKey";
 import MusicPlayer from "./page/MusicPlayer";
 import Summary from "./page/Summary";
+import LoginScreen from "./pages/Login";
+import SignupScreen from "./pages/Signup";
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -20,6 +22,8 @@ export default function MainNavigator() {
         gestureEnabled: true, // Enable swipe gestures
       }}
     >
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="Signup" component={SignupScreen} />
       <Stack.Screen name="Tabs" component={TabNavigator} />
       <Stack.Screen name="ChooseKey" component={ChooseKey} />
       <Stack.Screen name="MusicPlayer" component={MusicPlayer} />
@@ -44,9 +48,6 @@ function TabNavigator() {
 }
 
 const TABS = ["home", "stats", "profile"];
-
-import { BottomTabNavigationProp } from "@react-navigation/bottom-tabs";
-import { NavigationState } from "@react-navigation/native";
 
 function CustomBottomNav({
   navigation,
