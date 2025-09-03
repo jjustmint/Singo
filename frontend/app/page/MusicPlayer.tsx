@@ -321,6 +321,7 @@ useEffect(() => {
 
           <TouchableOpacity
             style={styles.micButton}
+            onPress={recording ? stopRecording : startRecording}
           >
             <Ionicons name="mic" size={36} color="white" />
           </TouchableOpacity>

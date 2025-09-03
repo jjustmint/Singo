@@ -42,7 +42,7 @@ const SignupScreen: React.FC = () => {
     }
 
     try {
-      const response = await fetch("http://10.4.153.66:8000/auth/register", {
+      const response = await fetch("http://localhost:8000/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),

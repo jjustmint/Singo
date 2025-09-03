@@ -96,12 +96,20 @@ export default function Profile() {
                   profileImage="https://example.com/profile.jpg" 
                 />
               </View>
-              <View style={{ padding: 20,}}>
-                <Recent 
-                  title="Sample Song" 
-                  artist="Sample Artist" 
-                  image="https://example.com/sample-image.jpg" 
+              <View style={{ padding: 20 }}>
+                <Recent
+                  data={[
+                    {
+                      id: "1",
+                      title: "Sample Song",
+                      artist: "Sample Artist",
+                      image: "https://images.genius.com/282a0165862d48f70b0f9c5ce8531eb5.1000x1000x1.png",
+                    },
+                  ]}
                 />
+              </View>
+              <View style={{ padding: 20,}}>
+                <History/>
               </View>
             </View>
           )}
