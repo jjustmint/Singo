@@ -15,8 +15,8 @@ import {
 import { Audio } from "expo-av";
 import Slider from "@react-native-community/slider";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
+import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 
 // --- Mock API call ---
 const fetchSongData = async () => {
@@ -80,58 +80,68 @@ export default function MusicPlayer() {
     };
   }, []);
 
-  // Ensure countdown starts only after loading is complete
+  // Ensure countdown triggers recording automatically and finish icon stops recording.
   useEffect(() => {
     if (!loading && countdown === null) {
-      setCountdown(3); // Start countdown after loading
+        setCountdown(3); // Start countdown after loading
     }
-  }, [loading]);
+}, [loading]);
 
-  // Optimize countdown rendering to prevent blinking
-  useEffect(() => {
+useEffect(() => {
     if (countdown !== null) {
-      const interval = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev !== null && prev <= 1) {
-            clearInterval(interval);
-            if (prev === 1) {
-              startRecording(); // Start recording when countdown ends
-            }
-            return null; // Stop the countdown
-          }
-          return prev! - 1;
-        });
-      }, 1000);
+        const interval = setInterval(() => {
+            setCountdown((prev) => {
+                if (prev !== null && prev <= 1) {
+                    clearInterval(interval);
+                    if (prev === 1) {
+                        startRecording(); // Automatically start recording when countdown ends
+                    }
+                    return null; // Stop the countdown
+                }
+                return prev! - 1;
+            });
+        }, 1000);
 
-      return () => clearInterval(interval); // Cleanup interval on unmount
+        return () => clearInterval(interval); // Cleanup interval on unmount
     }
-  }, [countdown]);
+}, [countdown]);
 
-  // Function to start the animation
+  // Updated the animation logic to make it loop in real-time while recording and stop when recording stops.
   const startAnimation = () => {
     console.log("Starting animation...");
     animationValue.setValue(0);
-    Animated.timing(animationValue, {
-      toValue: 1,
-      duration: 1000,
-      useNativeDriver: true,
-    }).start(() => {
-      console.log("Animation completed");
-    });
-  };
+    Animated.loop(
+        Animated.sequence([
+            Animated.timing(animationValue, {
+                toValue: 1,
+                duration: 500,
+                useNativeDriver: true,
+            }),
+            Animated.timing(animationValue, {
+                toValue: 0,
+                duration: 500,
+                useNativeDriver: true,
+            }),
+        ])
+    ).start();
+};
 
-  // Start the animation when recording starts
-  useEffect(() => {
-    if (recording) {
-      console.log("Recording started, triggering animation");
-      startAnimation();
-    } else {
-      console.log("Recording stopped, stopping animation");
-      animationValue.stopAnimation(() => {
+const stopAnimation = () => {
+    console.log("Stopping animation...");
+    animationValue.stopAnimation(() => {
         console.log("Animation has been stopped successfully");
-      });
+    });
+};
+
+useEffect(() => {
+    if (recording) {
+        console.log("Recording started, triggering animation");
+        startAnimation();
+    } else {
+        console.log("Recording stopped, stopping animation");
+        stopAnimation();
     }
-  }, [recording]);
+}, [recording]);
 
   const togglePlay = async () => {
     if (!sound) {
@@ -198,44 +208,18 @@ export default function MusicPlayer() {
     await FileSystem.copyAsync({ from: uri, to: wavFilePath });
     console.log(`Recording saved as .wav file at: ${wavFilePath}`);
 
-    // Simulate sending the file for verification
-    sendRecordingForVerification(wavFilePath);
-
-    // Share the recording
-    shareRecording(wavFilePath);
-  };
-
-  const shareRecording = async (filePath: string) => {
+    // Share the .wav file using expo-sharing
     if (await Sharing.isAvailableAsync()) {
-      try {
-        await Sharing.shareAsync(filePath);
-        console.log('Recording shared successfully');
-      } catch (error) {
-        console.error('Failed to share recording:', error);
-      }
+        try {
+            await Sharing.shareAsync(wavFilePath);
+            console.log('Recording shared successfully');
+        } catch (error) {
+            console.error('Failed to share recording:', error);
+        }
     } else {
-      console.log('Sharing is not available on this device');
+        console.log('Sharing is not available on this device');
     }
-  };
-
-  const sendRecordingForVerification = async (filePath: string) => {
-    try {
-      console.log(`Sending recording for verification: ${filePath}`);
-      // Replace with actual upload logic if needed
-      const response = await fetch('https://example.com/upload', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'audio/wav',
-        },
-        body: await FileSystem.readAsStringAsync(filePath, {
-          encoding: FileSystem.EncodingType.Base64,
-        }),
-      });
-      console.log('Upload response:', await response.json());
-    } catch (error) {
-      console.error('Failed to send recording for verification:', error);
-    }
-  };
+};
 
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
@@ -337,12 +321,13 @@ export default function MusicPlayer() {
 
           <TouchableOpacity
             style={styles.micButton}
-            onPress={recording ? stopRecording : startRecording}
           >
             <Ionicons name="mic" size={36} color="white" />
           </TouchableOpacity>
 
-          <MaterialIcons name="done" size={28} color="white" />
+          <TouchableOpacity onPress={stopRecording}>
+            <MaterialIcons name="done" size={28} color="white" />
+          </TouchableOpacity>
         </View>
 
         {/* Animated Visualization */}
@@ -453,7 +438,7 @@ const styles = StyleSheet.create({
   },
   animatedBar: {
     width: 10,
-    height: 50,
+    height: 20,
     backgroundColor: "#6c5ce7",
     marginHorizontal: 5,
   },
