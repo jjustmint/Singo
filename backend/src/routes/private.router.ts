@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { jwtMiddleware } from "../middlewares/jwt";
 import { UpdateKeyController } from "../controllers/updateKey";
 import { CompareVocalController } from "../controllers/CompareVocal";
-import { DisplaySongsController, getLyricsController } from "../controllers/Song";
+import { DisplaySongsController, getLyricsController, getSongKeyController } from "../controllers/Song";
 import { FindLeaderBoardController } from "../controllers/LeaderBoard";
 import { DisplayMistakesController } from "../controllers/Mistake";
 import { HistoryController } from "../controllers/History";
@@ -16,5 +16,6 @@ privateRouter.post("/getleaderboard", jwtMiddleware, FindLeaderBoardController);
 privateRouter.post("/getmistakes", jwtMiddleware, DisplayMistakesController);
 privateRouter.post("/gethistory", jwtMiddleware, HistoryController);
 privateRouter.post("/getlyrics", jwtMiddleware, getLyricsController);
+privateRouter.post("/getsongkey", jwtMiddleware, getSongKeyController);
 
 export { privateRouter }
