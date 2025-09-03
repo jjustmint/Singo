@@ -79,4 +79,4 @@ async def upload_and_detect(file: UploadFile = File(...)):
 
 # -------------------- Entry Point --------------------
 if __name__ == "__main__":
-    uvicorn.run("KeyDetector:app", host="0.0.0.0", port=8081)
+    uvicorn.run("KeyDetector:app", host="0.0.0.0", port=8083)
