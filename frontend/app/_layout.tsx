@@ -7,6 +7,7 @@ import Profile from "./page/Profile";
 import BottomNav from "./components/BottomNav";
 import ChooseKey from "./page/ChooseKey";
 import MusicPlayer from "./page/MusicPlayer";
+import Summary from "./page/Summary";
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -22,6 +23,7 @@ export default function MainNavigator() {
       <Stack.Screen name="Tabs" component={TabNavigator} />
       <Stack.Screen name="ChooseKey" component={ChooseKey} />
       <Stack.Screen name="MusicPlayer" component={MusicPlayer} />
+      <Stack.Screen name="Summary" component={Summary} />
     </Stack.Navigator>
   );
 }
@@ -66,7 +68,7 @@ function CustomBottomNav({
     if (routeName) {
       navigation.navigate(routeName);
     } else {
-      console.warn(<Text>Invalid tab key: {key}</Text>);
+      console.warn(`Invalid tab key: ${key}`); // Changed to a string template
     }
   };
 

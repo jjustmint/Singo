@@ -9,7 +9,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
-import { Audio } from 'expo-av'; // Import Audio from expo-av
+import { Audio, AVPlaybackStatus } from 'expo-av'; // Import Audio and AVPlaybackStatus from expo-av
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.8;
@@ -80,7 +80,7 @@ const NewReleaseTabs = () => {
       }
 
       try {
-        const { sound } = await Sound.createAsync(
+        const { sound } = await Audio.Sound.createAsync(
           typeof item.preview === 'string' ? { uri: item.preview } : item.preview,
           { shouldPlay: true }
         );
@@ -88,7 +88,7 @@ const NewReleaseTabs = () => {
         setPlayingId(item.id);
 
         // Explicitly define the type for the 'status' parameter
-        sound.setOnPlaybackStatusUpdate((status: Audio.AVPlaybackStatus) => {
+        sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
           if (status.isLoaded && status.didJustFinish) {
             setPlayingId(null);
           }
