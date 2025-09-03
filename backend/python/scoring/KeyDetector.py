@@ -1,13 +1,12 @@
 from typing import Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel
 import numpy as np
 import librosa
-import sounddevice as sd
-from collections import Counter
 import logging
-from fastapi.responses import JSONResponse
-import uvicorn   # 👈 added
+from tempfile import NamedTemporaryFile
+import shutil
+import uvicorn
 
 # -------------------- Setup --------------------
 logging.basicConfig(level=logging.INFO)
@@ -15,53 +14,36 @@ logging.basicConfig(level=logging.INFO)
 NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G',
               'G#', 'A', 'A#', 'B']
 SAMPLE_RATE = 44100
-DURATION = 5  # seconds
 
 app = FastAPI(title="Key Detection API")
 
 # -------------------- Helpers --------------------
-def freq_to_note_name(freq: float):
-    if freq == 0 or freq is None:
-        return None
-    midi_num = int(round(69 + 12 * np.log2(freq / 440.0)))
-    if midi_num < 0 or midi_num >= 128:
-        return None
-    return NOTE_NAMES[midi_num % 12]
-
-def detect_key(note_list):
-    note_counter = Counter(note_list)
-    most_common_notes = [note for note, _ in note_counter.most_common(7)]
-    return most_common_notes[0] if most_common_notes else "Unknown"
-
-def detect_key_from_audio(audio_data: np.ndarray, sample_rate: int):
-    logging.info("Running pitch tracking...")
-    pitches, magnitudes = librosa.core.piptrack(y=audio_data, sr=sample_rate)
-    detected_notes = []
-
-    threshold = 0.1 * np.max(magnitudes)  # ignore low magnitude pitches
-
-    for t in range(pitches.shape[1]):
-        pitch = pitches[:, t]
-        index = np.argmax(magnitudes[:, t])
-        if magnitudes[index, t] < threshold:
-            continue
-        freq = pitch[index]
-        if freq > 0:
-            note = freq_to_note_name(freq)
-            if note:
-                detected_notes.append(note)
-
-    logging.info(f"Detected notes count: {len(detected_notes)}")
-    return detect_key(detected_notes)
-
-def record_audio(duration: int, sample_rate: int):
-    logging.info("Recording...")
-    audio_data = sd.rec(int(duration * sample_rate),
-                        samplerate=sample_rate,
-                        channels=1)
-    sd.wait()
-    logging.info("Recording complete.")
-    return audio_data.flatten()
+def detect_key_librosa(audio_data: np.ndarray, sr: int):
+    """
+    Detect the key of a piece using a chromagram.
+    Returns the most likely tonic note (C, C#, D, etc.)
+    """
+    # Compute chromagram using Constant-Q transform
+    chroma = librosa.feature.chroma_cqt(y=audio_data, sr=sr)
+    
+    # Sum energy for each pitch class across all frames
+    chroma_sum = np.sum(chroma, axis=1)
+    
+    # Find the most prominent pitch class
+    tonic_index = np.argmax(chroma_sum)
+    tonic_note = NOTE_NAMES[tonic_index]
+    
+    # Optional: estimate major/minor using simple heuristic
+    # Compare sum of typical major vs minor triad positions
+    major_intervals = [0, 4, 7]  # tonic, major third, perfect fifth
+    minor_intervals = [0, 3, 7]  # tonic, minor third, perfect fifth
+    
+    major_score = sum(chroma_sum[(tonic_index + i) % 12] for i in major_intervals)
+    minor_score = sum(chroma_sum[(tonic_index + i) % 12] for i in minor_intervals)
+    
+    mode = "major" if major_score >= minor_score else "minor"
+    
+    return f"{tonic_note} {mode}"
 
 # -------------------- Schemas --------------------
 class DetectResponse(BaseModel):
@@ -70,14 +52,22 @@ class DetectResponse(BaseModel):
     message: Optional[str] = None
 
 # -------------------- API Routes --------------------
-@app.get("/keydetect", response_model=DetectResponse)
-def record_and_detect():
+@app.post("/keydetect", response_model=DetectResponse)
+async def upload_and_detect(file: UploadFile = File(...)):
     try:
-        audio_data = record_audio(DURATION, SAMPLE_RATE)
+        # Save uploaded file temporarily
+        with NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+            shutil.copyfileobj(file.file, tmp)
+            tmp_path = tmp.name
+
+        # Load audio
+        audio_data, sr = librosa.load(tmp_path, sr=SAMPLE_RATE, mono=True)
         if len(audio_data) == 0:
-            raise HTTPException(status_code=400, detail="No audio captured.")
-        
-        detected_key = detect_key_from_audio(audio_data, SAMPLE_RATE)
+            raise HTTPException(status_code=400, detail="No audio data found.")
+
+        # Detect key
+        detected_key = detect_key_librosa(audio_data, sr)
+
         return DetectResponse(
             success=True,
             detectedKey=detected_key,
