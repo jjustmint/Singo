@@ -18,6 +18,8 @@ import {
   Kanit_700Bold,
 } from "@expo-google-fonts/kanit";
 import { useRouter } from "expo-router";
+import { setAuthToken } from "@/util/cookies";
+import { LoginApi } from "@/api/auth/login";
 
 const LoginScreen: React.FC = () => {
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -39,19 +41,14 @@ const LoginScreen: React.FC = () => {
 
     setLoading(true);
     try {
-      const response = await fetch("http://10.4.153.66:8000/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
+      const loginResponse = await LoginApi(username, password);
 
-      const data = await response.json();
-
-      if (data.success) {
+      if (loginResponse.success) {
         Alert.alert("Login successful!");
+        setAuthToken(loginResponse.data); // Store token in cookies
         router.push("/"); // or your main app screen relative path
       } else {
-        Alert.alert(data.message || "Login failed");
+        Alert.alert(loginResponse.message || "Login failed");
       }
     } catch (error) {
       console.error(error);

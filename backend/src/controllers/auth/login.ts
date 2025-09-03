@@ -31,7 +31,7 @@ const LoginController = async (c: Context) => {
 
         setCookie(c, 'token', jwtToken)
 
-        return c.json(ConstructResponse(true, "Login Successfully"), 200)
+        return c.json(ConstructResponse(true, "Login Successfully", jwtToken))
     } catch (e) {
         console.log(e)
         return c.json(ConstructResponse(false, `${e}`), 500)
