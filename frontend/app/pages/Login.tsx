@@ -50,7 +50,10 @@ const LoginScreen: React.FC = () => {
       if (loginResponse.success) {
         Alert.alert("Login successful!");
         setAuthToken(loginResponse.data); // Store token in cookies
-        router.push("/page/Home"); // or your main app screen relative path
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "Tabs" as never, params: { screen: "Home" } }],
+        }); // Reset the navigation stack and go to the Home page
       } else {
         Alert.alert(loginResponse.message || "Login failed");
       }
@@ -150,7 +153,7 @@ const LoginScreen: React.FC = () => {
           {/* Sign up */}
           <View style={styles.signupRow}>
             <Text style={styles.signupText}>Don’t have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate("/Signup")}>
+            <TouchableOpacity onPress={() => navigation.navigate("Signup")}>
               <Text style={[styles.link, { textDecorationLine: "underline" }]}>
                 Sign up
               </Text>
