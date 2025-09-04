@@ -12,7 +12,8 @@ import CategoryTabs from "../components/CategoryTabs";
 import NewReleaseTabs from "../components/NewReleaseTabs";
 import TrendingCard from "../components/TrendingCard";
 import TopRateTabs from "../components/TopRateTabs";
-import { getAllsongs, getUsername } from "@/api/home";
+import { getUsername } from "@/api/getUser";
+import { getAllsongs } from "@/api/song/getAll";
 
 const { width } = Dimensions.get("window");
 
