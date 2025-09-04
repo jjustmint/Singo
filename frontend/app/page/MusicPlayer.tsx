@@ -203,15 +203,15 @@ useEffect(() => {
     setRecordingUri(uri);
     setRecording(null);
 
-    // Save the recording as a .wav file
-    const wavFilePath = `${FileSystem.documentDirectory}recording.wav`;
-    await FileSystem.copyAsync({ from: uri, to: wavFilePath });
-    console.log(`Recording saved as .wav file at: ${wavFilePath}`);
+    // Save the recording as a .mp3 file
+    const mp3FilePath = `${FileSystem.documentDirectory}recording.mp3`;
+    await FileSystem.copyAsync({ from: uri, to: mp3FilePath });
+    console.log(`Recording saved as .mp3 file at: ${mp3FilePath}`);
 
-    // Share the .wav file using expo-sharing
+    // Share the .mp3 file using expo-sharing
     if (await Sharing.isAvailableAsync()) {
         try {
-            await Sharing.shareAsync(wavFilePath);
+            await Sharing.shareAsync(mp3FilePath);
             console.log('Recording shared successfully');
         } catch (error) {
             console.error('Failed to share recording:', error);
