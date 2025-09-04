@@ -10,3 +10,6 @@ export type RootStackParamList = {
 
 export type TabKey = "home" | "stats" | "profile";
 
+// Added a default export to resolve the missing default export warning
+export default {};
+

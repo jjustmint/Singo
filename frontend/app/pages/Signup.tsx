@@ -5,8 +5,9 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   ActivityIndicator,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, Feather } from "@expo/vector-icons";
@@ -18,6 +19,9 @@ import {
 } from "@expo-google-fonts/kanit";
 import { useRouter } from "expo-router";
 import { SignUpApi } from "@/api/auth/signin";
+import { useNavigation } from "@react-navigation/native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
+import { StatusBar } from "expo-status-bar";
 
 const SignupScreen: React.FC = () => {
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -26,6 +30,7 @@ const SignupScreen: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
   const router = useRouter();
+  const navigation = useNavigation();
 
   const [fontsLoaded] = useFonts({
     Kanit_400Regular,
@@ -46,10 +51,15 @@ const SignupScreen: React.FC = () => {
       const signupResponse = await SignUpApi(username, password);
 
       if (signupResponse.success) {
-        alert("Signup successful! You can now login.");
-        router.push("/pages/Login");
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "Login" as never }],
+        });
       } else {
-        alert(signupResponse.message || `Signup failed (status ${signupResponse.message})`);
+        alert(
+          signupResponse.message ||
+            `Signup failed (status ${signupResponse.message})`
+        );
       }
     } catch (error) {
       console.error(error);
@@ -66,118 +76,152 @@ const SignupScreen: React.FC = () => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={["#6D5DFB", "#C56FFF"]}
-        style={styles.topSection}
-      ></LinearGradient>
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <View style={{ flex: 1 }}>
+        {/* Status bar */}
+        <StatusBar translucent backgroundColor="transparent" style="light" />
 
-      <View style={styles.formContainer}>
-        <TouchableOpacity
-          style={styles.backArrow}
-          onPress={() => router.back()} // Back button navigation
+        {/* Top Gradient Background */}
+        <LinearGradient
+          colors={["#6D5DFB", "#C56FFF"]}
+          style={styles.topBackground}
+        />
+
+        {/* Bottom White Background */}
+        <View style={styles.bottomBackground} />
+
+        {/* Scrollable Form */}
+        <KeyboardAwareScrollView
+          style={{ flex: 1, position: "absolute", width: "100%", height: "100%" }}
+          contentContainerStyle={{ flexGrow: 1 }}
+          enableOnAndroid
+          extraScrollHeight={30}
+          keyboardOpeningTime={0}
+          keyboardShouldPersistTaps="handled"
         >
-          <Ionicons name="arrow-back" size={28} color="#5A5DFF" />
-        </TouchableOpacity>
+          <View style={{ flex: 1, justifyContent: "flex-end" }}>
+            {/* White form container */}
+            <View style={styles.formContainer}>
+              <TouchableOpacity
+                style={styles.backArrow}
+                onPress={() => router.back()}
+              >
+                <Ionicons name="arrow-back" size={28} color="#5A5DFF" />
+              </TouchableOpacity>
 
-        <Text style={styles.signupText}>Sign up</Text>
+              <Text style={styles.signupText}>Sign Up</Text>
 
-        <View style={styles.inputWrapper}>
-          <Ionicons name="person-outline" size={20} color="#aaa" />
-          <TextInput
-            style={styles.input}
-            placeholder="Username"
-            placeholderTextColor="#ccc"
-            value={username}
-            onChangeText={setUsername}
-          />
-        </View>
+              {/* Username input */}
+              <View style={styles.inputWrapper}>
+                <Ionicons name="person-outline" size={20} color="#aaa" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Username"
+                  placeholderTextColor="#ccc"
+                  value={username}
+                  onChangeText={setUsername}
+                />
+              </View>
 
-        <View style={styles.inputWrapper}>
-          <Ionicons name="lock-closed-outline" size={20} color="#aaa" />
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor="#ccc"
-            secureTextEntry={!passwordVisible}
-            value={password}
-            onChangeText={setPassword}
-          />
-          <TouchableOpacity
-            onPress={() => setPasswordVisible(!passwordVisible)}
-          >
-            <Feather
-              name={passwordVisible ? "eye" : "eye-off"}
-              size={20}
-              color="#aaa"
-            />
-          </TouchableOpacity>
-        </View>
+              {/* Password input */}
+              <View style={styles.inputWrapper}>
+                <Ionicons name="lock-closed-outline" size={20} color="#aaa" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Password"
+                  placeholderTextColor="#ccc"
+                  secureTextEntry={!passwordVisible}
+                  value={password}
+                  onChangeText={setPassword}
+                />
+                <TouchableOpacity
+                  onPress={() => setPasswordVisible(!passwordVisible)}
+                >
+                  <Feather
+                    name={passwordVisible ? "eye" : "eye-off"}
+                    size={20}
+                    color="#aaa"
+                  />
+                </TouchableOpacity>
+              </View>
 
-        <View style={styles.inputWrapper}>
-          <Ionicons name="lock-closed-outline" size={20} color="#aaa" />
-          <TextInput
-            style={styles.input}
-            placeholder="Confirm Password"
-            placeholderTextColor="#ccc"
-            secureTextEntry={!confirmPasswordVisible}
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-          />
-          <TouchableOpacity
-            onPress={() => setConfirmPasswordVisible(!confirmPasswordVisible)}
-          >
-            <Feather
-              name={confirmPasswordVisible ? "eye" : "eye-off"}
-              size={20}
-              color="#aaa"
-            />
-          </TouchableOpacity>
-        </View>
+              {/* Confirm Password input */}
+              <View style={styles.inputWrapper}>
+                <Ionicons name="lock-closed-outline" size={20} color="#aaa" />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Confirm Password"
+                  placeholderTextColor="#ccc"
+                  secureTextEntry={!confirmPasswordVisible}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                />
+                <TouchableOpacity
+                  onPress={() =>
+                    setConfirmPasswordVisible(!confirmPasswordVisible)
+                  }
+                >
+                  <Feather
+                    name={confirmPasswordVisible ? "eye" : "eye-off"}
+                    size={20}
+                    color="#aaa"
+                  />
+                </TouchableOpacity>
+              </View>
 
-        <TouchableOpacity style={styles.signupButton} onPress={handleSignup}>
-          <Text style={styles.signupButtonText}>Sign up</Text>
-        </TouchableOpacity>
+              {/* Signup Button */}
+              <TouchableOpacity
+                style={styles.signupButton}
+                onPress={handleSignup}
+              >
+                <Text style={styles.signupButtonText}>Sign Up</Text>
+              </TouchableOpacity>
 
-        <View style={styles.Login}>
-          <Text style={{ color: "#666", fontFamily: "Kanit_500Medium" }}>
-            Already have an account?{" "}
-          </Text>
-          <TouchableOpacity onPress={() => router.push("/pages/Login")}>
-            <Text
-              style={[
-                styles.linkText,
-                {
-                  fontFamily: "Kanit_500Medium",
-                  textDecorationLine: "underline",
-                },
-              ]}
-            >
-              Login
-            </Text>
-          </TouchableOpacity>
-        </View>
+              {/* Login link */}
+              <View style={styles.Login}>
+                <Text style={{ color: "#666", fontFamily: "Kanit_500Medium" }}>
+                  Already have an account?{" "}
+                </Text>
+                <TouchableOpacity onPress={() => router.push("/pages/Login")}>
+                  <Text
+                    style={[
+                      styles.linkText,
+                      {
+                        fontFamily: "Kanit_500Medium",
+                        textDecorationLine: "underline",
+                      },
+                    ]}
+                  >
+                    Login
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </KeyboardAwareScrollView>
       </View>
-    </SafeAreaView>
+    </TouchableWithoutFeedback>
   );
 };
 
 export default SignupScreen;
 
 const styles = StyleSheet.create({
-  container: {
+  topBackground: {
     flex: 1,
-    backgroundColor: "#eee",
+    height: "40%", // top 40% gradient
   },
-  topSection: {
-    flex: 0.6,
+  bottomBackground: {
+    flex: 1,
+    height: "60%", // bottom 60% white
+    backgroundColor: "#F7F7F7",
   },
   formContainer: {
+    flex: 0.3,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     marginTop: -30,
-    flex: 2,
-    padding: 50,
+    padding: 30,
     backgroundColor: "#F7F7F7",
   },
   backArrow: {
