@@ -1,11 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  Image,
-  Dimensions,
-  ScrollView,
-} from "react-native";
+import { View, Text, Image, Dimensions, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
 import CategoryTabs from "../components/CategoryTabs";
@@ -14,6 +8,7 @@ import TrendingCard from "../components/TrendingCard";
 import TopRateTabs from "../components/TopRateTabs";
 import { getUsername } from "@/api/getUser";
 import { getAllsongs } from "@/api/song/getAll";
+import styles from "../style/pagestyle/HomeStyle"
 
 const { width } = Dimensions.get("window");
 
@@ -28,28 +23,27 @@ export default function Home() {
   }, []);
 
   const handleGetUsername = async () => {
-    const fetchedUsername =  await getUsername();
+    const fetchedUsername = await getUsername();
     const user = fetchedUsername.data.username;
     setUsername(user);
     console.log("Fetched username:", fetchedUsername);
   };
 
   const handleGetSongs = async () => {
-    const fetchedSongs =  await getAllsongs();
+    const fetchedSongs = await getAllsongs();
     setSongs(fetchedSongs.data);
-    // console.log("Fetched songs:", fetchedSongs);
-  }
+  };
 
-  const scrollToSection = (section: "New Release" | "Trending" | "Top Rated") => { // Add explicit type for 'section'
+  const scrollToSection = (section: "New Release" | "Trending" | "Top Rated") => {
     if (scrollViewRef.current) {
       scrollViewRef.current.scrollTo({
         y:
           section === "New Release"
-            ? 0 // Adjust this value to the Y-offset of the "New Release" section
+            ? 0
             : section === "Trending"
-            ? 300 // Adjust this value to the Y-offset of the "Trending" section
+            ? 300
             : section === "Top Rated"
-            ? 900 // Adjust this value to the Y-offset of the "Top Rated" section
+            ? 900
             : 0,
         animated: true,
       });
@@ -57,140 +51,56 @@ export default function Home() {
   };
 
   return (
-    <SafeAreaView
-      style={{ flex: 1, backgroundColor: "#131313" }}
-      edges={["left", "right"]}
-    >
-      <View style={{ flex: 1, position: "relative" }}>
-        <View
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            overflow: "hidden",
-            zIndex: 0,
-          }}
-        >
-          <View
-            style={{
-              position: "absolute",
-              width: 200,
-              height: 200,
-              borderRadius: 100,
-              backgroundColor: "rgba(255, 102, 204, 1)",
-              top: -40,
-              left: -40,
-            }}
-          />
-          <View
-            style={{
-              position: "absolute",
-              width: 180,
-              height: 180,
-              borderRadius: 90,
-              backgroundColor: "rgba(160, 102, 255, 1)",
-              top: 20,
-              left: 30,
-            }}
-          />
-          <View
-            style={{
-              position: "absolute",
-              width: 160,
-              height: 160,
-              borderRadius: 80,
-              backgroundColor: "rgba(102, 140, 255, 1)",
-              top: 60,
-              left: -20,
-            }}
-          />
-          <BlurView
-            intensity={100}
-            tint="dark"
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-            }}
-          />
+    <SafeAreaView style={styles.safeArea} edges={["left", "right"]}>
+      <View style={styles.container}>
+        {/* Background Blurs */}
+        <View style={styles.backgroundContainer}>
+          <View style={styles.circlePink} />
+          <View style={styles.circlePurple} />
+          <View style={styles.circleBlue} />
+          <BlurView intensity={100} tint="dark" style={styles.blur} />
         </View>
 
-        <ScrollView ref={scrollViewRef} contentContainerStyle={{ paddingBottom: 150 }}>
-          <View style={{ zIndex: 2 }}>
+        <ScrollView ref={scrollViewRef} contentContainerStyle={styles.scrollContent}>
+          <View style={styles.contentWrapper}>
             {/* Profile */}
-            <View style={{ padding: 20, marginTop: 50 }}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <View style={styles.profileContainer}>
+              <View style={styles.profileInner}>
                 <Image
                   source={{
                     uri: "https://static.vecteezy.com/system/resources/previews/024/966/233/non_2x/businesswoman-portrait-beautiful-woman-in-business-suit-employee-of-business-institution-in-uniform-lady-office-worker-woman-business-avatar-profile-picture-illustration-vector.jpg",
                   }}
-                  style={{
-                    width: 70,
-                    height: 70,
-                    borderRadius: 40,
-                    marginRight: 10,
-                  }}
+                  style={styles.profileImage}
                 />
-                <Text
-                  style={{
-                    fontSize: 24,
-                    fontWeight: "bold",
-                    color: "white",
-                    left: 30,
-                  }}
-                >
-                  Hi! {username || "Guest"}
-                </Text>
+                <Text style={styles.profileText}>Hi! {username || "Guest"}</Text>
               </View>
             </View>
 
-            <CategoryTabs scrollToSection={(category: string) => scrollToSection(category as "New Release" | "Trending" | "Top Rated")} />
+            <CategoryTabs
+              scrollToSection={(category: string) =>
+                scrollToSection(category as "New Release" | "Trending" | "Top Rated")
+              }
+            />
 
-            <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
-              <Text
-                style={{
-                  color: "white",
-                  fontSize: 22,
-                  fontWeight: "bold",
-                }}
-              >
-                New Release
-              </Text>
+            {/* New Release Section */}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>New Release</Text>
             </View>
             <NewReleaseTabs />
 
-            <View style={{ paddingHorizontal: 20 }}>
-              <Text
-                style={{
-                  color: "white",
-                  fontSize: 22,
-                  fontWeight: "bold",
-                }}
-              >
-                Trending
-              </Text>
+            {/* Trending Section */}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Trending</Text>
             </View>
-            <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
+            <View style={styles.sectionContent}>
               <TrendingCard />
             </View>
 
-            {/* Top Rate */}
-            <View style={{ paddingHorizontal: 20 }}>
-              <Text
-                style={{
-                  color: "white",
-                  fontSize: 22,
-                  fontWeight: "bold",
-                }}
-              >
-                Top Rate
-              </Text>
+            {/* Top Rate Section */}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Top Rate</Text>
             </View>
-            <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
+            <View style={styles.sectionContent}>
               <TopRateTabs />
             </View>
           </View>
@@ -199,4 +109,3 @@ export default function Home() {
     </SafeAreaView>
   );
 }
-

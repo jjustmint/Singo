@@ -5,10 +5,10 @@ import {
   FlatList,
   Image,
   TouchableOpacity,
-  StyleSheet,
 } from "react-native";
 import { AntDesign } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { styles } from "../style/componentstyle/HistoryStyle"
 
 interface HistoryItem {
   id: string;
@@ -18,6 +18,7 @@ interface HistoryItem {
   image: string;
 }
 
+// Mock Data
 const mockData: HistoryItem[] = [
   {
     id: "1",
@@ -71,7 +72,7 @@ const History: React.FC<{ data?: HistoryItem[] }> = ({ data = mockData }) => {
   const renderItem = ({ item }: { item: HistoryItem }) => (
     <TouchableOpacity
       key={item.id}
-      onPress={() => handleCardPress()}
+      onPress={handleCardPress}
       style={styles.card}
     >
       <Image source={{ uri: item.image }} style={styles.image} />
@@ -102,61 +103,5 @@ const History: React.FC<{ data?: HistoryItem[] }> = ({ data = mockData }) => {
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  container: {
-    marginTop: 20,
-    marginBottom: 20,
-  },
-  header: {
-    color: "#fff",
-    fontSize: 24,
-    marginBottom: 8,
-    fontWeight: "bold",
-  },
-  card: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1e1e1e",
-    borderRadius: 12,
-    marginTop: 5,
-    marginBottom: 10,
-    padding: 10,
-  },
-  image: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
-  },
-  info: {
-    flex: 1,
-    marginLeft: 10,
-  },
-  title: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-  artist: {
-    color: "#bbb",
-    fontSize: 12,
-  },
-  date: {
-    color: "#777",
-    fontSize: 12,
-  },
-  loadMore: {
-    marginTop: 10,
-    alignSelf: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    backgroundColor: "#5B5BF1",
-    borderRadius: 20,
-  },
-  loadMoreText: {
-    color: "#fff",
-    fontWeight: "bold",
-  },
-});
 
 export default History;

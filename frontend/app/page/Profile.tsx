@@ -90,11 +90,12 @@ export default function Profile() {
             <View style={{ zIndex: 2 }}>
               {/* Profile */}
               <View style={{ padding: 20, marginTop: 50 }}>
-                <ProfileInfo 
-                  name="John Doe" 
-                  songCount={30} 
-                  profileImage="https://example.com/profile.jpg" 
-                />
+              <ProfileInfo
+              name="John Doe"
+              songCount={15}
+              profileImage="https://www.thaiwatsadu.com/_next/image?url=https%3A%2F%2Fpim.thaiwatsadu.com%2FTWDPIM%2Fweb%2FWatermark%2FImage%2F0302%2F60390467_3.jpg&w=3840&q=75"
+              />
+
               </View>
               <View style={{ padding: 20 }}>
                 <Recent
