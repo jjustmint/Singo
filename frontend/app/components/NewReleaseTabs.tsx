@@ -59,7 +59,6 @@ const tripledSongs = [...originalSongs, ...originalSongs, ...originalSongs];
 const NewReleaseTabs = () => {
   const flatListRef = useRef<FlatList>(null);
   const positionIndex = useRef(VISIBLE_INDEX);
-  const [liked, setLiked] = useState<string[]>([]);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
 
@@ -126,7 +125,6 @@ const NewReleaseTabs = () => {
   }, []);
 
   const renderItem = ({ item }: { item: typeof originalSongs[0] }) => {
-    const isLiked = liked.includes(item.song_id);
     const isPlaying = playingId === item.song_id;
 
     return (
@@ -137,7 +135,7 @@ const NewReleaseTabs = () => {
           imageStyle={{ borderRadius: 20 }}
         >
           <View style={styles.textContainer}>
-            <Text style={styles.songName}>{item.name}</Text>
+            <Text style={styles.songName}>{item.title}</Text>
             <Text style={styles.singer}>{item.singer}</Text>
           </View>
 
