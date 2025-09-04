@@ -6,7 +6,9 @@ import { BlurView } from "expo-blur";
 import ScoreChart from "../components/ScoreChart";
 import SongChallenge from "../components/SongChalleng";
 import WeeklyRanking from "../components/WeeklyRanking";
-import { getAudioVerById, getLeaderboard, getSong } from "@/api/leaderboard";
+import { getLeaderboard } from "@/api/leaderboard";
+import { getSong } from "@/api/song/getSong";
+import { getAudioVerById } from "@/api/song/getAudioById";
 
 const { height } = Dimensions.get("window");
 
