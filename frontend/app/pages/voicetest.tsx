@@ -11,6 +11,7 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
+import axios from "axios";
 import {
   useFonts,
   Kanit_400Regular,
@@ -19,20 +20,18 @@ import {
 } from "@expo-google-fonts/kanit";
 
 const VoiceTestScreen = ({ navigation }: any) => {
-  // ---------- Hooks ----------
   const [step, setStep] = useState(0);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [uploading, setUploading] = useState(false); // track upload
 
-  // Load Kanit font
   const [fontsLoaded] = useFonts({
     Kanit_400Regular,
     Kanit_500Medium,
     Kanit_700Bold,
   });
 
-  // Setup audio
   useEffect(() => {
     const setupAudio = async () => {
       const { granted } = await Audio.requestPermissionsAsync();
@@ -69,9 +68,33 @@ const VoiceTestScreen = ({ navigation }: any) => {
       await recording.stopAndUnloadAsync();
       const uri = recording.getURI();
       if (!uri) throw new Error("Recording URI is null");
+
       setRecordedUri(uri);
       setRecording(null);
-      setStep(3); // ⬅️ jump to confirmation step immediately
+      setUploading(true); // start upload
+
+      // ---------- Upload to backend ----------
+      const formData = new FormData();
+      formData.append("file", {
+        uri,
+        name: "recording.mp3",
+        type: "audio/mp3",
+      } as any);
+
+      try {
+        const res = await axios.post(
+          "http://localhost:8000/private/updatekey", // your backend endpoint
+          formData,
+          { headers: { "Content-Type": "multipart/form-data" } }
+        );
+        console.log("Upload success:", res.data);
+      } catch (err) {
+        console.error("Upload failed:", err);
+        Alert.alert("Upload failed", "Please try again.");
+      } finally {
+        setUploading(false); // finished uploading
+        setStep(3); // go to confirmation step
+      }
     } catch (err) {
       console.error("Stop recording error", err);
     }
@@ -96,7 +119,6 @@ const VoiceTestScreen = ({ navigation }: any) => {
     await newSound.playAsync();
   };
 
-  // ---------- Step-specific data ----------
   const stepStyles = [
     { titleSize: 24, buttonSize: 90 },
     { titleSize: 48, buttonSize: 90 },
@@ -126,13 +148,12 @@ const VoiceTestScreen = ({ navigation }: any) => {
     {
       lines: [],
       icon: null,
-      replayStep: true, // we’ll use this flag to show buttons
+      replayStep: true,
     },
   ];
 
   const current = screens[step];
 
-  // ---------- Conditional render for font loading ----------
   if (!fontsLoaded) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
@@ -141,7 +162,6 @@ const VoiceTestScreen = ({ navigation }: any) => {
     );
   }
 
-  // ---------- Render ----------
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <LinearGradient colors={["#ff7eb3", "#6c5ce7"]} style={styles.container}>
@@ -195,90 +215,96 @@ const VoiceTestScreen = ({ navigation }: any) => {
                 />
               </TouchableOpacity>
             ) : null}
+
+            {uploading && (
+              <Text
+                style={{
+                  color: "yellow",
+                  marginTop: 20,
+                  fontFamily: "Kanit_500Medium",
+                }}
+              >
+                Uploading...
+              </Text>
+            )}
           </View>
         )}
 
         {/* Step 3: After recording finished */}
-{step === 3 && recordedUri && (
-  <View style={{ flex: 1, width: "100%" }}>
-    {/* Center area: text + play button */}
-    <View
-      style={{
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-      }}
-    >
-      {/* "Do you like it?" text */}
-      <Text
-        style={{
-          fontSize: 28,
-          fontFamily: "Kanit_700Bold",
-          color: "#fff",
-          textAlign: "center",
-          marginBottom: 20,
-        }}
-      >
-        Do you like it?
-      </Text>
+        {step === 3 && recordedUri && (
+          <View style={{ flex: 1, width: "100%" }}>
+            <View
+              style={{
+                flex: 1,
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 28,
+                  fontFamily: "Kanit_700Bold",
+                  color: "#fff",
+                  textAlign: "center",
+                  marginBottom: 20,
+                }}
+              >
+                Do you like it?
+              </Text>
 
-      {/* Play button */}
-      <TouchableOpacity
-        style={{
-          ...styles.mainButton,
-          width: 100,
-          height: 100,
-          borderRadius: 50,
-        }}
-        onPress={playRecording}
-      >
-        <Ionicons name="play" size={40} color="#fff" />
-      </TouchableOpacity>
-    </View>
+              <TouchableOpacity
+                style={{
+                  ...styles.mainButton,
+                  width: 100,
+                  height: 100,
+                  borderRadius: 50,
+                }}
+                onPress={playRecording}
+              >
+                <Ionicons name="play" size={40} color="#fff" />
+              </TouchableOpacity>
+            </View>
 
-    {/* Bottom area: refresh (left) & check (right) */}
-    <View
-      style={{
-        flexDirection: "row",
-        justifyContent: "space-between",
-        width: "97%",
-        marginBottom: 10,
-        alignSelf: "center",
-      }}
-    >
-      {/* Refresh button (left) */}
-      <TouchableOpacity
-        style={{
-          ...styles.mainButton,
-          width: 60,
-          height: 60,
-          borderRadius: 40,
-        }}
-        onPress={() => {
-          setRecordedUri(null);
-          setStep(2); // back to recording
-        }}
-      >
-        <Ionicons name="refresh" size={25} color="#fff" />
-      </TouchableOpacity>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                width: "97%",
+                marginBottom: 10,
+                alignSelf: "center",
+              }}
+            >
+              <TouchableOpacity
+                style={{
+                  ...styles.mainButton,
+                  width: 60,
+                  height: 60,
+                  borderRadius: 40,
+                }}
+                onPress={() => {
+                  setRecordedUri(null);
+                  setStep(2);
+                }}
+              >
+                <Ionicons name="refresh" size={25} color="#fff" />
+              </TouchableOpacity>
 
-      {/* Check button (right) */}
-      <TouchableOpacity
-        style={{
-          ...styles.mainButton,
-          width: 60,
-          height: 60,
-          borderRadius: 40,
-        }}
-        onPress={() => navigation.navigate("Home")}
-      >
-        <Ionicons name="checkmark" size={25} color="#fff" />
-      </TouchableOpacity>
-    </View>
-  </View>
-)}
+              <TouchableOpacity
+                style={{
+                  ...styles.mainButton,
+                  width: 60,
+                  height: 60,
+                  borderRadius: 40,
+                }}
+                onPress={() => navigation.navigate("Home")}
+              >
+                <Ionicons name="checkmark" size={25} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
-        {recording && (
+        {recording && !uploading && (
           <Text
             style={{
               color: "red",
