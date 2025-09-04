@@ -37,7 +37,7 @@ export default function Home() {
   const handleGetSongs = async () => {
     const fetchedSongs =  await getAllsongs();
     setSongs(fetchedSongs.data);
-    console.log("Fetched songs:", fetchedSongs);
+    // console.log("Fetched songs:", fetchedSongs);
   }
 
   const scrollToSection = (section: "New Release" | "Trending" | "Top Rated") => { // Add explicit type for 'section'
