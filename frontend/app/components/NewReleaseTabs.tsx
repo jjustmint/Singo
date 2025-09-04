@@ -18,36 +18,36 @@ const VISIBLE_INDEX = 5;
 
 const originalSongs = [
   {
-    id: '1',
-    name: 'Snack & Wine',
+    song_id: '1',
+    title: 'Snack & Wine',
     singer: 'WIM',
     image: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg',
     preview: require('../../assets/music/SnacksandWine.mp3'),
   },
   {
-    id: '2',
-    name: 'Handlebars(feat. Dua Lipa)',
+    song_id: '2',
+    title: 'Handlebars(feat. Dua Lipa)',
     singer: 'JENNIE',
     image: 'https://i.scdn.co/image/ab67616d0000b2735a43918ea90bf1e44b7bdcfd',
     preview: require('../../assets/music/SnacksandWine.mp3'),
   },
   {
-    id: '3',
-    name: 'Tell me the Name',
+    song_id: '3',
+    title: 'Tell me the Name',
     singer: 'Jaff Satur',
     image: 'https://i1.sndcdn.com/artworks-uTbCE2D2UMoS-0-t500x500.jpg',
     preview: require('../../assets/music/SnacksandWine.mp3'),
   },
   {
-    id: '4',
-    name: 'Supernatural',
+    song_id: '4',
+    title: 'Supernatural',
     singer: 'Ariana Grande',
     image: 'https://i.scdn.co/image/ab67616d00001e020497121c2a34a6a1cb885e97',
     preview: require('../../assets/music/SnacksandWine.mp3'),
   },
   {
-    id: '5',
-    name: 'Soft Spot',
+    song_id: '5',
+    title: 'Soft Spot',
     singer: 'Kashi',
     image: 'https://i.scdn.co/image/ab67616d0000b273617997bc09bb7fa23624eff5',
     preview: require('../../assets/music/SnacksandWine.mp3'),
@@ -63,14 +63,8 @@ const NewReleaseTabs = () => {
   const [playingId, setPlayingId] = useState<string | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
 
-  const toggleLike = (id: string) => {
-    setLiked((prev) =>
-      prev.includes(id) ? prev.filter((songId) => songId !== id) : [...prev, id]
-    );
-  };
-
   const playOrPause = async (item: typeof originalSongs[0]) => {
-    if (playingId === item.id) {
+    if (playingId === item.song_id) {
       await soundRef.current?.pauseAsync();
       setPlayingId(null);
     } else {
@@ -85,7 +79,7 @@ const NewReleaseTabs = () => {
           { shouldPlay: true }
         );
         soundRef.current = sound;
-        setPlayingId(item.id);
+        setPlayingId(item.song_id);
 
         // Explicitly define the type for the 'status' parameter
         sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
@@ -132,8 +126,8 @@ const NewReleaseTabs = () => {
   }, []);
 
   const renderItem = ({ item }: { item: typeof originalSongs[0] }) => {
-    const isLiked = liked.includes(item.id);
-    const isPlaying = playingId === item.id;
+    const isLiked = liked.includes(item.song_id);
+    const isPlaying = playingId === item.song_id;
 
     return (
       <View style={{ marginHorizontal: CARD_SPACING / 2 }}>
@@ -146,17 +140,6 @@ const NewReleaseTabs = () => {
             <Text style={styles.songName}>{item.name}</Text>
             <Text style={styles.singer}>{item.singer}</Text>
           </View>
-
-          <TouchableOpacity
-            style={styles.likeIcon}
-            onPress={() => toggleLike(item.id)}
-          >
-            <FontAwesome
-              name={isLiked ? 'heart' : 'heart-o'}
-              size={24}
-              color="#fff"
-            />
-          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.previewButton}
