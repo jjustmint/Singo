@@ -23,6 +23,8 @@ model song {
   key_signature  String          @db.VarChar(50)
   parent_song_id Int?
   lyrics         String?
+  album_cover    String?         @db.VarChar(255)
+  singer         String?         @db.VarChar(255)
   audio_version  audio_version[]
   song           song?           @relation("songTosong", fields: [parent_song_id], references: [song_id], onDelete: Cascade, onUpdate: NoAction)
   other_song     song[]          @relation("songTosong")
