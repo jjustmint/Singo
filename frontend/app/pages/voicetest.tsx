@@ -124,7 +124,7 @@ const VoiceTestScreen = ({ navigation }: any) => {
       icon: "mic",
     },
     {
-      lines: [{ text: "Do you like it?", size: 28 }],
+      lines: [],
       icon: null,
       replayStep: true, // we’ll use this flag to show buttons
     },
@@ -200,35 +200,79 @@ const VoiceTestScreen = ({ navigation }: any) => {
 
         {/* Step 3: After recording finished */}
 {step === 3 && recordedUri && (
-  <View style={{ alignItems: "center" }}>
-    <View style={{ flexDirection: "row", justifyContent: "center" }}>
+  <View style={{ flex: 1, width: "100%" }}>
+    {/* Center area: text + play button */}
+    <View
+      style={{
+        flex: 1,
+        justifyContent: "center",
+        alignItems: "center",
+      }}
+    >
+      {/* "Do you like it?" text */}
+      <Text
+        style={{
+          fontSize: 28,
+          fontFamily: "Kanit_700Bold",
+          color: "#fff",
+          textAlign: "center",
+          marginBottom: 20,
+        }}
+      >
+        Do you like it?
+      </Text>
+
+      {/* Play button */}
       <TouchableOpacity
         style={{
           ...styles.mainButton,
-          width: currentStyle.buttonSize,
-          height: currentStyle.buttonSize,
-          borderRadius: currentStyle.buttonSize / 2,
-          marginHorizontal: 20, // 👈 add spacing
+          width: 100,
+          height: 100,
+          borderRadius: 50,
         }}
         onPress={playRecording}
       >
         <Ionicons name="play" size={40} color="#fff" />
       </TouchableOpacity>
+    </View>
 
+    {/* Bottom area: refresh (left) & check (right) */}
+    <View
+      style={{
+        flexDirection: "row",
+        justifyContent: "space-between",
+        width: "97%",
+        marginBottom: 10,
+        alignSelf: "center",
+      }}
+    >
+      {/* Refresh button (left) */}
       <TouchableOpacity
         style={{
           ...styles.mainButton,
-          width: currentStyle.buttonSize,
-          height: currentStyle.buttonSize,
-          borderRadius: currentStyle.buttonSize / 2,
-          marginHorizontal: 20, // 👈 add spacing
+          width: 60,
+          height: 60,
+          borderRadius: 40,
         }}
         onPress={() => {
           setRecordedUri(null);
-          setStep(2);
+          setStep(2); // back to recording
         }}
       >
-        <Ionicons name="refresh" size={40} color="#fff" />
+        <Ionicons name="refresh" size={25} color="#fff" />
+      </TouchableOpacity>
+
+      {/* Check button (right) */}
+      <TouchableOpacity
+        style={{
+          ...styles.mainButton,
+          width: 60,
+          height: 60,
+          borderRadius: 40,
+        }}
+        onPress={() => navigation.navigate("Home")}
+      >
+        <Ionicons name="checkmark" size={25} color="#fff" />
       </TouchableOpacity>
     </View>
   </View>
