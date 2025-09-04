@@ -5,6 +5,7 @@
     "pull": "bunx prisma db pull && bunx prisma generate"
   },
   "dependencies": {
+    "@hono/node-server": "^1.19.1",
     "@prisma/client": "^6.7.0",
     "hono": "^4.9.5"
   },

@@ -27,6 +27,7 @@ import { LoginApi } from "@/api/auth/login";
 import { useNavigation } from "@react-navigation/native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { getUser } from "@/api/getUser";
 
 const CARD_RADIUS = 26;
 const ROOT_BG = "#ECECEC"; // original root color (behind everything)
@@ -63,10 +64,18 @@ const LoginScreen: React.FC = () => {
       const loginResponse = await LoginApi(username, password);
       if (loginResponse.success) {
         setAuthToken(loginResponse.data);
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "Tabs" as never, params: { screen: "Home" } }],
-        });
+        const HaveKey = await getUser();
+        if(HaveKey.data.user_key !== null){
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "Tabs" as never, params: { screen: "Home" } }],
+          });
+        }else{
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "voicetest" as never }],
+          });
+        }
       } else {
         Alert.alert(loginResponse.message || "Login failed");
       }
