@@ -13,14 +13,14 @@ const Axios: AxiosInstance = axios.create({
 
 // Request interceptor to add Authorization header automatically
 Axios.interceptors.request.use(
-    (config) => {
+    async(config) => {
         // Skip adding auth header for login endpoint
         if (config.url?.includes('/auth')) {
             return config;
         }
 
         // Add Authorization header for all other requests
-        const token = getAuthToken()
+        const token = await getAuthToken()
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }

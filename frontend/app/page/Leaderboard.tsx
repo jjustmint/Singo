@@ -1,4 +1,4 @@
-import React from "react";
+import React, { use, useEffect } from "react";
 import { View, Text, ScrollView, Dimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
@@ -6,10 +6,40 @@ import { BlurView } from "expo-blur";
 import ScoreChart from "../components/ScoreChart";
 import SongChallenge from "../components/SongChalleng";
 import WeeklyRanking from "../components/WeeklyRanking";
+import { getAudioVerById, getLeaderboard, getSong } from "@/api/leaderboard";
 
 const { height } = Dimensions.get("window");
 
 export default function Leaderboard() {
+  const audio_id = 5;
+  const [songId, setSongId] = React.useState(0);
+  useEffect(() => {
+    const fetchData = async () => {
+      await handleGetLeaderboard();
+      await handleGetAudioById();
+      await handleGetSongById();
+    };
+    fetchData();
+  }, []);
+
+  const handleGetLeaderboard = async() => {
+    const chartData = await getLeaderboard(audio_id);
+    console.log("Fetched leaderboard data:", chartData);
+    return chartData;
+  }
+  const handleGetAudioById = async() => {
+    const audioData = await getAudioVerById(audio_id);
+    setSongId(audioData.data.song_id);
+    console.log("Fetched audio data:", audioData);
+    return audioData;
+  }
+
+  const handleGetSongById = async() => {
+    const songData = await getSong(songId);
+    console.log("Fetched song data:", songData);
+    return songData;
+  }
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#131313" }} edges={["left", "right"]}>
       <View style={{ flex: 1, position: "relative" }}>

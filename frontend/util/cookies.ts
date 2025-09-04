@@ -1,14 +1,14 @@
-import Cookies from "js-cookie"
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const setAuthToken = (token: string) => {
-    Cookies.set("authToken", token)
+export const setAuthToken = async(token: string) => {
+    await AsyncStorage.setItem('token', token);
 }
 
-export const getAuthToken = () => {
-    const token = Cookies.get("authToken")
-    return token
+export const getAuthToken = async() => {
+    const token = await AsyncStorage.getItem('token');
+    return token;
 }
 
-export const removeAuthToken = () => {
-    Cookies.remove("authToken")
+export const removeAuthToken = async() => {
+    await AsyncStorage.removeItem("token");
 }

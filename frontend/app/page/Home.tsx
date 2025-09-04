@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -12,11 +12,32 @@ import CategoryTabs from "../components/CategoryTabs";
 import NewReleaseTabs from "../components/NewReleaseTabs";
 import TrendingCard from "../components/TrendingCard";
 import TopRateTabs from "../components/TopRateTabs";
+import { getAllsongs, getUsername } from "@/api/home";
 
 const { width } = Dimensions.get("window");
 
 export default function Home() {
-  const scrollViewRef = useRef<ScrollView>(null); // Properly type the ref
+  const scrollViewRef = useRef<ScrollView>(null);
+  const [username, setUsername] = useState<string>("");
+  const [songs, setSongs] = useState<any[]>([]);
+
+  useEffect(() => {
+    handleGetUsername();
+    handleGetSongs();
+  }, []);
+
+  const handleGetUsername = async () => {
+    const fetchedUsername =  await getUsername();
+    const user = fetchedUsername.data.username;
+    setUsername(user);
+    console.log("Fetched username:", fetchedUsername);
+  };
+
+  const handleGetSongs = async () => {
+    const fetchedSongs =  await getAllsongs();
+    setSongs(fetchedSongs.data);
+    console.log("Fetched songs:", fetchedSongs);
+  }
 
   const scrollToSection = (section: "New Release" | "Trending" | "Top Rated") => { // Add explicit type for 'section'
     if (scrollViewRef.current) {
@@ -121,7 +142,7 @@ export default function Home() {
                     left: 30,
                   }}
                 >
-                  Hi! Pathompong
+                  Hi! {username || "Guest"}
                 </Text>
               </View>
             </View>
