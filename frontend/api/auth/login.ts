@@ -1,5 +1,6 @@
 import { Axios } from "@/util/AxiosInstance";
 import { BaseResponse } from "../types/baseResponse";
+import { setAuthToken } from "@/util/cookies";
 
 type LoginResponse = BaseResponse<string>;
 
@@ -9,6 +10,8 @@ export const LoginApi = async (username: string, password: string): Promise<Logi
             username,
             password
         })
+        const token = response.data;
+        await setAuthToken(token.data);
         return response.data
 
     } catch (e) {
