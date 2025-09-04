@@ -12,7 +12,7 @@ import CategoryTabs from "../components/CategoryTabs";
 import NewReleaseTabs from "../components/NewReleaseTabs";
 import TrendingCard from "../components/TrendingCard";
 import TopRateTabs from "../components/TopRateTabs";
-import { getUsername } from "@/api/getUser";
+import { getUser } from "@/api/getUser";
 import { getAllsongs } from "@/api/song/getAll";
 
 const { width } = Dimensions.get("window");
@@ -28,7 +28,7 @@ export default function Home() {
   }, []);
 
   const handleGetUsername = async () => {
-    const fetchedUsername =  await getUsername();
+    const fetchedUsername =  await getUser();
     const user = fetchedUsername.data.username;
     setUsername(user);
     console.log("Fetched username:", fetchedUsername);

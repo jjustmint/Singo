@@ -10,6 +10,8 @@ import MusicPlayer from "./page/MusicPlayer";
 import Summary from "./page/Summary";
 import LoginScreen from "./pages/Login";
 import SignupScreen from "./pages/Signup";
+import VoiceTestScreen from "./page/voicetest";
+
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -28,6 +30,7 @@ export default function MainNavigator() {
       <Stack.Screen name="ChooseKey" component={ChooseKey} />
       <Stack.Screen name="MusicPlayer" component={MusicPlayer} />
       <Stack.Screen name="Summary" component={Summary} />
+      <Stack.Screen name="voicetest" component={require("./page/voicetest").default} />
     </Stack.Navigator>
   );
 }

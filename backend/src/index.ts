@@ -3,6 +3,7 @@ import { PrismaClient } from './generated/prisma';
 import { logger } from 'hono/logger'
 import { cors } from 'hono/cors'
 import { mainRouter } from './routes/main.router';
+import { serveStatic } from '@hono/node-server/serve-static'
 
 const app = new Hono()
 
@@ -12,6 +13,13 @@ app.use(cors({
   origin: ["http://localhost:8081"], // Your frontend URL
   credentials: true
 }))
+
+app.use(
+  '/uploads/*',
+  serveStatic({
+    root: './data', 
+  })
+)
 
 export const prisma = new PrismaClient();
 
