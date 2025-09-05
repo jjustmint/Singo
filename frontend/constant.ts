@@ -1,3 +1,3 @@
 export const GlobalConstant = {
-    API_URL: "http://10.4.154.108:8000",
+    API_URL: "http://172.20.10.2:8000",
 }
