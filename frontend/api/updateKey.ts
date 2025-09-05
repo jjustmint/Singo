@@ -21,7 +21,7 @@ export const updateKey = async (uri: string): Promise<UpdateKeyResponse> => {
         },
       }
     );
-
+    console.log("Key detection response:", response.data);
     return response.data;
   } catch (e) {
     Object.entries(e as { [key: string]: any }).forEach(([key, value]) => {
