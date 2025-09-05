@@ -18,6 +18,7 @@ import {
   Kanit_500Medium,
   Kanit_700Bold,
 } from "@expo-google-fonts/kanit";
+import { updateKey } from "@/api/updateKey";
 
 const VoiceTestScreen = ({ navigation }: any) => {
   const [step, setStep] = useState(0);
@@ -81,20 +82,18 @@ const VoiceTestScreen = ({ navigation }: any) => {
         type: "audio/mp3",
       } as any);
 
-      try {
-        const res = await axios.post(
-          "http://localhost:8000/private/updatekey", // your backend endpoint
-          formData,
-          { headers: { "Content-Type": "multipart/form-data" } }
-        );
-        console.log("Upload success:", res.data);
-      } catch (err) {
-        console.error("Upload failed:", err);
-        Alert.alert("Upload failed", "Please try again.");
-      } finally {
-        setUploading(false); // finished uploading
-        setStep(3); // go to confirmation step
-      }
+      // try {
+      //   const key = await updateKey(uri);
+      //   console.log("Key detection result:", key);
+      // } catch (err) {
+      //   console.error("Upload failed:", err);
+      //   Alert.alert("Upload failed", "Please try again.");
+      // } finally {
+      //   setUploading(false); // finished uploading
+      //   setStep(3); // go to confirmation step
+      // }
+      setUploading(false); // finished uploading
+      setStep(3);
     } catch (err) {
       console.error("Stop recording error", err);
     }
@@ -296,7 +295,7 @@ const VoiceTestScreen = ({ navigation }: any) => {
                   height: 60,
                   borderRadius: 40,
                 }}
-                onPress={() => navigation.navigate("Home")}
+                onPress={async () => await updateKey(recordedUri)} // Call updateKey API
               >
                 <Ionicons name="checkmark" size={25} color="#fff" />
               </TouchableOpacity>

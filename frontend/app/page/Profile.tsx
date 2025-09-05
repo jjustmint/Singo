@@ -11,13 +11,34 @@ import TopRateTabs from "../components/TopRateTabs";
 import Recent from "../components/Recent";
 import ProfileInfo from "../components/ProfileInfo";
 import History from "../components/History";
+import { useEffect, useState } from "react";
+import { getUser } from "@/api/getUser";
+import { GlobalConstant } from "@/constant";
 
 const { width } = Dimensions.get("window");
 
 export default function Profile() {
 
   const sections = [{ key: "content" }];
+  const [username, setUsername] = useState<string>("");
+  const [profileImage, setProfileImage] = useState<string>("");
 
+  useEffect(() => {
+    const fetchData = async () => {
+      await handleGetUser();
+    };
+    fetchData();
+  }, []);
+
+  const handleGetUser = async () => {
+      const fetchedUsername =  await getUser();
+      const user = fetchedUsername.data.username;
+      const photo = fetchedUsername.data.photo;
+      setUsername(user);
+      setProfileImage(photo || "https://images.genius.com/282a0165862d48f70b0f9c5ce8531eb5.1000x1000x1.png");
+      console.log("Fetched username:", fetchedUsername);
+      console.log("photo: "+`${GlobalConstant.API_URL}${profileImage}`);
+    };
   return (
     <SafeAreaView
       style={{ flex: 1, backgroundColor: "#131313" }}
@@ -90,12 +111,11 @@ export default function Profile() {
             <View style={{ zIndex: 2 }}>
               {/* Profile */}
               <View style={{ padding: 20, marginTop: 50 }}>
-              <ProfileInfo
-              name="John Doe"
-              songCount={15}
-              profileImage="https://www.thaiwatsadu.com/_next/image?url=https%3A%2F%2Fpim.thaiwatsadu.com%2FTWDPIM%2Fweb%2FWatermark%2FImage%2F0302%2F60390467_3.jpg&w=3840&q=75"
-              />
-
+                <ProfileInfo 
+                  name="John Doe" 
+                  songCount={30} 
+                  profileImage="https://example.com/profile.jpg" 
+                />
               </View>
               <View style={{ padding: 20 }}>
                 <Recent
