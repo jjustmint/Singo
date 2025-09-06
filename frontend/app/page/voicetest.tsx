@@ -11,7 +11,6 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
-import axios from "axios";
 import {
   useFonts,
   Kanit_400Regular,
@@ -26,6 +25,7 @@ const VoiceTestScreen = ({ navigation }: any) => {
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [uploading, setUploading] = useState(false); // track upload
+  const [key, setKey] = useState<string | null>(null);
 
   const [fontsLoaded] = useFonts({
     Kanit_400Regular,
@@ -81,21 +81,27 @@ const VoiceTestScreen = ({ navigation }: any) => {
         name: "recording.mp3",
         type: "audio/mp3",
       } as any);
-
-      // try {
-      //   const key = await updateKey(uri);
-      //   console.log("Key detection result:", key);
-      // } catch (err) {
-      //   console.error("Upload failed:", err);
-      //   Alert.alert("Upload failed", "Please try again.");
-      // } finally {
-      //   setUploading(false); // finished uploading
-      //   setStep(3); // go to confirmation step
-      // }
       setUploading(false); // finished uploading
       setStep(3);
     } catch (err) {
       console.error("Stop recording error", err);
+    }
+  };
+
+  const handleUpdateKey = async (uri: string) => {
+    try {
+      const response = await updateKey(uri);
+      setKey(response.data)
+      console.log("Update key response:", response.data);
+      
+      if (response.success) {
+        Alert.alert("Success", "Key updated successfully!");
+      } else {
+        Alert.alert("Error", response.message || "Failed to update key.");
+      }
+    } catch (error) {
+      console.error("Update key error", error);
+      Alert.alert("Error", "An error occurred while updating the key.");
     }
   };
 
@@ -295,7 +301,7 @@ const VoiceTestScreen = ({ navigation }: any) => {
                   height: 60,
                   borderRadius: 40,
                 }}
-                onPress={async () => await updateKey(recordedUri)} // Call updateKey API
+                onPress={async () => await handleUpdateKey(recordedUri)} // Call updateKey API
               >
                 <Ionicons name="checkmark" size={25} color="#fff" />
               </TouchableOpacity>
