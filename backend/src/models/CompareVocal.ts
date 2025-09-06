@@ -51,6 +51,24 @@ export const uploadMistakes = async(recordId: number, mistakes: Mistake[]) => {
             recording_id: recordId, // if you have a relation
           },
         });
-      }
-      
+      }     
+}
+
+export const createUserRecord = async(payload: {
+    user_id: number,
+    version_id: number,
+    key: string,
+    user_audio_path: string,
+    accuracy_score: number,
+}) => {
+    const newRecord = await prisma.recording.create({
+        data: {
+            user_id: payload.user_id,
+            version_id: payload.version_id,
+            key: payload.key || null,
+            user_audio_path: payload.user_audio_path,
+            accuracy_score: payload.accuracy_score || null,
+        }
+    })
+    return newRecord
 }
