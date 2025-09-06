@@ -25,7 +25,8 @@ export const getSong = async (song_id: number): Promise<LeaderboardResponse> => 
                 key_signature: "",
                 parent_song_id: null,
                 lyrics: null,
-                singer: null,
+                singer: "",
+                album_cover: null,
             },
         }
     }
