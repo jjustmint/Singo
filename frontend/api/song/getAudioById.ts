@@ -6,7 +6,7 @@ type AudioResponse = BaseResponse<AudioType>;
 export const getAudioVerById = async (audio_version_id: number): Promise<AudioResponse> => {
     try {
         const response = await Axios.post<AudioResponse>(
-            "/private/getaudiobyerid", {
+            "/private/getaudiobyid", {
                 audio_version_id: audio_version_id
             }
         );

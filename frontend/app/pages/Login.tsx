@@ -22,7 +22,7 @@ import {
   Kanit_700Bold,
 } from "@expo-google-fonts/kanit";
 import { useRouter } from "expo-router";
-import { setAuthToken } from "@/util/cookies";
+import { setAuthToken, setUseId } from "@/util/cookies";
 import { LoginApi } from "@/api/auth/login";
 import { useNavigation } from "@react-navigation/native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
@@ -65,6 +65,8 @@ const LoginScreen: React.FC = () => {
       if (loginResponse.success) {
         setAuthToken(loginResponse.data);
         const HaveKey = await getUser();
+        const user_id = HaveKey.data.user_id;
+        await setUseId(user_id);
         if(HaveKey.data.user_key !== null){
           navigation.reset({
             index: 0,

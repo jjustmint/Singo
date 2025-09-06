@@ -11,6 +11,7 @@ import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from "@react-navigation/native";
 import { get } from "react-native/Libraries/TurboModule/TurboModuleRegistry";
+import { getSongkey } from "@/api/getSongKey";
 
 interface Song {
   id: string;
@@ -28,6 +29,7 @@ const ChooseKey = () => {
   });
   const [keys, setKeys] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const song_id = 2; // Example song ID
 
   const navigation = useNavigation();
 
@@ -35,7 +37,7 @@ const ChooseKey = () => {
   useEffect(() => {
     const fetchKeys = async () => {
       try {
-        getKey(2);
+        getKey(song_id);
       } catch (error) {
         console.log("Error fetching keys:", error);
       }
@@ -45,18 +47,11 @@ const ChooseKey = () => {
 
   const getKey = async (song_id: number) =>{
     try {
-      const response = await fetch("http://192.168.1.100:8000/private/getsongkey", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ song_id: song_id })
-      })
-      const data = await response.json();
-      setKeys(data.key_signature);
-      console.log("Fetched keys:", data.key_signature);
+      const data = await getSongkey(song_id);
+      setKeys(data.data.map(item => item.key_signature));
+      console.log("Fetched keys:", data);
       if (data.success) {
-        return data.key_signature;
+        return data;
       } else {
         console.error("Failed to fetch key:", data.message);
         return null;

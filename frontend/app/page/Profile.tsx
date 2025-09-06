@@ -114,7 +114,7 @@ export default function Profile() {
                 <ProfileInfo 
                   name="John Doe" 
                   songCount={30} 
-                  profileImage={`${GlobalConstant.API_URL}${profileImage}`}
+                  profileImage={`${GlobalConstant.API_URL}${profileImage}` || "https://images.genius.com/282a0165862d48f70b0f9c5ce8531eb5.1000x1000x1.png"}
                 />
               </View>
               <View style={{ padding: 20 }}>
