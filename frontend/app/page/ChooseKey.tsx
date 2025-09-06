@@ -177,16 +177,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 50,
+    marginTop: 100,
   },
   chevronButton: {
-    padding: 20,
+    padding: 10,
   },
   keyText: {
-    fontSize: 100,
+    fontSize: 50,
     color: "white",
     fontWeight: "bold",
-    marginHorizontal: 20,
+    marginHorizontal: 0,
   },
   suggested: {
     textAlign: "center",
