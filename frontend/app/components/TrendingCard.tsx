@@ -26,26 +26,6 @@ interface Song {
 }
 
 // Mock Data
-const mockSongs: Song[] = [
-  {
-    id: "1",
-    image: "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg",
-    songName: "Shape of You",
-    artist: "Ed Sheeran",
-  },
-  {
-    id: "2",
-    image: "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg",
-    songName: "Blinding Lights",
-    artist: "The Weeknd",
-  },
-  {
-    id: "3",
-    image: "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg",
-    songName: "Another Song",
-    artist: "Another Artist",
-  },
-];
 
 const TrendingCard: React.FC<{ song: Song }> = ({ song }) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -84,10 +64,10 @@ const TrendingCard: React.FC<{ song: Song }> = ({ song }) => {
   );
 };
 
-const TrendingList: React.FC = () => {
+const TrendingList: React.FC<{ song: Song[] }> = ({ song }) => {
   return (
     <FlatList
-      data={mockSongs}
+      data={song}
       keyExtractor={(item) => item.id}
       renderItem={({ item }) => <TrendingCard song={item} />}
       contentContainerStyle={{ paddingBottom: 20 }}

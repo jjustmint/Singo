@@ -10,21 +10,31 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
 import CategoryTabs from "../components/CategoryTabs";
 import NewReleaseTabs from "../components/NewReleaseTabs";
-import TrendingCard from "../components/TrendingCard";
+import TrendingList from "../components/TrendingCard";
 import TopRateTabs from "../components/TopRateTabs";
 import { getUser } from "@/api/getUser";
 import { getAllsongs } from "@/api/song/getAll";
 
 const { width } = Dimensions.get("window");
 
+interface Song {
+  id: string;
+  image: string;
+  songName: string;
+  artist: string;
+}
+
 export default function Home() {
   const scrollViewRef = useRef<ScrollView>(null);
   const [username, setUsername] = useState<string>("");
-  const [songs, setSongs] = useState<any[]>([]);
+  const [songs, setSongs] = useState<Song[]>([]);
 
   useEffect(() => {
-    handleGetUsername();
-    handleGetSongs();
+    const fetchData = async () => {
+      await handleGetUsername();
+      await handleGetSongs();
+    };
+    fetchData();
   }, []);
 
   const handleGetUsername = async () => {
@@ -35,10 +45,18 @@ export default function Home() {
   };
 
   const handleGetSongs = async () => {
-    const fetchedSongs =  await getAllsongs();
-    setSongs(fetchedSongs.data);
-    console.log("Fetched songs:", fetchedSongs);
-  }
+    const fetchedSongs = await getAllsongs();
+    const mappedSongs: Song[] = fetchedSongs.data.map((song: any) => ({
+      id: song.song_id.toString(),
+      image:
+        song.album_cover ||
+        "https://i.pinimg.com/564x/11/8e/7f/118e7f4d22f1e5ff4f6e2f1f2d1f3c4b5.jpg",
+      songName: song.title,
+      artist: song.singer,
+    }));
+    setSongs(mappedSongs);
+    console.log("Fetched songs:", fetchedSongs.data);
+  };  
 
   const scrollToSection = (section: "New Release" | "Trending" | "Top Rated") => { // Add explicit type for 'section'
     if (scrollViewRef.current) {
@@ -175,7 +193,7 @@ export default function Home() {
               </Text>
             </View>
             <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
-              <TrendingCard />
+              <TrendingList song={songs}/>
             </View>
 
             {/* Top Rate */}
