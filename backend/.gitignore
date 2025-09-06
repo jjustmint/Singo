@@ -9,3 +9,5 @@ python/scoring/.venv/
 python/scoring/pretrained_models/
 
 .venv/
+
+.cpython-version/
