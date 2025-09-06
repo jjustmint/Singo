@@ -28,6 +28,8 @@ export const UpdateKeyController = async (c: Context) => {
   
       return c.json(ConstructResponse(true, "Successfully Updated Key", update), 200);
     } catch (e) {
+      console.log(e);
+      
       return c.json(ConstructResponse(false, `${e}`), 500);
     }
   };
