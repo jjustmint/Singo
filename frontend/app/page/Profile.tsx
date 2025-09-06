@@ -14,6 +14,9 @@ import History from "../components/History";
 import { useEffect, useState } from "react";
 import { getUser } from "@/api/getUser";
 import { GlobalConstant } from "@/constant";
+import { getHistory } from "@/api/getHistory";
+import { getUserId } from "@/util/cookies";
+import { HistoryType } from "../../../backend/src/types/getHistory";
 
 const { width } = Dimensions.get("window");
 
@@ -22,23 +25,31 @@ export default function Profile() {
   const sections = [{ key: "content" }];
   const [username, setUsername] = useState<string>("");
   const [profileImage, setProfileImage] = useState<string>("");
-
+  const [history, setHistory] = useState<HistoryType[]>([]);
   useEffect(() => {
     const fetchData = async () => {
       await handleGetUser();
+      await handleHistory();
     };
     fetchData();
   }, []);
 
   const handleGetUser = async () => {
-      const fetchedUsername =  await getUser();
-      const user = fetchedUsername.data.username;
-      const photo = fetchedUsername.data.photo;
-      setUsername(user);
-      setProfileImage(photo || "https://images.genius.com/282a0165862d48f70b0f9c5ce8531eb5.1000x1000x1.png");
-      console.log("Fetched username:", fetchedUsername);
-      console.log("photo: "+`${GlobalConstant.API_URL}${profileImage}`);
+    const fetchedUsername =  await getUser();
+    const user = fetchedUsername.data.username;
+    const photo = fetchedUsername.data.photo;
+    setUsername(user);
+    setProfileImage(photo || "https://images.genius.com/282a0165862d48f70b0f9c5ce8531eb5.1000x1000x1.png");
+    console.log("Fetched username:", fetchedUsername);
+    console.log("photo: "+`${GlobalConstant.API_URL}${profileImage}`);
     };
+
+  const handleHistory = async() => {
+    const userId = await getUserId();
+    const history = await getHistory(userId as number);
+    setHistory(history.data);
+    console.log("Fetched history:", history);
+  }
   return (
     <SafeAreaView
       style={{ flex: 1, backgroundColor: "#131313" }}
