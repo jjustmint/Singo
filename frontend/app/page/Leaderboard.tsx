@@ -17,7 +17,8 @@ import { getLeaderboard } from "@/api/leaderboard";
 import { getSong } from "@/api/song/getSong";
 import { getAudioVerById } from "@/api/song/getAudioById";
 import ScoreChart from "../components/ScoreChart";
-import WeeklyRanking from "../components/WeeklyRanking"; // import the component
+import WeeklyRanking from "../components/WeeklyRanking"; 
+import SongChallenge from "../components/SongChalleng";
 
 const { height } = Dimensions.get("window");
 const audio_id = 5;
@@ -151,25 +152,15 @@ export default function Leaderboard() {
           />
 
           {/* Weekly Challenge Song */}
-          <View style={{ marginTop: 30, paddingHorizontal: 20 }}>
-            <Text style={{ fontSize: 18, fontWeight: "bold", color: "white", marginBottom: 10 }}>
-              Weekly Challenge Song
-            </Text>
+<View style={{ marginTop: 30, paddingHorizontal: 20 }}>
+  <Text style={{ fontSize: 18, fontWeight: "bold", color: "white", marginBottom: 10 }}>
+    Weekly Challenge Song
+  </Text>
 
-            {weeklySong === null ? (
-              <Text style={{ color: "white" }}>Loading...</Text>
-            ) : weeklySong === false ? (
-              <Text style={{ color: "gray" }}>No weekly song available this week</Text>
-            ) : (
-              <View style={{ flexDirection: "row", alignItems: "center", marginVertical: 4, backgroundColor: "#1E1E1E", padding: 12, borderRadius: 10 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ color: "white", fontSize: 16 }}>Title: {weeklySong.title}</Text>
-                  <Text style={{ color: "white", fontSize: 16 }}>Singer: {weeklySong.singer}</Text>
-                  <Text style={{ color: "white", fontSize: 16 }}>Key: {weeklySong.key}</Text>
-                </View>
-              </View>
-            )}
-          </View>
+  {/* Use the modular SongChallenge component */}
+  <SongChallenge audioId={audio_id} />
+</View>
+
 
           {/* Top 10 Weekly Ranking */}
           <View style={{ marginTop: 30, paddingHorizontal: 20, marginBottom: 20 }}>
