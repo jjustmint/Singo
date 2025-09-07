@@ -262,56 +262,55 @@ const MusicPlayer: React.FC = () => {
   };
 
   const stopRecording = async () => {
-    if (!recording) return;
-    await recording.stopAndUnloadAsync();
-    const uri = recording.getURI();
-    setRecordingUri(uri);
-    setRecording(null);
+  if (!recording) return;
+  await recording.stopAndUnloadAsync();
+  const uri = recording.getURI();
+  setRecordingUri(uri);
+  setRecording(null);
 
-    if (sound) {
-      await sound.stopAsync();
-      await sound.unloadAsync();
-      setSound(null);
-    }
+  if (sound) {
+    await sound.stopAsync();
+    await sound.unloadAsync();
+    setSound(null);
+  }
 
-    console.log("Recording stopped and instrumental audio unloaded");
+  console.log("Recording stopped and instrumental audio unloaded");
 
-    // Save the recording as a .wav file
-    const wavFilePath = `${FileSystem.documentDirectory}recording.wav`;
-    if (uri) {
-      await FileSystem.copyAsync({ from: uri, to: wavFilePath });
+  // Save the recording as a .wav file
+  const wavFilePath = `${FileSystem.documentDirectory}recording.wav`;
+  if (uri) {
+    await FileSystem.copyAsync({ from: uri, to: wavFilePath });
+  } else {
+    console.error("Recording URI is null, cannot copy file.");
+    return;
+  }
+  console.log(`Recording saved as .wav file at: ${wavFilePath}`);
+
+  try {
+    if (!songKey.ori_path) throw new Error("Original path is missing");
+
+    const response = await createRecord(
+      wavFilePath,
+      `${songKey.version_id}`,
+      songKey.key_signature,
+      songKey.ori_path
+    );
+
+    console.log("Record created successfully:", response);
+
+    // ✅ Navigate to Result if score is returned
+    if (response.success && response.data?.score !== undefined) {
+      navigation.navigate("Result", { score: response.data.score });
     } else {
-      console.error("Recording URI is null, cannot copy file.");
+      console.error("No score returned from backend:", response);
     }
-    console.log(`Recording saved as .wav file at: ${wavFilePath}`);
+  } catch (e) {
+    console.error("Error creating record:", e);
+  } finally {
+    console.log("Stop recording process completed.");
+  }
+};
 
-    const fetchResp = await fetch(wavFilePath);
-    const blob = await fetchResp.blob();
-
-    if (!blob || blob.size === 0) {
-      console.error("Blob is empty or undefined");
-      return;
-    }
-
-    const recordingFile = new File([blob], "recording.wav", {
-      type: "audio/vnd.wave",
-    });
-
-    try {
-      if (!songKey.ori_path) throw new Error("Original path is missing");
-      const response = await createRecord(
-        wavFilePath,
-        `${songKey.version_id}`,
-        songKey.key_signature,
-        songKey.ori_path
-      );
-      console.log("Record created successfully:", response);
-    } catch (e) {
-      console.error("Error creating record:", e);
-    } finally {
-      console.log("Stop recording process completed.");
-    }
-  };
 
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
