@@ -16,6 +16,8 @@ export const uploadRecordAndScoreController = async (c: Context) => {
 
         // Parse form data (file + versionId + key)
         const formData = await c.req.formData();
+        console.log("Formdata keys ", Array.from(formData.keys()));
+        
         const file = formData.get("file") as File;
         const versionId = formData.get("versionId") as string;
         const key = formData.get("key") as string | null;
@@ -27,6 +29,10 @@ export const uploadRecordAndScoreController = async (c: Context) => {
         if (!versionId) {
             return c.json(ConstructResponse(false, "Missing versionId"), 400);
         }
+
+        console.log("File data received:", file);
+        console.log(file.name, file.size, file.type);
+        
 
         // Convert file into buffer
         const arrayBuffer = await file.arrayBuffer();

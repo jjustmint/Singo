@@ -20,6 +20,7 @@ export type RootStackParamList = {
   params?: { song?: SongType & { selectedKey?: string } };
   MusicPlayer: { songKey: SongKeyType };
   Summary: undefined;
+  Signup: undefined;
 };
 
 export type ChooseKeyParams = { song: SongType };

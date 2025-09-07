@@ -3,12 +3,13 @@ import { BaseResponse } from "./types/baseResponse";
 
 type CreateRecordResponse = BaseResponse<string>; // adjust `any` if backend returns a specific shape
 
-export const createRecord = async (uri: string, versionId: string, key: string, ori: string ): Promise<BaseResponse<string>> => {
+export const createRecord = async (file: string, versionId: string, key: string, ori: string ): Promise<BaseResponse<string>> => {
     try {
         const formData = new FormData();
         formData.append("file", {
-        uri,
-        type: "audio/mp3",
+            uri: file,
+            name: "recording.mp3",
+            type: "audio/mp3",
         } as any);
         formData.append("versionId", versionId);
         formData.append("key", key)
