@@ -1,62 +1,105 @@
-import React, { use, useEffect } from "react";
-import { View, Text, ScrollView, Dimensions } from "react-native";
+// ---------------- Leaderboard.tsx ----------------
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  ScrollView,
+  Dimensions,
+  Image,
+  StyleSheet,
+  FlatList,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
+import AntDesign from "@expo/vector-icons/AntDesign";
 
-import ScoreChart from "../components/ScoreChart";
-import SongChallenge from "../components/SongChalleng";
-import WeeklyRanking from "../components/WeeklyRanking";
 import { getLeaderboard } from "@/api/leaderboard";
 import { getSong } from "@/api/song/getSong";
 import { getAudioVerById } from "@/api/song/getAudioById";
+import ScoreChart from "../components/ScoreChart";
+import WeeklyRanking from "../components/WeeklyRanking"; // import the component
 
 const { height } = Dimensions.get("window");
+const audio_id = 5;
 
+// ---------------- Types ----------------
+interface User {
+  recordId: string; // convert to string
+  userName: string;
+  accuracyScore: number;
+  profilePicture?: string;
+}
+
+// ---------------- Leaderboard Screen ----------------
 export default function Leaderboard() {
-  const audio_id = 5;
-  const [songId, setSongId] = React.useState(0);
+  const [weeklyRanking, setWeeklyRanking] = useState<User[] | null>(null);
+  const [weeklySong, setWeeklySong] = useState<any | false | null>(null);
+
   useEffect(() => {
     const fetchData = async () => {
-      await handleGetLeaderboard();
-      await handleGetAudioById();
-      await handleGetSongById();
+      try {
+        await Promise.all([fetchLeaderboard(), fetchWeeklySong()]);
+      } catch (err) {
+        console.error("Error fetching data:", err);
+      }
     };
     fetchData();
   }, []);
 
-  const handleGetLeaderboard = async() => {
-    const chartData = await getLeaderboard(audio_id);
-    console.log("Fetched leaderboard data:", chartData);
-    return chartData;
-  }
-  const handleGetAudioById = async() => {
-    const audioData = await getAudioVerById(audio_id);
-    setSongId(audioData.data.song_id);
-    console.log("Fetched audio data:", audioData);
-    return audioData;
-  }
+  // ---------------- Fetch Leaderboard ----------------
+  const fetchLeaderboard = async () => {
+    try {
+      const leaderboardData = await getLeaderboard(audio_id);
 
-  const handleGetSongById = async() => {
-    const songData = await getSong(songId);
-    console.log("Fetched song data:", songData);
-    return songData;
-  }
+      // map API data to User type and convert recordId to string
+      const data: User[] = (leaderboardData?.data || []).map((user: any) => ({
+        recordId: String(user.recordId), // <-- convert number to string
+        userName: user.userName,
+        accuracyScore: user.accuracyScore,
+        profilePicture: user.profilePicture,
+      }));
 
+      const sortedData = [...data].sort(
+        (a, b) => b.accuracyScore - a.accuracyScore
+      );
+
+      setWeeklyRanking(sortedData);
+    } catch (err) {
+      console.error("Failed to fetch leaderboard:", err);
+      setWeeklyRanking([]);
+    }
+  };
+
+  // ---------------- Fetch Weekly Song ----------------
+  const fetchWeeklySong = async () => {
+    try {
+      const audioData = await getAudioVerById(audio_id);
+      if (!audioData?.data?.song_id) {
+        setWeeklySong(false);
+        return;
+      }
+      const songData = await getSong(audioData.data.song_id);
+      if (!songData?.data) {
+        setWeeklySong(false);
+        return;
+      }
+      setWeeklySong({
+        title: songData.data.title || "Unknown Title",
+        singer: songData.data.singer || "Unknown Singer",
+        key: audioData.data.key_signature || "N/A",
+      });
+    } catch (err) {
+      console.error("Failed to fetch weekly song info:", err);
+      setWeeklySong(false);
+    }
+  };
+
+  // ---------------- UI ----------------
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#131313" }} edges={["left", "right"]}>
       <View style={{ flex: 1, position: "relative" }}>
-        {/* === Background Full Screen === */}
-        <View
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 0,
-          }}
-        >
-          {/* Color Circles */}
+        {/* Background Shapes */}
+        <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 0 }}>
           <View
             style={{
               position: "absolute",
@@ -90,62 +133,102 @@ export default function Leaderboard() {
               left: -40,
             }}
           />
-
-          {/* Blur overlay to blend */}
-          <BlurView
-            intensity={100}
-            tint="dark"
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-            }}
-          />
+          <BlurView intensity={100} tint="dark" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
         </View>
 
-        {/* === Leaderboard Content === */}
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 40 }}
-          style={{ flex: 1, zIndex: 2 }}
-        >
+        {/* Content */}
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }} style={{ flex: 1, zIndex: 2 }}>
           {/* Title */}
           <View style={{ padding: 20 }}>
-            <Text
-              style={{
-                fontSize: 32,
-                fontWeight: "bold",
-                color: "white",
-                textAlign: "center",
-                marginTop: 40,
-              }}
-            >
+            <Text style={{ fontSize: 32, fontWeight: "bold", color: "white", textAlign: "center", marginTop: 40 }}>
               Leaderboard
             </Text>
           </View>
 
-          {/* Your Chart */}
-          <ScoreChart />
+          {/* Top 3 Score Chart */}
+          <ScoreChart
+            top3={weeklyRanking ? weeklyRanking.slice(0, 3) : []}
+          />
 
-          {/* Weekly Challenge Songs */}
+          {/* Weekly Challenge Song */}
           <View style={{ marginTop: 30, paddingHorizontal: 20 }}>
             <Text style={{ fontSize: 18, fontWeight: "bold", color: "white", marginBottom: 10 }}>
-              Weekly Challenge Songs
+              Weekly Challenge Song
             </Text>
-          </View>
-          <SongChallenge />
 
-          {/* Weekly Ranking */}
+            {weeklySong === null ? (
+              <Text style={{ color: "white" }}>Loading...</Text>
+            ) : weeklySong === false ? (
+              <Text style={{ color: "gray" }}>No weekly song available this week</Text>
+            ) : (
+              <View style={{ flexDirection: "row", alignItems: "center", marginVertical: 4, backgroundColor: "#1E1E1E", padding: 12, borderRadius: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: "white", fontSize: 16 }}>Title: {weeklySong.title}</Text>
+                  <Text style={{ color: "white", fontSize: 16 }}>Singer: {weeklySong.singer}</Text>
+                  <Text style={{ color: "white", fontSize: 16 }}>Key: {weeklySong.key}</Text>
+                </View>
+              </View>
+            )}
+          </View>
+
+          {/* Top 10 Weekly Ranking */}
           <View style={{ marginTop: 30, paddingHorizontal: 20, marginBottom: 20 }}>
             <Text style={{ fontSize: 18, fontWeight: "bold", color: "white", marginBottom: 10 }}>
               Top 10 Weekly Ranking
             </Text>
-            <WeeklyRanking />
+
+            {weeklyRanking === null ? (
+              <Text style={{ color: "white" }}>Loading...</Text>
+            ) : weeklyRanking.length === 0 ? (
+              <Text style={{ color: "gray" }}>No rankings available</Text>
+            ) : (
+              <WeeklyRanking data={weeklyRanking} />
+            )}
           </View>
         </ScrollView>
       </View>
     </SafeAreaView>
   );
 }
+
+// ---------------- Styles ----------------
+const styles = StyleSheet.create({
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 10,
+    marginVertical: 10,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderRadius: 10,
+  },
+  rank: {
+    width: 30,
+    textAlign: "center",
+    fontWeight: "bold",
+    marginRight: 8,
+  },
+  image: {
+    width: 96,
+    height: 96,
+    borderRadius: 10,
+    marginRight: 12,
+  },
+  textContainer: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  Username: {
+    fontSize: 25,
+    fontWeight: "bold",
+    color: "#fff",
+  },
+  Score: {
+    fontSize: 15,
+    color: "#bbb",
+    marginTop: 2,
+  },
+  icon: {
+    marginLeft: 10,
+    alignSelf: "center",
+  },
+});
