@@ -4,10 +4,10 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   Alert,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio } from "expo-av";
@@ -45,7 +45,7 @@ const VoiceTestScreen = ({ navigation }: any) => {
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
         staysActiveInBackground: false,
-        interruptionModeIOS: 1, // do not mix
+        interruptionModeIOS: 1,
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
       });
@@ -56,7 +56,7 @@ const VoiceTestScreen = ({ navigation }: any) => {
   // ---------- Handlers ----------
   const startRecording = async () => {
     try {
-      if (recording) return; // guard against double-tap
+      if (recording) return;
       const { recording: rec } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
@@ -78,10 +78,7 @@ const VoiceTestScreen = ({ navigation }: any) => {
       setRecording(null);
       setUploading(true);
 
-      // If you actually upload, do it here with your API / FormData
-      // const formData = new FormData();
-      // formData.append("file", { uri, name: "recording.mp3", type: "audio/mp3" } as any);
-      // await yourUpload(formData);
+      // upload here if needed...
 
       setUploading(false);
       setStep(3);
@@ -96,11 +93,8 @@ const VoiceTestScreen = ({ navigation }: any) => {
       setProcessing(true);
       const response = await updateKey(uri);
       setKey(response?.data ?? null);
-      if (response?.success) {
-        setStep(4);
-      } else {
-        Alert.alert("Error", response?.message || "Failed to update key.");
-      }
+      if (response?.success) setStep(4);
+      else Alert.alert("Error", response?.message || "Failed to update key.");
     } catch (error) {
       console.error("Update key error", error);
       Alert.alert("Error", "An error occurred while updating the key.");
@@ -145,7 +139,8 @@ const VoiceTestScreen = ({ navigation }: any) => {
     {
       lines: [
         {
-          text: "Alright! Take a deep breath,\nshake off the nerves, and let's\nhave some fun singing!",
+          text:
+            "Alright! Take a deep breath,\nshake off the nerves, and let's\nhave some fun singing!",
           size: 24,
         },
       ],
@@ -159,13 +154,8 @@ const VoiceTestScreen = ({ navigation }: any) => {
       ],
       icon: "mic",
     },
+    { lines: [], icon: null, replayStep: true },
     {
-      lines: [],
-      icon: null,
-      replayStep: true,
-    },
-    {
-      // Step 4 uses a custom layout, so these lines won't be rendered
       lines: [
         { text: "Your Key is:", size: 28 },
         { text: "—", size: 48 },
@@ -183,149 +173,159 @@ const VoiceTestScreen = ({ navigation }: any) => {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <LinearGradient colors={["#ff7eb3", "#6c5ce7"]} style={styles.container}>
-        {/* Header lines (skip on step 4 for a custom centered layout) */}
-        {step !== 4 &&
-          screens[step].lines.map((line, index) => (
-            <Text
-              key={index}
-              style={{
-                fontSize: line.size,
-                fontFamily: "Kanit_700Bold",
-                color: "#fff",
-                textAlign: "center",
-                marginBottom: 10,
-              }}
-            >
-              {typeof line.text === "object" ? JSON.stringify(line.text) : String(line.text)}
-            </Text>
-          ))}
+    <SafeAreaView style={{ flex: 1 }} edges={["left", "right"]}>
+      <View style={{ flex: 1 }}>
+        {/* Full-bleed gradient background */}
+        <LinearGradient
+          colors={["#ff7eb3", "#6c5ce7"]}
+          style={StyleSheet.absoluteFill}
+        />
 
-        {/* Arrow button for step 0 & 1 */}
-        {step < 2 && (
-          <TouchableOpacity
-            style={{
-              ...styles.mainButton,
-              width: currentStyle.buttonSize,
-              height: currentStyle.buttonSize,
-              borderRadius: currentStyle.buttonSize / 2,
-            }}
-            onPress={() => setStep(step + 1)}
-          >
-            <Ionicons name={screens[step].icon as any} size={40} color="#fff" />
-          </TouchableOpacity>
-        )}
-
-        {/* Step 2: Recording */}
-        {step === 2 && (
-          <View style={{ alignItems: "center" }}>
-            {!recordedUri ? (
-              <TouchableOpacity
+        <View style={styles.container}>
+          {/* Header lines (skip on step 4 for a custom centered layout) */}
+          {step !== 4 &&
+            screens[step].lines.map((line, index) => (
+              <Text
+                key={index}
                 style={{
-                  ...styles.mainButton,
-                  width: currentStyle.buttonSize,
-                  height: currentStyle.buttonSize,
-                  borderRadius: currentStyle.buttonSize / 2,
+                  fontSize: line.size,
+                  fontFamily: "Kanit_700Bold",
+                  color: "#fff",
+                  textAlign: "center",
+                  marginBottom: 10,
                 }}
-                onPress={recording ? stopRecording : startRecording}
               >
-                <Ionicons name={recording ? "stop" : "mic"} size={40} color="#fff" />
-              </TouchableOpacity>
-            ) : null}
-
-            {uploading && (
-              <Text style={styles.statusText}>
-                Uploading...
+                {typeof line.text === "object"
+                  ? JSON.stringify(line.text)
+                  : String(line.text)}
               </Text>
-            )}
-          </View>
-        )}
+            ))}
 
-        {/* Step 3: After recording finished */}
-        {step === 3 && recordedUri && (
-          <View style={{ flex: 1, width: "100%" }}>
-            <View style={styles.centerWrap}>
-              <Text style={styles.titleLarge}>Do you like it?</Text>
+          {/* Arrow button for step 0 & 1 */}
+          {step < 2 && (
+            <TouchableOpacity
+              style={{
+                ...styles.mainButton,
+                width: currentStyle.buttonSize,
+                height: currentStyle.buttonSize,
+                borderRadius: currentStyle.buttonSize / 2,
+              }}
+              onPress={() => setStep(step + 1)}
+            >
+              <Ionicons name={screens[step].icon as any} size={40} color="#fff" />
+            </TouchableOpacity>
+          )}
 
-              <TouchableOpacity
-                style={[styles.mainButton, { width: 100, height: 100, borderRadius: 50 }]}
-                onPress={playRecording}
-              >
-                <Ionicons name="play" size={40} color="#fff" />
-              </TouchableOpacity>
+          {/* Step 2: Recording */}
+          {step === 2 && (
+            <View style={{ alignItems: "center" }}>
+              {!recordedUri ? (
+                <TouchableOpacity
+                  style={{
+                    ...styles.mainButton,
+                    width: currentStyle.buttonSize,
+                    height: currentStyle.buttonSize,
+                    borderRadius: currentStyle.buttonSize / 2,
+                  }}
+                  onPress={recording ? stopRecording : startRecording}
+                >
+                  <Ionicons name={recording ? "stop" : "mic"} size={40} color="#fff" />
+                </TouchableOpacity>
+              ) : null}
 
-              {processing && (
-                <Text style={styles.statusText}>
-                  Processing your voice...
-                </Text>
-              )}
+              {uploading && <Text style={styles.statusText}>Uploading...</Text>}
             </View>
+          )}
 
-            <View style={styles.actionsRow}>
-              <TouchableOpacity
-                style={[styles.mainButton, styles.roundSm]}
-                onPress={() => {
-                  setRecordedUri(null);
-                  setStep(2);
-                }}
-              >
-                <Ionicons name="refresh" size={25} color="#fff" />
-              </TouchableOpacity>
+          {/* Step 3: After recording finished */}
+          {step === 3 && recordedUri && (
+            <View style={{ flex: 1, width: "100%" }}>
+              <View style={styles.centerWrap}>
+                <Text style={styles.titleLarge}>Do you like it?</Text>
 
-              <TouchableOpacity
-                style={[
-                  styles.mainButton,
-                  styles.roundSm,
-                  { opacity: processing ? 0.5 : 1 },
-                ]}
-                onPress={async () => {
-                  if (recordedUri) await handleUpdateKey(recordedUri);
-                }}
-                disabled={processing}
-              >
-                {processing ? (
-                  <ActivityIndicator size={25} color="#fff" />
-                ) : (
-                  <Ionicons name="checkmark" size={25} color="#fff" />
+                <TouchableOpacity
+                  style={[styles.mainButton, { width: 100, height: 100, borderRadius: 50 }]}
+                  onPress={playRecording}
+                >
+                  <Ionicons name="play" size={40} color="#fff" />
+                </TouchableOpacity>
+
+                {processing && (
+                  <Text style={styles.statusText}>Processing your voice...</Text>
                 )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+              </View>
 
-        {/* Step 4: Show detected key result (center text, bottom button) */}
-        {step === 4 && (
-          <View style={styles.step4}>
-            {/* Centered content */}
-            <View style={styles.step4Center}>
-              <Text style={styles.step4Label}>Your Key is:</Text>
-              <Text style={styles.step4Value}>
-                {key || (processing ? "Processing..." : "—")}
-              </Text>
-            </View>
+              <View style={styles.actionsRow}>
+                <TouchableOpacity
+                  style={[styles.mainButton, styles.roundSm]}
+                  onPress={() => {
+                    setRecordedUri(null);
+                    setStep(2);
+                  }}
+                >
+                  <Ionicons name="refresh" size={25} color="#fff" />
+                </TouchableOpacity>
 
-            {/* Bottom navigation button */}
-            <View style={styles.step4Footer}>
-              <TouchableOpacity
-                style={[styles.mainButton, styles.step4NextBtn]}
-                onPress={() => {
-                  navigation.reset({
-                    index: 0,
-                    routes: [{ name: "Tabs", params: { screen: "Home" } }],
-                  });
-                }}
-              >
-                <Ionicons name="arrow-forward" size={25} color="#fff" />
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.mainButton,
+                    styles.roundSm,
+                    { opacity: processing ? 0.5 : 1 },
+                  ]}
+                  onPress={async () => {
+                    if (recordedUri) await handleUpdateKey(recordedUri);
+                  }}
+                  disabled={processing}
+                >
+                  {processing ? (
+                    <ActivityIndicator size={25} color="#fff" />
+                  ) : (
+                    <Ionicons name="checkmark" size={25} color="#fff" />
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        )}
+          )}
 
-        {recording && !uploading && step === 2 && (
-          <Text style={[styles.statusText, { color: "red" }]}>Recording...</Text>
-        )}
-      </LinearGradient>
+          {/* Step 4: Show detected key result (center text, bottom button) */}
+          {step === 4 && (
+            <View style={styles.step4}>
+              <View style={styles.step4Center}>
+                <Text style={styles.step4Label}>Your Key is:</Text>
+                <Text style={styles.step4Value}>
+                  {key || (processing ? "Processing..." : "—")}
+                </Text>
+              </View>
+
+              <View style={styles.step4Footer}>
+                <TouchableOpacity
+                  style={[styles.mainButton, styles.step4NextBtn]}
+                  onPress={() => {
+                    navigation.reset({
+                      index: 0,
+                      routes: [
+                        {
+                          name: "MainTabs" as never, // must match your Stack.Screen
+                          state: {
+                            index: 0,
+                            routes: [{ name: "Home" as never }], // a tab inside MainTabs
+                          },
+                        },
+                      ],
+                    });
+                  }}
+                >
+                  <Ionicons name="arrow-forward" size={25} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {recording && !uploading && step === 2 && (
+            <Text style={[styles.statusText, { color: "red" }]}>Recording...</Text>
+          )}
+        </View>
+      </View>
     </SafeAreaView>
   );
 };
@@ -383,19 +383,17 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 40,
   },
-
-  // --- Step 4 layout ---
   step4: {
     flex: 1,
     width: "100%",
     paddingHorizontal: 20,
     paddingBottom: 24,
-    justifyContent: "space-between", // pushes center and footer apart
+    justifyContent: "space-between",
   },
   step4Center: {
     flexGrow: 1,
     alignItems: "center",
-    justifyContent: "center", // vertical center
+    justifyContent: "center",
   },
   step4Label: {
     fontSize: 28,
