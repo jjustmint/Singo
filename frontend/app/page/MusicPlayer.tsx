@@ -16,19 +16,23 @@ import { Audio } from "expo-av";
 import Slider from "@react-native-community/slider";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system";
-import * as Sharing from "expo-sharing";
+// import * as Sharing from "expo-sharing";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import { RootStackParamList } from "../Types/Navigation";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { getSong } from "@/api/song/getSong";
+import { createRecord } from "@/api/createRecord";
 
 type MusicPlayerRouteProp = RouteProp<RootStackParamList, "MusicPlayer">;
-type MusicPlayerNavProp = StackNavigationProp<RootStackParamList, "MusicPlayer">;
+type MusicPlayerNavProp = StackNavigationProp<
+  RootStackParamList,
+  "MusicPlayer"
+>;
 
-const MusicPlayer: React.FC = () =>{
+const MusicPlayer: React.FC = () => {
   const route = useRoute<MusicPlayerRouteProp>();
   const navigation = useNavigation<MusicPlayerNavProp>();
-  
+
   const { songKey } = route.params;
   const [loading, setLoading] = useState(true);
 
@@ -69,85 +73,85 @@ const MusicPlayer: React.FC = () =>{
   // Ensure countdown triggers recording automatically and finish icon stops recording.
   useEffect(() => {
     if (!loading && countdown === null) {
-        setCountdown(3); // Start countdown after loading
+      setCountdown(3); // Start countdown after loading
     }
-}, [loading]);
+  }, [loading]);
 
-useEffect(() => {
+  useEffect(() => {
     if (countdown !== null) {
-        const interval = setInterval(() => {
-            setCountdown((prev) => {
-                if (prev !== null && prev <= 1) {
-                    clearInterval(interval);
-                    if (prev === 1) {
-                        startRecording(); // Automatically start recording when countdown ends
-                    }
-                    return null; // Stop the countdown
-                }
-                return prev! - 1;
-            });
-        }, 1000);
+      const interval = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev !== null && prev <= 1) {
+            clearInterval(interval);
+            if (prev === 1) {
+              startRecording(); // Automatically start recording when countdown ends
+            }
+            return null; // Stop the countdown
+          }
+          return prev! - 1;
+        });
+      }, 1000);
 
-        return () => clearInterval(interval); // Cleanup interval on unmount
+      return () => clearInterval(interval); // Cleanup interval on unmount
     }
-}, [countdown]);
+  }, [countdown]);
 
-const handleGetSongById = async (song_id: number) => {
+  const handleGetSongById = async (song_id: number) => {
     try {
-        const response = await getSong(song_id);
-        setTitle(response.data.title);
-        setLyrics(response.data.lyrics?.split('\n') || ["No lyrics available"]);
-        setImage(response.data.album_cover || "");
-        setSinger(response.data.singer);
-        
-        if (response.success) {
-            console.log("Fetched song data:", response);
-            return response.data;
-        } else {
-            console.error("Failed to fetch song:", response.message);
-            return null;
-        }
-    } catch (error) {
-        console.error("Error fetching song:", error);
+      const response = await getSong(song_id);
+      setTitle(response.data.title);
+      setLyrics(response.data.lyrics?.split("\n") || ["No lyrics available"]);
+      setImage(response.data.album_cover || "");
+      setSinger(response.data.singer);
+
+      if (response.success) {
+        console.log("Fetched song data:", response);
+        return response.data;
+      } else {
+        console.error("Failed to fetch song:", response.message);
         return null;
+      }
+    } catch (error) {
+      console.error("Error fetching song:", error);
+      return null;
     }
-}
+  };
   // Updated the animation logic to make it loop in real-time while recording and stop when recording stops.
   const startAnimation = () => {
     console.log("Starting animation...");
     animationValue.setValue(0);
     Animated.loop(
-        Animated.sequence([
-            Animated.timing(animationValue, {
-                toValue: 1,
-                duration: 500,
-                useNativeDriver: true,
-            }),
-            Animated.timing(animationValue, {
-                toValue: 0,
-                duration: 500,
-                useNativeDriver: true,
-            }),
-        ])
+      Animated.sequence([
+        Animated.timing(animationValue, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(animationValue, {
+          toValue: 0,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ])
     ).start();
-};
+  };
 
-const stopAnimation = () => {
+  const stopAnimation = () => {
     console.log("Stopping animation...");
     animationValue.stopAnimation(() => {
-        console.log("Animation has been stopped successfully");
+      console.log("Animation has been stopped successfully");
     });
-};
+  };
 
-useEffect(() => {
+  useEffect(() => {
     if (recording) {
-        console.log("Recording started, triggering animation");
-        startAnimation();
+      console.log("Recording started, triggering animation");
+      startAnimation();
     } else {
-        console.log("Recording stopped, stopping animation");
-        stopAnimation();
+      console.log("Recording stopped, stopping animation");
+      stopAnimation();
     }
-}, [recording]);
+  }, [recording]);
 
   // const togglePlay = async () => {
   //   if (!sound) {
@@ -212,24 +216,37 @@ useEffect(() => {
     // Save the recording as a .wav file
     const wavFilePath = `${FileSystem.documentDirectory}recording.wav`;
     if (uri) {
-        await FileSystem.copyAsync({ from: uri, to: wavFilePath });
+      await FileSystem.copyAsync({ from: uri, to: wavFilePath });
     } else {
-        console.error("Recording URI is null, cannot copy file.");
+      console.error("Recording URI is null, cannot copy file.");
     }
     console.log(`Recording saved as .wav file at: ${wavFilePath}`);
 
-    // Share the .wav file using expo-sharing
-    if (await Sharing.isAvailableAsync()) {
-        try {
-            await Sharing.shareAsync(wavFilePath);
-            console.log('Recording shared successfully');
-        } catch (error) {
-            console.error('Failed to share recording:', error);
-        }
-    } else {
-        console.log('Sharing is not available on this device');
+    const fetchResp = await fetch(wavFilePath);
+    const blob = await fetchResp.blob();
+
+    if (!blob || blob.size === 0) {
+      console.error("Blob is empty or undefined");
+      return;
     }
-};
+
+    const recordingFile = new File([blob], "recording.wav", { type: "audio/vnd.wave" });
+
+    try {
+      if (!songKey.ori_path) throw new Error("Original path is missing");
+      const response = await createRecord(
+        wavFilePath,
+        `${songKey.version_id}`,
+        songKey.key_signature,
+        songKey.ori_path
+      );
+      console.log("Record created successfully:", response);
+    } catch (e) {
+      console.error("Error creating record:", e);
+    } finally {
+      console.log("Stop recording process completed.");
+    }
+  };
 
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
@@ -289,9 +306,9 @@ useEffect(() => {
 
         {/* Lyrics */}
         <View style={styles.lyricsWrapper}>
-          <ScrollView 
-          contentContainerStyle={styles.lyricsContainer}
-          showsVerticalScrollIndicator={false}
+          <ScrollView
+            contentContainerStyle={styles.lyricsContainer}
+            showsVerticalScrollIndicator={false}
           >
             {lyrics?.map((line: string, index: number) => (
               <Text key={index} style={styles.lyrics}>
@@ -360,7 +377,7 @@ useEffect(() => {
       )}
     </ImageBackground>
   );
-}; 
+};
 export default MusicPlayer;
 
 const styles = StyleSheet.create({
@@ -410,7 +427,7 @@ const styles = StyleSheet.create({
   lyrics: {
     color: "white",
     fontSize: 20,
-    textAlign: "left", 
+    textAlign: "left",
     lineHeight: 28,
     marginVertical: 4,
   },

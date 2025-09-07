@@ -25,12 +25,10 @@ export default function MainNavigator() {
         <Stack.Screen name="SignIn" component={LoginScreen} />
         <Stack.Screen name="MainTabs" component={TabNavigator} />
         <Stack.Screen name="ChooseKey" component={ChooseKey} />
-        {/* Optional extra stack screens if you actually use them here */}
-        {/* <Stack.Screen name="SettingScreen" component={Settings} /> */}
-        {/* <Stack.Screen name="Summary" component={Summary} /> */}
         <Stack.Screen name="voicetest" component={VoiceTestScreen} />
         <Stack.Screen name="MusicPlayer" component={MusicPlayer} />
         <Stack.Screen name="Summary" component={Summary} />
+        <Stack.Screen name="Signup" component={SignupScreen} />
       </Stack.Navigator>
   );
 }
