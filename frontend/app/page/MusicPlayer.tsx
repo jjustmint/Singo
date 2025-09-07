@@ -17,39 +17,19 @@ import Slider from "@react-native-community/slider";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
+import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
+import { RootStackParamList } from "../Types/Navigation";
+import { StackNavigationProp } from "@react-navigation/stack";
+import { getSong } from "@/api/song/getSong";
 
-// --- Mock API call ---
-const fetchSongData = async () => {
-  return new Promise((resolve) =>
-    setTimeout(() => {
-      resolve({
-        id: "1",
-        image:
-          "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg",
-        title: "BIRDS OF THE FEATHER",
-        artist: "Billie Eilish",
-        duration: 210, // seconds
-        audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-        lyrics: [
-          "I want you to stay",
-          "'Til I'm in the grave",
-          "'Til I rot away, dead and buried",
-          "'Til I'm in the casket you carry",
-          "If you go, I'm goin' too, uh",
-          "'Cause it was always you",
-          "(Alright)",
-          "And if I'm turnin' blue, please",
-          "don't save me",
-          "Nothin' left to lose without",
-          "my baby",
-        ],
-      });
-    }, 800)
-  );
-};
+type MusicPlayerRouteProp = RouteProp<RootStackParamList, "MusicPlayer">;
+type MusicPlayerNavProp = StackNavigationProp<RootStackParamList, "MusicPlayer">;
 
-export default function MusicPlayer() {
-  const [song, setSong] = useState<any>(null);
+const MusicPlayer: React.FC = () =>{
+  const route = useRoute<MusicPlayerRouteProp>();
+  const navigation = useNavigation<MusicPlayerNavProp>();
+  
+  const { songKey } = route.params;
   const [loading, setLoading] = useState(true);
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
@@ -65,11 +45,17 @@ export default function MusicPlayer() {
   const [animationValue] = useState(new Animated.Value(0)); // State for animation
   const [volume, setVolume] = useState(0); // State for volume
 
+  const songName = songKey.song_id;
+  const [title, setTitle] = useState<string | undefined>(undefined);
+  const [lyrics, setLyrics] = useState<string[] | undefined>(undefined);
+  const [image, setImage] = useState<string | undefined>(undefined);
+  const [singer, setSinger] = useState<string | undefined>(undefined);
+
   useEffect(() => {
     (async () => {
-      const data: any = await fetchSongData();
-      setSong(data);
-      setDuration(data.duration);
+      await handleGetSongById(songKey.song_id);
+      // setSong(data);
+      // setDuration(data.duration);
       setLoading(false);
     })();
 
@@ -106,6 +92,26 @@ useEffect(() => {
     }
 }, [countdown]);
 
+const handleGetSongById = async (song_id: number) => {
+    try {
+        const response = await getSong(song_id);
+        setTitle(response.data.title);
+        setLyrics(response.data.lyrics?.split('\n') || ["No lyrics available"]);
+        setImage(response.data.album_cover || "");
+        setSinger(response.data.singer);
+        
+        if (response.success) {
+            console.log("Fetched song data:", response);
+            return response.data;
+        } else {
+            console.error("Failed to fetch song:", response.message);
+            return null;
+        }
+    } catch (error) {
+        console.error("Error fetching song:", error);
+        return null;
+    }
+}
   // Updated the animation logic to make it loop in real-time while recording and stop when recording stops.
   const startAnimation = () => {
     console.log("Starting animation...");
@@ -143,30 +149,30 @@ useEffect(() => {
     }
 }, [recording]);
 
-  const togglePlay = async () => {
-    if (!sound) {
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: song.audioUrl },
-        { shouldPlay: true }
-      );
-      setSound(newSound);
+  // const togglePlay = async () => {
+  //   if (!sound) {
+  //     const { sound: newSound } = await Audio.Sound.createAsync(
+  //       { uri: song.audioUrl },
+  //       { shouldPlay: true }
+  //     );
+  //     setSound(newSound);
 
-      newSound.setOnPlaybackStatusUpdate((status: any) => {
-        if (status.isLoaded) {
-          setPosition(status.positionMillis / 1000);
-          setDuration(status.durationMillis / 1000);
-          setIsPlaying(status.isPlaying);
-          setVolume(status.volume); // Update volume
-        }
-      });
-    } else {
-      if (isPlaying) {
-        await sound.pauseAsync();
-      } else {
-        await sound.playAsync();
-      }
-    }
-  };
+  //     newSound.setOnPlaybackStatusUpdate((status: any) => {
+  //       if (status.isLoaded) {
+  //         setPosition(status.positionMillis / 1000);
+  //         setDuration(status.durationMillis / 1000);
+  //         setIsPlaying(status.isPlaying);
+  //         setVolume(status.volume); // Update volume
+  //       }
+  //     });
+  //   } else {
+  //     if (isPlaying) {
+  //       await sound.pauseAsync();
+  //     } else {
+  //       await sound.playAsync();
+  //     }
+  //   }
+  // };
 
   const onSeek = async (value: number) => {
     if (sound) {
@@ -205,7 +211,11 @@ useEffect(() => {
 
     // Save the recording as a .wav file
     const wavFilePath = `${FileSystem.documentDirectory}recording.wav`;
-    await FileSystem.copyAsync({ from: uri, to: wavFilePath });
+    if (uri) {
+        await FileSystem.copyAsync({ from: uri, to: wavFilePath });
+    } else {
+        console.error("Recording URI is null, cannot copy file.");
+    }
     console.log(`Recording saved as .wav file at: ${wavFilePath}`);
 
     // Share the .wav file using expo-sharing
@@ -259,7 +269,7 @@ useEffect(() => {
 
   return (
     <ImageBackground
-      source={{ uri: song.image }}
+      source={{ uri: image ? image : "https://via.placeholder.com/150" }}
       style={styles.bgImage}
       resizeMode="cover"
       blurRadius={15}
@@ -270,10 +280,10 @@ useEffect(() => {
       <SafeAreaView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <Image source={{ uri: song.image }} style={styles.albumArt} />
+          <Image source={{ uri: image }} style={styles.albumArt} />
           <View style={{ marginLeft: 12 }}>
-            <Text style={styles.songTitle}>{song.title}</Text>
-            <Text style={styles.artist}>{song.artist}</Text>
+            <Text style={styles.songTitle}>{title}</Text>
+            <Text style={styles.artist}>{singer}</Text>
           </View>
         </View>
 
@@ -283,7 +293,7 @@ useEffect(() => {
           contentContainerStyle={styles.lyricsContainer}
           showsVerticalScrollIndicator={false}
           >
-            {song.lyrics.map((line: string, index: number) => (
+            {lyrics?.map((line: string, index: number) => (
               <Text key={index} style={styles.lyrics}>
                 {line}
               </Text>
@@ -311,7 +321,7 @@ useEffect(() => {
 
         {/* Controls */}
         <View style={styles.controls}>
-          <TouchableOpacity onPress={togglePlay}>
+          <TouchableOpacity onPress={() => {}}>
             <Ionicons
               name={isPlaying ? "pause" : "play"}
               size={36}
@@ -350,7 +360,8 @@ useEffect(() => {
       )}
     </ImageBackground>
   );
-}
+}; 
+export default MusicPlayer;
 
 const styles = StyleSheet.create({
   bgImage: {

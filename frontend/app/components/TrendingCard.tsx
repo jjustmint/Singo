@@ -6,28 +6,24 @@ import {
   TouchableOpacity,
   StyleSheet,
   FlatList,
+  ScrollView,
 } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
+import { SongType } from "../Types/Song";
 
 type RootStackParamList = {
   MainTabs: undefined;
   ChooseKey: { song: { id: string; songName: string; artist: string; image: string } };
 };
 
-type NavigationProp = StackNavigationProp<RootStackParamList>;
+type NavigationProp = StackNavigationProp<RootStackParamList, "MainTabs">;
 
-interface Song {
-  id: string;
-  image: string;
-  songName: string;
-  artist: string;
-}
 
 // Mock Data
 
-const TrendingCard: React.FC<{ song: Song }> = ({ song }) => {
+const TrendingCard: React.FC<{ song: SongType }> = ({ song }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const navigation = useNavigation<NavigationProp>();
 
@@ -37,7 +33,8 @@ const TrendingCard: React.FC<{ song: Song }> = ({ song }) => {
   };
 
   const handleCardPress = () => {
-    navigation.navigate("ChooseKey", { song }); // Ensure this navigates to ChooseKey with song data
+    navigation.navigate("ChooseKey", { song });
+    console.log("Navigating to ChooseKey with song:", song);
   };
 
   return (
@@ -64,14 +61,14 @@ const TrendingCard: React.FC<{ song: Song }> = ({ song }) => {
   );
 };
 
-const TrendingList: React.FC<{ song: Song[] }> = ({ song }) => {
+const TrendingList: React.FC<{ song: SongType[] }> = ({ song }) => {
   return (
-    <FlatList
-      data={song}
-      keyExtractor={(item) => item.id}
-      renderItem={({ item }) => <TrendingCard song={item} />}
-      contentContainerStyle={{ paddingBottom: 20 }}
-    />
+      <FlatList
+        data={song}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => <TrendingCard song={item} />}
+        contentContainerStyle={{ paddingBottom: 20 }}
+      />
   );
 };
 

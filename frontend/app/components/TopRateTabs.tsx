@@ -99,6 +99,7 @@ const TopRateScreen: React.FC = () => {
         <TopRateTabs song={item} index={index} />
       )}
       contentContainerStyle={{ paddingBottom: 20 }}
+      nestedScrollEnabled={true} // Enable nested scrolling
     />
   );
 };

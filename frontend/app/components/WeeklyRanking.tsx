@@ -95,7 +95,7 @@ const WeeklyRanking: React.FC = () => {
       renderItem={({ item, index }) => <SongCard song={item} index={index} />}
       contentContainerStyle={{ paddingBottom: 20 }}
       scrollEnabled={false}
-      nestedScrollEnabled
+      nestedScrollEnabled={true} // Enable nested scrolling
     />
   );
 };

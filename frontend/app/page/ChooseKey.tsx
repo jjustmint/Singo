@@ -9,35 +9,45 @@ import {
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from "@react-navigation/native";
 import { get } from "react-native/Libraries/TurboModule/TurboModuleRegistry";
 import { getSongkey } from "@/api/getSongKey";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { RootStackParamList } from "../Types/Navigation";
+import { StackNavigationProp } from "@react-navigation/stack";
+import { SongKeyType } from "../Types/SongKey";
+import { SongType } from "../Types/Song";
 
-interface Song {
-  id: string;
-  title: string;
-  artist: string;
-  cover: string;
-}
+type ChooseKeyRouteProp = RouteProp<RootStackParamList, "ChooseKey">;
+type ChooseKeyNavProp = StackNavigationProp<RootStackParamList, "ChooseKey">;
 
-const ChooseKey = () => {
-  const [song, setSong] = useState<Song>({
-    id: "1",
-    title: "BIRDS OF THE FEATHER",
-    artist: "Billie Eilish",
-    cover: "https://i1.sndcdn.com/artworks-BHI8P4kbIiY67cXS-K2kVZA-t500x500.jpg",
-  });
-  const [keys, setKeys] = useState<string[]>([]);
+const ChooseKey: React.FC = () => {
+  const route = useRoute<ChooseKeyRouteProp>();
+  const navigation = useNavigation<ChooseKeyNavProp>();
+
+  const { song } = route.params;
+  
+  const [songList, setSongList] = useState<SongKeyType[]>([]);
+  const [keys, setKeys] = useState<String[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const song_id = 2; // Example song ID
-
-  const navigation = useNavigation();
+  const songName = song.songName;
+  const artist = song.artist;
+  const song_id = song.id;
+  const image = song.image;
+   // Use songKey.id for the song ID
+ // Adjust type to match your navigation structure
 
   // Fetch keys from backend
   useEffect(() => {
     const fetchKeys = async () => {
       try {
-        getKey(song_id);
+        const result = await getKey(parseInt(song_id, 10));
+        console.log("Song ID:", song_id);
+        console.log("songName:", songName);
+        console.log("artist:", artist);
+        
+        if (result) {
+          console.log("Fetched keys successfully:", result);
+        }
       } catch (error) {
         console.log("Error fetching keys:", error);
       }
@@ -49,7 +59,8 @@ const ChooseKey = () => {
     try {
       const data = await getSongkey(song_id);
       setKeys(data.data.map(item => item.key_signature));
-      console.log("Fetched keys:", data);
+      setSongList(data.data);
+      console.log("Fetched keys:", keys);
       if (data.success) {
         return data;
       } else {
@@ -71,23 +82,22 @@ const ChooseKey = () => {
   };
 
   const handleConfirm = () => {
-    navigation.navigate("MusicPlayer", { songId: song.id });
+    if (songList.length > 0) {
+      navigation.navigate("MusicPlayer", { songKey: songList[currentIndex] });
+    } else {
+      console.error("No song selected");
+    }
   };
 
-  const renderSong = ({ item }: { item: Song }) => (
+
+  const renderSong = ({ item }: { item: SongType }) => (
     <View>
-      <Text>{item.title}</Text>
+      <Text>{item.songName}</Text>
     </View>
   );
 
-  const songs = [
-    { song_id: "1", title: "Song 1" },
-    { song_id: "2", title: "Song 2" },
-    { song_id: "3", title: "Song 3" },
-  ];
-
   return (
-    <ImageBackground source={{ uri: song.cover }} style={styles.bg}>
+    <ImageBackground source={{ uri: image ? image : '' }} style={styles.bg}>
       {/* Gradient overlay - black from bottom fading to transparent at top */}
       <LinearGradient
         colors={['transparent', 'transparent', 'rgba(0,0,0,0.8)', '#000000']}
@@ -102,10 +112,10 @@ const ChooseKey = () => {
       
       {/* Song Info */}
       <View style={styles.songInfo}>
-        <Text style={styles.title}>{song.title}</Text>
+        <Text style={styles.title}>{songName ? songName : 'No Title'}</Text>
         <View style={styles.artistRow}>
           <Feather name="user" size={16} color="white" />
-          <Text style={styles.artist}> {song.artist}</Text>
+          <Text style={styles.artist}> {artist ? artist : 'Unknown Artist'}</Text>
         </View>
       </View>
       
@@ -123,11 +133,11 @@ const ChooseKey = () => {
       
       {/* Song List */}
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <FlatList
-          data={songs}
-          keyExtractor={(item) => item.song_id.toString()}
+        {/* <FlatList
+          data={songList}
+          keyExtractor={(item) => item.id.toString()}
           renderItem={renderSong}
-        />
+        /> */}
       </View>
 
       {/* Confirm Button */}
