@@ -21,6 +21,12 @@ app.use(
   })
 )
 
+app.use('/song/*',
+  serveStatic({
+    root: './python/scoring',
+  })
+)
+
 export const prisma = new PrismaClient();
 
 prisma.$connect().catch((e) => {

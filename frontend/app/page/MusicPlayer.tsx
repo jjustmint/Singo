@@ -12,7 +12,7 @@ import {
   Animated,
   Easing,
 } from "react-native";
-import { Audio } from "expo-av";
+import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from "expo-av";
 import Slider from "@react-native-community/slider";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system";
@@ -22,6 +22,8 @@ import { RootStackParamList } from "../Types/Navigation";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { getSong } from "@/api/song/getSong";
 import { createRecord } from "@/api/createRecord";
+import { getAudioVerById } from "@/api/song/getAudioById";
+import { GlobalConstant } from "@/constant";
 
 type MusicPlayerRouteProp = RouteProp<RootStackParamList, "MusicPlayer">;
 type MusicPlayerNavProp = StackNavigationProp<
@@ -34,6 +36,7 @@ const MusicPlayer: React.FC = () => {
   const navigation = useNavigation<MusicPlayerNavProp>();
 
   const { songKey } = route.params;
+
   const [loading, setLoading] = useState(true);
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
@@ -54,6 +57,71 @@ const MusicPlayer: React.FC = () => {
   const [lyrics, setLyrics] = useState<string[] | undefined>(undefined);
   const [image, setImage] = useState<string | undefined>(undefined);
   const [singer, setSinger] = useState<string | undefined>(undefined);
+
+  const getAudioById = async () => {
+    try {
+      const response = await getAudioVerById(songKey.version_id);
+      console.log("GETAUDIOVERBYID", response.data);
+      const audioUri = `${GlobalConstant.API_URL}/${response.data.ori_path}`;
+      console.log("Audio URI:", audioUri);
+
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: audioUri },
+        { shouldPlay: false }
+      );
+      setSound(newSound);
+
+      const st = await newSound.getStatusAsync();
+    if (st.isLoaded && typeof st.durationMillis === "number") {
+      setDuration(st.durationMillis / 1000); // keep seconds in state
+    }
+
+    newSound.setOnPlaybackStatusUpdate((status) => {
+      if (!status.isLoaded) return;
+
+      if (typeof status.positionMillis === "number") {
+        setPosition(status.positionMillis / 1000); 
+      }
+      if (typeof status.durationMillis === "number") {
+        setDuration(status.durationMillis / 1000); 
+      }
+      setIsPlaying(status.isPlaying === true);
+
+      if (status.didJustFinish) {
+        setIsPlaying(false);
+        setPosition(0);
+      }
+    });
+    } catch (e) {
+      console.error("Error fetching audio by ID:", e);
+    }
+  };
+
+  useEffect(() => {
+    getAudioById();
+  }, []);
+
+  const playInstrumental = async () => {
+    try {
+      if (!sound) {
+        console.error("Sound is not loaded");
+        return;
+      }
+      // await Audio.setAudioModeAsync({
+      //   allowsRecordingIOS: false,
+      //   playsInSilentModeIOS: true,
+      //   staysActiveInBackground: true,
+      //   interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+      //   interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+      //   shouldDuckAndroid: false,
+      //   playThroughEarpieceAndroid: false,
+      // });
+      await sound.playAsync();
+
+    } catch (error) {
+      console.error("Error playing instrumental:", error);
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -153,31 +221,6 @@ const MusicPlayer: React.FC = () => {
     }
   }, [recording]);
 
-  // const togglePlay = async () => {
-  //   if (!sound) {
-  //     const { sound: newSound } = await Audio.Sound.createAsync(
-  //       { uri: song.audioUrl },
-  //       { shouldPlay: true }
-  //     );
-  //     setSound(newSound);
-
-  //     newSound.setOnPlaybackStatusUpdate((status: any) => {
-  //       if (status.isLoaded) {
-  //         setPosition(status.positionMillis / 1000);
-  //         setDuration(status.durationMillis / 1000);
-  //         setIsPlaying(status.isPlaying);
-  //         setVolume(status.volume); // Update volume
-  //       }
-  //     });
-  //   } else {
-  //     if (isPlaying) {
-  //       await sound.pauseAsync();
-  //     } else {
-  //       await sound.playAsync();
-  //     }
-  //   }
-  // };
-
   const onSeek = async (value: number) => {
     if (sound) {
       await sound.setPositionAsync(value * 1000);
@@ -192,13 +235,21 @@ const MusicPlayer: React.FC = () => {
         console.error("Microphone permissions not granted");
         return;
       }
-  
+
       console.log("Setting audio mode...");
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: false,
       });
-  
+
+      console.log("Playing instrumental...");
+      await playInstrumental();
+
       console.log("Creating recording...");
       const { recording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY
@@ -217,6 +268,14 @@ const MusicPlayer: React.FC = () => {
     setRecordingUri(uri);
     setRecording(null);
 
+    if (sound) {
+      await sound.stopAsync();
+      await sound.unloadAsync();
+      setSound(null);
+    }
+
+    console.log("Recording stopped and instrumental audio unloaded");
+
     // Save the recording as a .wav file
     const wavFilePath = `${FileSystem.documentDirectory}recording.wav`;
     if (uri) {
@@ -234,7 +293,9 @@ const MusicPlayer: React.FC = () => {
       return;
     }
 
-    const recordingFile = new File([blob], "recording.wav", { type: "audio/vnd.wave" });
+    const recordingFile = new File([blob], "recording.wav", {
+      type: "audio/vnd.wave",
+    });
 
     try {
       if (!songKey.ori_path) throw new Error("Original path is missing");
@@ -350,11 +411,8 @@ const MusicPlayer: React.FC = () => {
             />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.micButton}
-            onPress={recording ? stopRecording : startRecording}
-          >
-            <Ionicons name="mic" size={36} color="white" />
+          <TouchableOpacity style={styles.micButton}>
+            <Ionicons name="mic" size={50} color="white" />
           </TouchableOpacity>
 
           <TouchableOpacity onPress={stopRecording}>
@@ -457,7 +515,7 @@ const styles = StyleSheet.create({
     marginBottom: 80,
   },
   micButton: {
-    backgroundColor: "#6c5ce7",
+    backgroundColor: "rgba(107, 107, 107, 0.5)",
     padding: 20,
     borderRadius: 50,
     justifyContent: "center",
