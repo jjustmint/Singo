@@ -185,24 +185,28 @@ const MusicPlayer: React.FC = () => {
   };
 
   const startRecording = async () => {
-    if (countdown === null) {
-      try {
-        console.log("Requesting microphone permissions...");
-        await Audio.requestPermissionsAsync();
-        console.log("Setting audio mode...");
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
-        });
-        console.log("Creating recording...");
-        const { recording } = await Audio.Recording.createAsync(
-          Audio.RecordingOptionsPresets.HIGH_QUALITY
-        );
-        console.log("Recording created successfully");
-        setRecording(recording);
-      } catch (err) {
-        console.error("Failed to start recording", err);
+    try {
+      console.log("Requesting microphone permissions...");
+      const { granted } = await Audio.requestPermissionsAsync();
+      if (!granted) {
+        console.error("Microphone permissions not granted");
+        return;
       }
+  
+      console.log("Setting audio mode...");
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+  
+      console.log("Creating recording...");
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      console.log("Recording created successfully");
+      setRecording(recording);
+    } catch (err) {
+      console.error("Failed to start recording", err);
     }
   };
 
