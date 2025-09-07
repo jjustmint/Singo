@@ -1,76 +1,64 @@
 import React, { useRef, useEffect } from "react";
-import { TouchableOpacity, Animated, StyleSheet, LayoutChangeEvent } from "react-native";
+import { TouchableOpacity, Animated, StyleSheet, LayoutChangeEvent, View } from "react-native";
 import { BlurView } from "expo-blur";
 import { Feather } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { TabKey } from "../index";
 
 const TABS: TabKey[] = ["home", "stats", "profile"];
 
-type BottomNavProps = {
-  active: TabKey;
-  onTabPress: (key: TabKey) => void;
-};
-
-const BottomNav = ({ active, onTabPress }: BottomNavProps) => {
+export default function BottomNav({ active, onTabPress }: { active: TabKey; onTabPress: (k: TabKey) => void; }) {
+  const insets = useSafeAreaInsets();                       // ⬅ safe bottom
   const indicatorX = useRef(new Animated.Value(0)).current;
   const buttonLayouts = useRef<{ [key in TabKey]?: number }>({}).current;
 
-  const handleLayout = (key: TabKey) => (event: LayoutChangeEvent) => {
-    const { x } = event.nativeEvent.layout;
+  const handleLayout = (key: TabKey) => (e: LayoutChangeEvent) => {
+    const { x } = e.nativeEvent.layout;
     buttonLayouts[key] = x;
-    if (key === active) {
-      indicatorX.setValue(x);
-    }
+    if (key === active) indicatorX.setValue(x);
   };
 
   useEffect(() => {
     const targetX = buttonLayouts[active];
     if (typeof targetX === "number") {
-      Animated.spring(indicatorX, {
-        toValue: targetX,
-        useNativeDriver: false,
-        damping: 50,
-        stiffness: 100,
-      }).start();
+      Animated.spring(indicatorX, { toValue: targetX, useNativeDriver: false, damping: 50, stiffness: 100 }).start();
     }
   }, [active]);
 
   return (
-    <BlurView intensity={50} tint="dark" style={styles.container}>
-      <Animated.View style={[styles.indicator, { left: indicatorX }]} />
-      {TABS.map((key) => (
-        <TouchableOpacity
-          key={key}
-          onLayout={handleLayout(key)}
-          onPress={() => onTabPress(key)}
-          style={styles.iconButton}
-        >
-          <Feather
-            name={key === "home" ? "home" : key === "stats" ? "bar-chart-2" : "user"}
-            size={20}
-            color={active === key ? "white" : "lightgray"}
-          />
-        </TouchableOpacity>
-      ))}
-    </BlurView>
+    <View pointerEvents="box-none" style={[styles.wrap, { bottom: 16 + insets.bottom }]}>
+      <BlurView intensity={50} tint="dark" style={styles.container}>
+        <Animated.View style={[styles.indicator, { left: indicatorX }]} />
+        {TABS.map((key) => (
+          <TouchableOpacity key={key} onLayout={handleLayout(key)} onPress={() => onTabPress(key)} style={styles.iconButton}>
+            <Feather name={key === "home" ? "home" : key === "stats" ? "bar-chart-2" : "user"} size={20} color={active === key ? "white" : "lightgray"} />
+          </TouchableOpacity>
+        ))}
+      </BlurView>
+    </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
+  // absolute wrapper to float above content
+  wrap: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+  },
   container: {
-    alignSelf: "center",
     width: 344,
     height: 72,
+    alignSelf: "center",
     borderRadius: 999,
     paddingHorizontal: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    backgroundColor: "rgba(255,255,255,0.1)",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.2)",
     overflow: "hidden",
-    position: "relative",
   },
   iconButton: {
     width: 100,
@@ -89,6 +77,3 @@ const styles = StyleSheet.create({
     zIndex: 0,
   },
 });
-
-export default BottomNav;
-
