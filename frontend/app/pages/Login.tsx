@@ -69,9 +69,17 @@ const LoginScreen: React.FC = () => {
         await setUseId(user_id);
         if(HaveKey.data.user_key !== null){
           navigation.reset({
-            index: 0,
-            routes: [{ name: "Tabs" as never, params: { screen: "Home" } }],
-          });
+  index: 0,
+  routes: [
+    {
+      name: "MainTabs" as never, // must match your Stack.Screen
+      state: {
+        index: 0,
+        routes: [{ name: "Home" as never }], // a tab inside MainTabs
+      },
+    },
+  ],
+});
         }else{
           navigation.reset({
             index: 0,

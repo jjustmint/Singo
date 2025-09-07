@@ -7,7 +7,7 @@ export const getSong = async (song_id: number): Promise<LeaderboardResponse> => 
     try {
         const response = await Axios.post<LeaderboardResponse>(
             "/private/getsong", {
-                song_id: song_id
+                songId: song_id
             }
         );
         return response.data;

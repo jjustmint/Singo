@@ -1,37 +1,37 @@
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+// MainNavigator.tsx
+import React from "react";
+import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
-import { View, Text } from "react-native";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import type { RootStackParamList, TabParamList } from "./Types/Navigation";
+
 import Home from "./page/Home";
 import Leaderboard from "./page/Leaderboard";
 import Profile from "./page/Profile";
 import BottomNav from "./components/BottomNav";
 import ChooseKey from "./page/ChooseKey";
-import MusicPlayer from "./page/MusicPlayer";
-import Summary from "./page/Summary";
+import MusicPlayer from "./page/MusicPlayer";   // (keep if used elsewhere)         // (keep if used elsewhere)
 import LoginScreen from "./pages/Login";
 import SignupScreen from "./pages/Signup";
 import VoiceTestScreen from "./page/voicetest";
+import Summary from "./page/Summary";
 
-
-const Tab = createBottomTabNavigator();
-const Stack = createStackNavigator();
+const Stack = createStackNavigator<RootStackParamList>();
+const Tab = createBottomTabNavigator<TabParamList>();
 
 export default function MainNavigator() {
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-        gestureEnabled: true, // Enable swipe gestures
-      }}
-    >
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="Signup" component={SignupScreen} />
-      <Stack.Screen name="Tabs" component={TabNavigator} />
-      <Stack.Screen name="ChooseKey" component={ChooseKey} />
-      <Stack.Screen name="MusicPlayer" component={MusicPlayer} />
-      <Stack.Screen name="Summary" component={Summary} />
-      <Stack.Screen name="voicetest" component={require("./page/voicetest").default} />
-    </Stack.Navigator>
+      <Stack.Navigator screenOptions={{ headerShown: false, gestureEnabled: true }}>
+        <Stack.Screen name="SignIn" component={LoginScreen} />
+        <Stack.Screen name="MainTabs" component={TabNavigator} />
+        <Stack.Screen name="ChooseKey" component={ChooseKey} />
+        {/* Optional extra stack screens if you actually use them here */}
+        {/* <Stack.Screen name="SettingScreen" component={Settings} /> */}
+        {/* <Stack.Screen name="Summary" component={Summary} /> */}
+        <Stack.Screen name="voicetest" component={VoiceTestScreen} />
+        <Stack.Screen name="MusicPlayer" component={MusicPlayer} />
+        <Stack.Screen name="Summary" component={Summary} />
+      </Stack.Navigator>
   );
 }
 
@@ -50,50 +50,19 @@ function TabNavigator() {
   );
 }
 
-const TABS = ["home", "stats", "profile"];
-
-function CustomBottomNav({
-  navigation,
-  state,
-}: {
-  navigation: any;
-  state: any;
-}) {
-  const handleTabPress = (key: string) => {
-    const routeName =
-      key === "home"
-        ? "Home"
-        : key === "stats"
-        ? "Leaderboard"
-        : key === "profile"
-        ? "Profile"
-        : null;
-
-    if (routeName) {
-      navigation.navigate(routeName);
-    } else {
-      console.warn(`Invalid tab key: ${key}`); // Changed to a string template
-    }
+function CustomBottomNav({ navigation, state }: { navigation: any; state: any }) {
+  const handleTabPress = (key: "home" | "stats" | "profile") => {
+    const routeName = key === "home" ? "Home" : key === "stats" ? "Leaderboard" : "Profile";
+    navigation.navigate(routeName);
   };
 
-  const activeTab =
-    state.routes[state.index]?.name === "Home"
-      ? "home"
-      : state.routes[state.index]?.name === "Leaderboard"
-      ? "stats"
-      : state.routes[state.index]?.name === "Profile"
-      ? "profile"
-      : "home"; // Default to "home" if no match
+  const active = state.routes[state.index]?.name;
+  const activeTab = active === "Home" ? "home" : active === "Leaderboard" ? "stats" : "profile";
 
   return (
-    <View style={{ position: "absolute", bottom: 50, left: 0, right: 0 }}> {/* Adjusted bottom position to 50px */}
-      <BottomNav
-        active={activeTab}
-        onTabPress={(key: string) => {
-          handleTabPress(key);
-        }}
-      />
-    </View>
+    <BottomNav
+      active={activeTab}
+      onTabPress={(key: string) => handleTabPress(key as "home" | "stats" | "profile")}
+    />
   );
 }
-
