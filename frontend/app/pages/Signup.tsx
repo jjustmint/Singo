@@ -22,6 +22,7 @@ import { SignUpApi } from "@/api/auth/signin";
 import { useNavigation } from "@react-navigation/native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { StatusBar } from "expo-status-bar";
+import { navigate } from "expo-router/build/global-state/routing";
 
 const SignupScreen: React.FC = () => {
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -53,7 +54,7 @@ const SignupScreen: React.FC = () => {
       if (signupResponse.success) {
         navigation.reset({
           index: 0,
-          routes: [{ name: "Login" as never }],
+          routes: [{ name: "SignIn" as never }],
         });
       } else {
         alert(

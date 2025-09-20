@@ -12,7 +12,7 @@ import {
   Animated,
   Easing,
 } from "react-native";
-import { Audio } from "expo-av";
+import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from "expo-av";
 import Slider from "@react-native-community/slider";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system";
@@ -22,6 +22,8 @@ import { RootStackParamList } from "../Types/Navigation";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { getSong } from "@/api/song/getSong";
 import { createRecord } from "@/api/createRecord";
+import { getAudioVerById } from "@/api/song/getAudioById";
+import { GlobalConstant } from "@/constant";
 
 type MusicPlayerRouteProp = RouteProp<RootStackParamList, "MusicPlayer">;
 type MusicPlayerNavProp = StackNavigationProp<
@@ -34,6 +36,7 @@ const MusicPlayer: React.FC = () => {
   const navigation = useNavigation<MusicPlayerNavProp>();
 
   const { songKey } = route.params;
+
   const [loading, setLoading] = useState(true);
 
   const [sound, setSound] = useState<Audio.Sound | null>(null);
@@ -56,6 +59,71 @@ const MusicPlayer: React.FC = () => {
   const [singer, setSinger] = useState<string | undefined>(undefined);
   
 
+
+  const getAudioById = async () => {
+    try {
+      const response = await getAudioVerById(songKey.version_id);
+      console.log("GETAUDIOVERBYID", response.data);
+      const audioUri = `${GlobalConstant.API_URL}/${response.data.ori_path}`;
+      console.log("Audio URI:", audioUri);
+
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: audioUri },
+        { shouldPlay: false }
+      );
+      setSound(newSound);
+
+      const st = await newSound.getStatusAsync();
+    if (st.isLoaded && typeof st.durationMillis === "number") {
+      setDuration(st.durationMillis / 1000); // keep seconds in state
+    }
+
+    newSound.setOnPlaybackStatusUpdate((status) => {
+      if (!status.isLoaded) return;
+
+      if (typeof status.positionMillis === "number") {
+        setPosition(status.positionMillis / 1000); 
+      }
+      if (typeof status.durationMillis === "number") {
+        setDuration(status.durationMillis / 1000); 
+      }
+      setIsPlaying(status.isPlaying === true);
+
+      if (status.didJustFinish) {
+        setIsPlaying(false);
+        setPosition(0);
+      }
+    });
+    } catch (e) {
+      console.error("Error fetching audio by ID:", e);
+    }
+  };
+
+  useEffect(() => {
+    getAudioById();
+  }, []);
+
+  const playInstrumental = async () => {
+    try {
+      if (!sound) {
+        console.error("Sound is not loaded");
+        return;
+      }
+      // await Audio.setAudioModeAsync({
+      //   allowsRecordingIOS: false,
+      //   playsInSilentModeIOS: true,
+      //   staysActiveInBackground: true,
+      //   interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+      //   interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+      //   shouldDuckAndroid: false,
+      //   playThroughEarpieceAndroid: false,
+      // });
+      await sound.playAsync();
+
+    } catch (error) {
+      console.error("Error playing instrumental:", error);
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -155,31 +223,6 @@ const MusicPlayer: React.FC = () => {
     }
   }, [recording]);
 
-  // const togglePlay = async () => {
-  //   if (!sound) {
-  //     const { sound: newSound } = await Audio.Sound.createAsync(
-  //       { uri: song.audioUrl },
-  //       { shouldPlay: true }
-  //     );
-  //     setSound(newSound);
-
-  //     newSound.setOnPlaybackStatusUpdate((status: any) => {
-  //       if (status.isLoaded) {
-  //         setPosition(status.positionMillis / 1000);
-  //         setDuration(status.durationMillis / 1000);
-  //         setIsPlaying(status.isPlaying);
-  //         setVolume(status.volume); // Update volume
-  //       }
-  //     });
-  //   } else {
-  //     if (isPlaying) {
-  //       await sound.pauseAsync();
-  //     } else {
-  //       await sound.playAsync();
-  //     }
-  //   }
-  // };
-
   const onSeek = async (value: number) => {
     if (sound) {
       await sound.setPositionAsync(value * 1000);
@@ -187,60 +230,89 @@ const MusicPlayer: React.FC = () => {
   };
 
   const startRecording = async () => {
-    if (countdown === null) {
-      try {
-        console.log("Requesting microphone permissions...");
-        await Audio.requestPermissionsAsync();
-        console.log("Setting audio mode...");
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
-        });
-        console.log("Creating recording...");
-        const { recording } = await Audio.Recording.createAsync(
-          Audio.RecordingOptionsPresets.HIGH_QUALITY
-        );
-        console.log("Recording created successfully");
-        setRecording(recording);
-      } catch (err) {
-        console.error("Failed to start recording", err);
+    try {
+      console.log("Requesting microphone permissions...");
+      const { granted } = await Audio.requestPermissionsAsync();
+      if (!granted) {
+        console.error("Microphone permissions not granted");
+        return;
       }
+
+      console.log("Setting audio mode...");
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: true,
+        interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+        interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: false,
+      });
+
+      console.log("Playing instrumental...");
+      await playInstrumental();
+
+      console.log("Creating recording...");
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      console.log("Recording created successfully");
+      setRecording(recording);
+    } catch (err) {
+      console.error("Failed to start recording", err);
     }
   };
 
   const stopRecording = async () => {
-    if (!recording) return;
-    await recording.stopAndUnloadAsync();
-    const uri = recording.getURI();
-    console.log("Recording stopped and stored at", uri);
-    
-    setRecordingUri(uri);
-    setRecording(null);
+  if (!recording) return;
+  await recording.stopAndUnloadAsync();
+  const uri = recording.getURI();
+  setRecordingUri(uri);
+  setRecording(null);
 
-    // Save the recording as a .wav file
-    const wavFilePath = `${FileSystem.documentDirectory}recording.wav`;
-    if (uri) {
-      await FileSystem.copyAsync({ from: uri, to: wavFilePath });
+  if (sound) {
+    await sound.stopAsync();
+    await sound.unloadAsync();
+    setSound(null);
+  }
+
+  console.log("Recording stopped and instrumental audio unloaded");
+
+  // Save the recording as a .wav file
+  const wavFilePath = `${FileSystem.documentDirectory}recording.wav`;
+  if (uri) {
+    await FileSystem.copyAsync({ from: uri, to: wavFilePath });
+  } else {
+    console.error("Recording URI is null, cannot copy file.");
+    return;
+  }
+  console.log(`Recording saved as .wav file at: ${wavFilePath}`);
+
+  try {
+    if (!songKey.ori_path) throw new Error("Original path is missing");
+
+    const response = await createRecord(
+      wavFilePath,
+      `${songKey.version_id}`,
+      songKey.key_signature,
+      songKey.ori_path
+    );
+
+    console.log("Record created successfully:", response);
+
+    // ✅ Navigate to Result if score is returned
+    if (response.success && response.data?.score !== undefined) {
+      navigation.navigate("Result", { score: response.data.score });
     } else {
-      console.error("Recording URI is null, cannot copy file.");
+      console.error("No score returned from backend:", response);
     }
-    console.log(`Recording saved as .wav file at: ${wavFilePath}`);
+  } catch (e) {
+    console.error("Error creating record:", e);
+  } finally {
+    console.log("Stop recording process completed.");
+  }
+};
 
-    try {
-      if (!songKey.ori_path) throw new Error("Original path is missing");
-      const response = await createRecord(
-        wavFilePath,
-        `${songKey.version_id}`,
-        songKey.key_signature,
-        songKey.ori_path
-      );
-      console.log("Record created successfully:", response);
-    } catch (e) {
-      console.error("Error creating record:", e);
-    } finally {
-      console.log("Stop recording process completed.");
-    }
-  };
 
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
@@ -340,11 +412,8 @@ const MusicPlayer: React.FC = () => {
             />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.micButton}
-            onPress={recording ? stopRecording : startRecording}
-          >
-            <Ionicons name="mic" size={36} color="white" />
+          <TouchableOpacity style={styles.micButton}>
+            <Ionicons name="mic" size={50} color="white" />
           </TouchableOpacity>
 
           <TouchableOpacity onPress={stopRecording}>
@@ -447,7 +516,7 @@ const styles = StyleSheet.create({
     marginBottom: 80,
   },
   micButton: {
-    backgroundColor: "#6c5ce7",
+    backgroundColor: "rgba(107, 107, 107, 0.5)",
     padding: 20,
     borderRadius: 50,
     justifyContent: "center",

@@ -18,7 +18,8 @@ export type RootStackParamList = {
   SignIn: undefined;
   voicetest: undefined;
   params?: { song?: SongType & { selectedKey?: string } };
-  MusicPlayer: { songKey: SongKeyType };
+  MusicPlayer: { songKey: any };
+  Result: { score: number }; 
   Summary: undefined;
   Signup: undefined;
 };
