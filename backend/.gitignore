@@ -15,3 +15,5 @@ python/.DS_Store
 .cpython-version/
 .DS_Store
 __pycache__/
+
+data/
