@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, version } from "react";
 import {
   View,
   Text,
@@ -54,6 +54,8 @@ const MusicPlayer: React.FC = () => {
   const [lyrics, setLyrics] = useState<string[] | undefined>(undefined);
   const [image, setImage] = useState<string | undefined>(undefined);
   const [singer, setSinger] = useState<string | undefined>(undefined);
+  
+
 
   useEffect(() => {
     (async () => {
@@ -210,6 +212,8 @@ const MusicPlayer: React.FC = () => {
     if (!recording) return;
     await recording.stopAndUnloadAsync();
     const uri = recording.getURI();
+    console.log("Recording stopped and stored at", uri);
+    
     setRecordingUri(uri);
     setRecording(null);
 
@@ -221,16 +225,6 @@ const MusicPlayer: React.FC = () => {
       console.error("Recording URI is null, cannot copy file.");
     }
     console.log(`Recording saved as .wav file at: ${wavFilePath}`);
-
-    const fetchResp = await fetch(wavFilePath);
-    const blob = await fetchResp.blob();
-
-    if (!blob || blob.size === 0) {
-      console.error("Blob is empty or undefined");
-      return;
-    }
-
-    const recordingFile = new File([blob], "recording.wav", { type: "audio/vnd.wave" });
 
     try {
       if (!songKey.ori_path) throw new Error("Original path is missing");
@@ -338,7 +332,7 @@ const MusicPlayer: React.FC = () => {
 
         {/* Controls */}
         <View style={styles.controls}>
-          <TouchableOpacity onPress={() => {}}>
+          <TouchableOpacity onPress={() => { }}>
             <Ionicons
               name={isPlaying ? "pause" : "play"}
               size={36}

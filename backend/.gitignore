@@ -5,9 +5,13 @@ src/generated/prisma/
 
 .env
 
-python/scoring/.venv/
-python/scoring/pretrained_models/
-
+python/.venv/
+python/pretrained_models/
+python/song/
+python/__pycache__/
+python/.DS_Store
 .venv/
 
 .cpython-version/
+.DS_Store
+__pycache__/
