@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, version } from "react";
 import {
   View,
   Text,
@@ -57,6 +57,8 @@ const MusicPlayer: React.FC = () => {
   const [lyrics, setLyrics] = useState<string[] | undefined>(undefined);
   const [image, setImage] = useState<string | undefined>(undefined);
   const [singer, setSinger] = useState<string | undefined>(undefined);
+  
+
 
   const getAudioById = async () => {
     try {
@@ -402,7 +404,7 @@ const MusicPlayer: React.FC = () => {
 
         {/* Controls */}
         <View style={styles.controls}>
-          <TouchableOpacity onPress={() => {}}>
+          <TouchableOpacity onPress={() => { }}>
             <Ionicons
               name={isPlaying ? "pause" : "play"}
               size={36}
