@@ -36,7 +36,7 @@ export const CreateSongAndVersionController = async (c: Context) => {
       previewsong = previewPath;
     }
 
-    const songBaseDir = path.join("python", "song", songName);
+    const songBaseDir = path.join("python","song", songName);
         const vocalDir = path.join(songBaseDir, "vocal");
         const instruDir = path.join(songBaseDir, "instru");
 
@@ -47,12 +47,16 @@ export const CreateSongAndVersionController = async (c: Context) => {
     const backendForm = new FormData();
     backendForm.append("song", song);
     backendForm.append("song_name", songName);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5 * 60 * 1000); // 5 min
 
     const response = await fetch("http://localhost:8085/upload-song", {
       method: "POST",
       body: backendForm,
+      signal: controller.signal,
     });
-
+    
+    clearTimeout(timeout);
     const result = await response.json();
 
     if (!response.ok || result.status !== "success") {
@@ -72,27 +76,20 @@ export const CreateSongAndVersionController = async (c: Context) => {
     // === Step 2: Save separated versions ===
     for (const item of result.separated) {
       if (item.status === "done") {
-
-        // Use .wav consistently
-        const vocalPath = path.join(vocalDir, `${item.key}.mp3`);
-        const instruPath = path.join(instruDir, `${item.key}.mp3`);
-
-        // Save binary audio files from FastAPI response
-        const fixedVocalPath = path.join(item.vocal_path);
-        const fixedInstruPath = path.join(item.instru_path);
-
-        fs.copyFileSync(fixedVocalPath, vocalPath);
-        fs.copyFileSync(fixedInstruPath, instruPath);
-
-          
         // Save correct relative paths in DB (match the actual file extension)
-        await createVersion(
+        try {
+          await createVersion(
           songRecord.song_id,
-          `song/${songName}/instru/${songName}_${item.key}.mp3`,
-          `song/${songName}/vocal/${songName}_${item.key}.mp3`,
+          item.vocal_path,   // already created by FastAPI
+          item.instru_path,
           item.key
-        );
+        );}
+        catch (e) {
+          console.error("Error creating version:", e);
+          console.error("111111111111111111111111111111111111111111111111111111111111111111111111111111111111");
+          return c.json(ConstructResponse(false, `Error creating version: ${e}`), 500);
       }
+    }
     }
   
     return c.json(
@@ -103,6 +100,7 @@ export const CreateSongAndVersionController = async (c: Context) => {
     );
   } catch (e) {
     console.error("Execution error:", e);
+    console.error("222222222222222222222222222222222222222222222222222222222222222222222222222222222222");
     return c.json(ConstructResponse(false, `Error: ${e}`), 500);
   }
 };
