@@ -78,8 +78,8 @@ export const CreateSongAndVersionController = async (c: Context) => {
         try {
           await createVersion(
           songRecord.song_id,
-          item.vocal_path,   // already created by FastAPI
           item.instru_path,
+          item.vocal_path,
           item.key,
           item.semitone_shift,
           item.is_original
