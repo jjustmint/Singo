@@ -47,8 +47,7 @@ export const CreateSongAndVersionController = async (c: Context) => {
     const backendForm = new FormData();
     backendForm.append("song", song);
     backendForm.append("song_name", songName);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5 * 60 * 1000); // 5 min
+    const controller = new AbortController(); // 5 min
 
     const response = await fetch("http://localhost:8085/upload-song", {
       method: "POST",
@@ -56,7 +55,6 @@ export const CreateSongAndVersionController = async (c: Context) => {
       signal: controller.signal,
     });
     
-    clearTimeout(timeout);
     const result = await response.json();
 
     if (!response.ok || result.status !== "success") {
@@ -82,7 +80,9 @@ export const CreateSongAndVersionController = async (c: Context) => {
           songRecord.song_id,
           item.vocal_path,   // already created by FastAPI
           item.instru_path,
-          item.key
+          item.key,
+          item.semitone_shift,
+          item.is_original
         );}
         catch (e) {
           console.error("Error creating version:", e);

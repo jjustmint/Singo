@@ -42,13 +42,15 @@ model recording {
 }
 
 model audio_version {
-  version_id    Int         @id(map: "songaudioversion_pkey") @default(autoincrement())
-  song_id       Int?
-  instru_path   String      @db.VarChar(50)
-  ori_path      String?     @db.VarChar
-  key_signature String      @db.VarChar(50)
-  song          song?       @relation(fields: [song_id], references: [song_id], onDelete: Cascade, onUpdate: NoAction, map: "songaudioversion_song_id_fkey")
-  recording     recording[]
+  version_id     Int         @id(map: "songaudioversion_pkey") @default(autoincrement())
+  song_id        Int?
+  instru_path    String      @db.VarChar(50)
+  ori_path       String?     @db.VarChar
+  key_signature  String      @db.VarChar(50)
+  semitone_shift Int?
+  is_original    Boolean?
+  song           song?       @relation(fields: [song_id], references: [song_id], onDelete: Cascade, onUpdate: NoAction, map: "songaudioversion_song_id_fkey")
+  recording      recording[]
 }
 
 model mistakes {
