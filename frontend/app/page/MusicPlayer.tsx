@@ -62,7 +62,7 @@ const MusicPlayer: React.FC = () => {
     try {
       const response = await getAudioVerById(songKey.version_id);
       console.log("GETAUDIOVERBYID", response.data);
-      const audioUri = `${GlobalConstant.API_URL}/${response.data.ori_path}`;
+      const audioUri = `${GlobalConstant.API_URL}/${response.data.instru_path}`;
       console.log("Audio URI:", audioUri);
 
       const { sound: newSound } = await Audio.Sound.createAsync(
@@ -300,7 +300,7 @@ const MusicPlayer: React.FC = () => {
 
     // ✅ Navigate to Result if score is returned
     if (response.success && response.data?.score !== undefined) {
-      navigation.navigate("Result", { score: response.data.score });
+      navigation.navigate("Result", { score: response.data.score, });
     } else {
       console.error("No score returned from backend:", response);
     }
