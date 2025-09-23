@@ -10,7 +10,7 @@ const app = new Hono()
 app.use(logger())
 
 app.use(cors({
-  origin: ["http://localhost:8081"], // Your frontend URL
+  origin: "*", // Your frontend URL
   credentials: true
 }))
 
@@ -23,7 +23,7 @@ app.use(
 
 app.use('/song/*',
   serveStatic({
-    root: './python/scoring',
+    root: './python',
   })
 )
 

@@ -18,16 +18,14 @@ model User {
 }
 
 model song {
-  song_id        Int             @id @default(autoincrement())
-  title          String
-  key_signature  String          @db.VarChar(50)
-  parent_song_id Int?
-  lyrics         String?
-  album_cover    String?         @db.VarChar(255)
-  singer         String?         @db.VarChar(255)
-  audio_version  audio_version[]
-  song           song?           @relation("songTosong", fields: [parent_song_id], references: [song_id], onDelete: Cascade, onUpdate: NoAction)
-  other_song     song[]          @relation("songTosong")
+  song_id       Int             @id @default(autoincrement())
+  title         String
+  key_signature String          @db.VarChar(50)
+  lyrics        String?
+  album_cover   String?         @db.VarChar(255)
+  singer        String?         @db.VarChar(255)
+  previewsong   String?         @db.VarChar(255)
+  audio_version audio_version[]
 }
 
 model recording {
@@ -44,13 +42,15 @@ model recording {
 }
 
 model audio_version {
-  version_id    Int         @id(map: "songaudioversion_pkey") @default(autoincrement())
-  song_id       Int?
-  instru_path   String      @db.VarChar(50)
-  ori_path      String?     @db.VarChar
-  key_signature String      @db.VarChar(50)
-  song          song?       @relation(fields: [song_id], references: [song_id], onDelete: Cascade, onUpdate: NoAction, map: "songaudioversion_song_id_fkey")
-  recording     recording[]
+  version_id     Int         @id(map: "songaudioversion_pkey") @default(autoincrement())
+  song_id        Int?
+  instru_path    String      @db.VarChar(50)
+  ori_path       String?     @db.VarChar
+  key_signature  String      @db.VarChar(50)
+  semitone_shift Int?
+  is_original    Boolean?
+  song           song?       @relation(fields: [song_id], references: [song_id], onDelete: Cascade, onUpdate: NoAction, map: "songaudioversion_song_id_fkey")
+  recording      recording[]
 }
 
 model mistakes {
