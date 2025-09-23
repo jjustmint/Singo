@@ -45,7 +45,7 @@ const MusicPlayer: React.FC = () => {
   const [duration, setDuration] = useState(0);
 
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [recordingUri, setRecordingUri] = useState<string | null>(null);
+  const [recordingUri, setRecordingUri] = useState<string | null>(null); 
 
   const [countdown, setCountdown] = useState<number | null>(null); // Countdown state
 
