@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+
+
 import {
   View,
   Text,
@@ -12,6 +14,7 @@ import { FontAwesome } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { SongType } from "../Types/Song";
+import { GlobalConstant } from "@/constant";
 
 type RootStackParamList = {
   MainTabs: undefined;
@@ -20,8 +23,6 @@ type RootStackParamList = {
 
 type NavigationProp = StackNavigationProp<RootStackParamList, "MainTabs">;
 
-
-// Mock Data
 
 const TrendingCard: React.FC<{ song: SongType }> = ({ song }) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -39,7 +40,7 @@ const TrendingCard: React.FC<{ song: SongType }> = ({ song }) => {
 
   return (
     <TouchableOpacity style={styles.card} onPress={handleCardPress}>
-      <Image source={{ uri: song.image }} style={styles.image} />
+      <Image source={{ uri: `${GlobalConstant.API_URL}/${song.image}` }} style={styles.image} />
       <View style={styles.rightContainer}>
         <View style={styles.textContainer}>
           <Text style={styles.songName} numberOfLines={1}>

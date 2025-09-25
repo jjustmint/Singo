@@ -45,7 +45,7 @@ const MusicPlayer: React.FC = () => {
   const [duration, setDuration] = useState(0);
 
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [recordingUri, setRecordingUri] = useState<string | null>(null);
+  const [recordingUri, setRecordingUri] = useState<string | null>(null); 
 
   const [countdown, setCountdown] = useState<number | null>(null); // Countdown state
 
@@ -64,7 +64,7 @@ const MusicPlayer: React.FC = () => {
     try {
       const response = await getAudioVerById(songKey.version_id);
       console.log("GETAUDIOVERBYID", response.data);
-      const audioUri = `${GlobalConstant.API_URL}/${response.data.ori_path}`;
+      const audioUri = `${GlobalConstant.API_URL}/${response.data.instru_path}`;
       console.log("Audio URI:", audioUri);
 
       const { sound: newSound } = await Audio.Sound.createAsync(
@@ -300,19 +300,19 @@ const MusicPlayer: React.FC = () => {
 
       console.log("Record created successfully:", response);
 
-      // ✅ Navigate to Result if score is returned
-      if (response.success && response.data?.score !== undefined) {
-        navigation.navigate("Result", { score: response.data.score });
-      } else {
-        console.error("No score returned from backend:", response);
-      }
-    } catch (e) {
-      console.error("Error creating record:", e);
-    } finally {
-      setLoadingResult(false);
-      console.log("Stop recording process completed.");
+    // ✅ Navigate to Result if score is returned
+    if (response.success && response.data?.score !== undefined) {
+      navigation.navigate("Result", { score: response.data.score, });
+    } else {
+      console.error("No score returned from backend:", response);
     }
-  };
+  } catch (e) {
+    console.error("Error creating record:", e);
+  } finally {
+    console.log("Stop recording process completed.");
+  }
+};
+
 
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
@@ -352,7 +352,7 @@ const MusicPlayer: React.FC = () => {
 
   return (
     <ImageBackground
-      source={{ uri: image ? image : "https://via.placeholder.com/150" }}
+      source={{ uri: image ? `${GlobalConstant.API_URL}/${image}` : "https://via.placeholder.com/150" }}
       style={styles.bgImage}
       resizeMode="cover"
       blurRadius={15}
@@ -363,7 +363,7 @@ const MusicPlayer: React.FC = () => {
       <SafeAreaView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <Image source={{ uri: image }} style={styles.albumArt} />
+          <Image source={{ uri: `${GlobalConstant.API_URL}/${image}` }} style={styles.albumArt} />
           <View style={{ marginLeft: 12 }}>
             <Text style={styles.songTitle}>{title}</Text>
             <Text style={styles.artist}>{singer}</Text>

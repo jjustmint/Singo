@@ -1,5 +1,5 @@
 // app/screens/Summary.tsx
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -14,6 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { getMistakes } from "@/api/getMistakes";
 
 type Issue = {
   /** seconds from start of track */
@@ -32,7 +33,7 @@ type Track = {
 
 type RouteParams = {
   track?: Track;
-  score?: number; // 0..100
+  score?: number; 
   issues?: Issue[];
 };
 
@@ -72,6 +73,17 @@ export default function Summary() {
     () => formatTime(theTrack.durationSec),
     [theTrack.durationSec]
   );
+
+  useEffect(() => {
+  }, []);
+
+  const fetchMistakes = async () => { 
+    try {
+      const response = await getMistakes(1);
+      console.log("Fetched mistakes:", response);
+    } catch (error) {
+      console.error("Error fetching mistakes:", error);
+    }}
 
   return (
     <LinearGradient

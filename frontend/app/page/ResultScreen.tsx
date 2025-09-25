@@ -1,9 +1,19 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { View, Text, StyleSheet, SafeAreaView } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { useNavigation } from "@react-navigation/native";
 
-const ResultScreen: React.FC<{ route: { params: { score: number } } }> = ({ route }) => {
-  const { score } = route.params;
+const ResultScreen: React.FC<{ route: { params: { score: number; recordId: number } } }> = ({ route }) => {
+  const { score, recordId } = route.params;
+  const navigation = useNavigation();
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      navigation.navigate("Summary" as never);
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [navigation]);
 
   return (
     <LinearGradient
