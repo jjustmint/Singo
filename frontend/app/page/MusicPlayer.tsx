@@ -57,8 +57,8 @@ const MusicPlayer: React.FC = () => {
   const [lyrics, setLyrics] = useState<string[] | undefined>(undefined);
   const [image, setImage] = useState<string | undefined>(undefined);
   const [singer, setSinger] = useState<string | undefined>(undefined);
-  
 
+  const [loadingResult, setLoadingResult] = useState(false);
 
   const getAudioById = async () => {
     try {
@@ -74,26 +74,26 @@ const MusicPlayer: React.FC = () => {
       setSound(newSound);
 
       const st = await newSound.getStatusAsync();
-    if (st.isLoaded && typeof st.durationMillis === "number") {
-      setDuration(st.durationMillis / 1000); // keep seconds in state
-    }
-
-    newSound.setOnPlaybackStatusUpdate((status) => {
-      if (!status.isLoaded) return;
-
-      if (typeof status.positionMillis === "number") {
-        setPosition(status.positionMillis / 1000); 
+      if (st.isLoaded && typeof st.durationMillis === "number") {
+        setDuration(st.durationMillis / 1000); // keep seconds in state
       }
-      if (typeof status.durationMillis === "number") {
-        setDuration(status.durationMillis / 1000); 
-      }
-      setIsPlaying(status.isPlaying === true);
 
-      if (status.didJustFinish) {
-        setIsPlaying(false);
-        setPosition(0);
-      }
-    });
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (!status.isLoaded) return;
+
+        if (typeof status.positionMillis === "number") {
+          setPosition(status.positionMillis / 1000);
+        }
+        if (typeof status.durationMillis === "number") {
+          setDuration(status.durationMillis / 1000);
+        }
+        setIsPlaying(status.isPlaying === true);
+
+        if (status.didJustFinish) {
+          setIsPlaying(false);
+          setPosition(0);
+        }
+      });
     } catch (e) {
       console.error("Error fetching audio by ID:", e);
     }
@@ -119,7 +119,6 @@ const MusicPlayer: React.FC = () => {
       //   playThroughEarpieceAndroid: false,
       // });
       await sound.playAsync();
-
     } catch (error) {
       console.error("Error playing instrumental:", error);
     }
@@ -264,55 +263,56 @@ const MusicPlayer: React.FC = () => {
   };
 
   const stopRecording = async () => {
-  if (!recording) return;
-  await recording.stopAndUnloadAsync();
-  const uri = recording.getURI();
-  setRecordingUri(uri);
-  setRecording(null);
+    if (!recording) return;
+    await recording.stopAndUnloadAsync();
+    const uri = recording.getURI();
+    setRecordingUri(uri);
+    setRecording(null);
 
-  if (sound) {
-    await sound.stopAsync();
-    await sound.unloadAsync();
-    setSound(null);
-  }
-
-  console.log("Recording stopped and instrumental audio unloaded");
-
-  // Save the recording as a .wav file
-  const wavFilePath = `${FileSystem.documentDirectory}recording.wav`;
-  if (uri) {
-    await FileSystem.copyAsync({ from: uri, to: wavFilePath });
-  } else {
-    console.error("Recording URI is null, cannot copy file.");
-    return;
-  }
-  console.log(`Recording saved as .wav file at: ${wavFilePath}`);
-
-  try {
-    if (!songKey.ori_path) throw new Error("Original path is missing");
-
-    const response = await createRecord(
-      wavFilePath,
-      `${songKey.version_id}`,
-      songKey.key_signature,
-      songKey.ori_path
-    );
-
-    console.log("Record created successfully:", response);
-
-    // ✅ Navigate to Result if score is returned
-    if (response.success && response.data?.score !== undefined) {
-      navigation.navigate("Result", { score: response.data.score });
-    } else {
-      console.error("No score returned from backend:", response);
+    if (sound) {
+      await sound.stopAsync();
+      await sound.unloadAsync();
+      setSound(null);
     }
-  } catch (e) {
-    console.error("Error creating record:", e);
-  } finally {
-    console.log("Stop recording process completed.");
-  }
-};
 
+    console.log("Recording stopped and instrumental audio unloaded");
+
+    // Save the recording as a .wav file
+    const wavFilePath = `${FileSystem.documentDirectory}recording.wav`;
+    if (uri) {
+      await FileSystem.copyAsync({ from: uri, to: wavFilePath });
+    } else {
+      console.error("Recording URI is null, cannot copy file.");
+      return;
+    }
+    console.log(`Recording saved as .wav file at: ${wavFilePath}`);
+
+    try {
+      if (!songKey.ori_path) throw new Error("Original path is missing");
+
+      setLoadingResult(true);
+      const response = await createRecord(
+        wavFilePath,
+        `${songKey.version_id}`,
+        songKey.key_signature,
+        songKey.ori_path
+      );
+
+      console.log("Record created successfully:", response);
+
+      // ✅ Navigate to Result if score is returned
+      if (response.success && response.data?.score !== undefined) {
+        navigation.navigate("Result", { score: response.data.score });
+      } else {
+        console.error("No score returned from backend:", response);
+      }
+    } catch (e) {
+      console.error("Error creating record:", e);
+    } finally {
+      setLoadingResult(false);
+      console.log("Stop recording process completed.");
+    }
+  };
 
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
@@ -404,7 +404,7 @@ const MusicPlayer: React.FC = () => {
 
         {/* Controls */}
         <View style={styles.controls}>
-          <TouchableOpacity onPress={() => { }}>
+          <TouchableOpacity onPress={() => {}}>
             <Ionicons
               name={isPlaying ? "pause" : "play"}
               size={36}
@@ -436,6 +436,20 @@ const MusicPlayer: React.FC = () => {
       {countdown !== null && (
         <View style={styles.countdownOverlay}>
           <Text style={styles.countdownText}>{countdown}</Text>
+        </View>
+      )}
+
+      {/* Loading overlay for Result */}
+      {loadingResult && (
+        <View
+          style={{
+            ...StyleSheet.absoluteFillObject,
+            justifyContent: "center",
+            alignItems: "center",
+            backgroundColor: "rgba(0,0,0,0.5)",
+          }}
+        >
+          <ActivityIndicator size="large" color="#fff" />
         </View>
       )}
     </ImageBackground>
