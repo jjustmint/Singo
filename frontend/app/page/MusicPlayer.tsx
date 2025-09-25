@@ -352,7 +352,7 @@ const MusicPlayer: React.FC = () => {
 
   return (
     <ImageBackground
-      source={{ uri: image ? image : "https://via.placeholder.com/150" }}
+      source={{ uri: image ? `${GlobalConstant.API_URL}/${image}` : "https://via.placeholder.com/150" }}
       style={styles.bgImage}
       resizeMode="cover"
       blurRadius={15}
@@ -363,7 +363,7 @@ const MusicPlayer: React.FC = () => {
       <SafeAreaView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <Image source={{ uri: image }} style={styles.albumArt} />
+          <Image source={{ uri: `${GlobalConstant.API_URL}/${image}` }} style={styles.albumArt} />
           <View style={{ marginLeft: 12 }}>
             <Text style={styles.songTitle}>{title}</Text>
             <Text style={styles.artist}>{singer}</Text>

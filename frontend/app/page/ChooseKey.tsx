@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { GlobalConstant } from "@/constant";
 import {
   View,
   Text,
@@ -97,7 +98,7 @@ const ChooseKey: React.FC = () => {
   );
 
   return (
-    <ImageBackground source={{ uri: image ? image : '' }} style={styles.bg}>
+    <ImageBackground source={{ uri: `${GlobalConstant.API_URL}/${song.image}` }} style={styles.bg}>
       {/* Gradient overlay - black from bottom fading to transparent at top */}
       <LinearGradient
         colors={['transparent', 'transparent', 'rgba(0,0,0,0.8)', '#000000']}
