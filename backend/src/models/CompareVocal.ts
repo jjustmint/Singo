@@ -42,15 +42,19 @@ export const updateScore = async(recordId: number, score: number) => {
 
 export const uploadMistakes = async(recordId: number, mistakes: Mistake[]) => {
     for (const mistake of mistakes) {
-        await prisma.mistakes.create({
-          data: {
-            pitch_diff: mistake.pitch_diff,
-            reason: mistake.reason,
-            timestamp_start: mistake.start_time,
-            timestamp_end: mistake.end_time,
-            recording_id: recordId, // if you have a relation
-          },
-        });
+        try {
+            await prisma.mistakes.create({
+              data: {
+                pitch_diff: Math.round(mistake.pitch_diff),
+                reason: mistake.reason,
+                timestamp_start: mistake.start_time,
+                timestamp_end: mistake.end_time,
+                recording_id: recordId,
+              },
+            });
+          } catch (err) {
+            console.error("Prisma error inserting mistake:", err);
+          }
       }     
 }
 
