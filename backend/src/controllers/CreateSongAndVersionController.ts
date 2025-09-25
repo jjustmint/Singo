@@ -22,7 +22,8 @@ export const CreateSongAndVersionController = async (c: Context) => {
       const albumPath = path.join(albumDir, album_coverFile.name);
       const buf = Buffer.from(await album_coverFile.arrayBuffer());
       fs.writeFileSync(albumPath, buf);
-      album_cover = albumPath;
+      album_cover = albumPath.replace(/^data[\\/]/, "");
+
     }
 
     // === Save previewsong if provided ===
@@ -33,7 +34,7 @@ export const CreateSongAndVersionController = async (c: Context) => {
       const previewPath = path.join(previewDir, previewsongFile.name);
       const buf = Buffer.from(await previewsongFile.arrayBuffer());
       fs.writeFileSync(previewPath, buf);
-      previewsong = previewPath;
+      previewsong = previewPath.replace(/^data[\\/]/, "");
     }
 
     const songBaseDir = path.join("python","song", songName);
