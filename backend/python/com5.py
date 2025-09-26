@@ -45,7 +45,7 @@ def is_harmonic(note1, note2):
     interval = abs(note1 - note2) % 12
     return interval in [0, 7, 5, 4, 3]
 
-def compute_timing_penalty(path, sr, hop_length=512, max_allowed_delay=0.8, penalty_factor=25, max_penalty=35, large_delay_cap=3):
+def compute_timing_penalty(path, sr, hop_length=512, max_allowed_delay=0.8, penalty_factor=18, max_penalty=30, large_delay_cap=4):
     delays = [(user_idx - orig_idx) * hop_length / sr for orig_idx, user_idx in path]
     if not delays:
         return 0
@@ -169,14 +169,14 @@ async def compare(request: CompareRequest):
 
             if reason == 'missing':
                 pitch_diff = 0.0
-                penalty = duration * 10
+                penalty = duration * 2
             else:
                 expected_midi = 60 + mistake['expected_note']
                 actual_midi = 60 + mistake['actual_note']
                 expected_freq = freq_from_midi(expected_midi)
                 actual_freq = freq_from_midi(actual_midi)
                 pitch_diff = abs(expected_freq - actual_freq)
-                penalty = duration * min(pitch_diff / 1000, 1) * 10
+                penalty = duration * min(pitch_diff / 1400, 1) * 2
 
             mistakes.append({
                 "reason": reason,
@@ -190,9 +190,9 @@ async def compare(request: CompareRequest):
         # Score calculation
         mistake_frames = sum(m['frames'] for m in detect_mistake_points(original_chroma, user_chroma, path, sr1))
         voiced_frames = sum(1 for _, user_idx in path if np.sum(user_chroma[:, user_idx]) > 0.1)
-        base_accuracy = 100 * (1 - mistake_frames / voiced_frames) if voiced_frames > 0 else 0
+        base_accuracy = 100 * (1 - 0.7 * mistake_frames / voiced_frames) if voiced_frames > 0 else 0
         timing_penalty = compute_timing_penalty(path, sr1)
-        pitch_shift_penalty = abs(shift) * 2
+        pitch_shift_penalty = abs(shift) * 0.5
 
         final_score = max(0.0, base_accuracy - timing_penalty - pitch_shift_penalty)
 
