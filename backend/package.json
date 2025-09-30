@@ -2,7 +2,8 @@
   "name": "backend",
   "scripts": {
     "dev": "bun run --hot src/index.ts",
-    "pull": "bunx prisma db pull && bunx prisma generate"
+    "pull": "bunx prisma db pull && bunx prisma generate",
+    "compile": "bun build src/index.ts --outdir dist --target bun"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.1",

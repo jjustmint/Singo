@@ -17,3 +17,5 @@ python/.DS_Store
 __pycache__/
 
 data/
+dockerfile
+dist
