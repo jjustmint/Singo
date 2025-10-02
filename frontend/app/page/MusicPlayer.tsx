@@ -15,8 +15,8 @@ import {
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from "expo-av";
 import Slider from "@react-native-community/slider";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import * as FileSystem from "expo-file-system";
-// import * as Sharing from "expo-sharing";
+//import * as FileSystem from "expo-file-system";
+import { File, Paths } from "expo-file-system";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import { RootStackParamList } from "../Types/Navigation";
 import { StackNavigationProp } from "@react-navigation/stack";
@@ -45,7 +45,7 @@ const MusicPlayer: React.FC = () => {
   const [duration, setDuration] = useState(0);
 
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
-  const [recordingUri, setRecordingUri] = useState<string | null>(null); 
+  const [recordingUri, setRecordingUri] = useState<string | null>(null);
 
   const [countdown, setCountdown] = useState<number | null>(null); // Countdown state
 
@@ -107,6 +107,7 @@ const MusicPlayer: React.FC = () => {
     try {
       if (!sound) {
         console.error("Sound is not loaded");
+        console.log(sound);
         return;
       }
       // await Audio.setAudioModeAsync({
@@ -262,8 +263,46 @@ const MusicPlayer: React.FC = () => {
     }
   };
 
+  // const stopRecording = async () => {
+  //   if (!recording) return;
+  //   await recording.stopAndUnloadAsync();
+  //   const uri = recording.getURI();
+  //   setRecordingUri(uri);
+  //   setRecording(null);
+
+  //   if (sound) {
+  //     await sound.stopAsync();
+  //     await sound.unloadAsync();
+  //     setSound(null);
+  //   }
+
+  //   console.log("Recording stopped and instrumental audio unloaded");
+
+  //   const wavFilePath = `${(FileSystem as any).documentDirectory}recording.wav`;
+  //   if (uri) {
+  //     await FileSystem.copyAsync({ from: uri, to: wavFilePath });
+  //   } else {
+  //     console.error("Recording URI is null, cannot copy file.");
+  //     return;
+  //   }
+  //   console.log(`Recording saved as .wav file at: ${wavFilePath}`);
+
+  //   try {
+  //     if (!songKey.ori_path) throw new Error("Original path is missing");
+
+  //     setLoadingResult(true);
+  //     const response = await createRecord(
+  //       wavFilePath,
+  //       `${songKey.version_id}`,
+  //       songKey.key_signature,
+  //       songKey.ori_path
+  //     );
+
+  //     console.log("Record created successfully:", response);
+
   const stopRecording = async () => {
     if (!recording) return;
+
     await recording.stopAndUnloadAsync();
     const uri = recording.getURI();
     setRecordingUri(uri);
@@ -277,22 +316,31 @@ const MusicPlayer: React.FC = () => {
 
     console.log("Recording stopped and instrumental audio unloaded");
 
-    // Save the recording as a .wav file
-    const wavFilePath = `${FileSystem.documentDirectory}recording.wav`;
-    if (uri) {
-      await FileSystem.copyAsync({ from: uri, to: wavFilePath });
-    } else {
-      console.error("Recording URI is null, cannot copy file.");
-      return;
-    }
-    console.log(`Recording saved as .wav file at: ${wavFilePath}`);
-
     try {
+      if (!uri) {
+        console.error("Recording URI is null, cannot save file.");
+        return;
+      }
+
+      // ✅ SDK 54 File API
+      const source = new File(uri);
+      const target = new File(Paths.document, "recording.m4a");
+
+      // optional: if you want to force-overwrite, delete old file first
+      if (target.exists) {
+        try {
+          target.delete();
+        } catch {}
+      }
+
+      source.copy(target); // <-- synchronous, no await
+      console.log(`Recording saved as .m4a file at: ${target.uri}`);
+
       if (!songKey.ori_path) throw new Error("Original path is missing");
 
       setLoadingResult(true);
       const response = await createRecord(
-        wavFilePath,
+        target.uri, // use the new file’s URI
         `${songKey.version_id}`,
         songKey.key_signature,
         songKey.ori_path
@@ -300,19 +348,30 @@ const MusicPlayer: React.FC = () => {
 
       console.log("Record created successfully:", response);
 
-    // ✅ Navigate to Result if score is returned
-    if (response.success && response.data?.score !== undefined) {
-      navigation.navigate("Result", { score: response.data.score, });
-    } else {
-      console.error("No score returned from backend:", response);
+      if (response.success && response.data?.score !== undefined) {
+        navigation.navigate("Result", { score: response.data.score });
+      } else {
+        console.error("No score returned from backend:", response);
+      }
+    } catch (e) {
+      console.error("Error creating record:", e);
+    } finally {
+      console.log("Stop recording process completed.");
     }
-  } catch (e) {
-    console.error("Error creating record:", e);
-  } finally {
-    console.log("Stop recording process completed.");
-  }
-};
+  };
 
+  // ✅ Navigate to Result if score is returned
+  //     if (response.success && response.data?.score !== undefined) {
+  //       navigation.navigate("Result", { score: response.data.score, });
+  //     } else {
+  //       console.error("No score returned from backend:", response);
+  //     }
+  //   } catch (e) {
+  //     console.error("Error creating record:", e);
+  //   } finally {
+  //     console.log("Stop recording process completed.");
+  //   }
+  // };
 
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
@@ -352,7 +411,11 @@ const MusicPlayer: React.FC = () => {
 
   return (
     <ImageBackground
-      source={{ uri: image ? `${GlobalConstant.API_URL}/${image}` : "https://via.placeholder.com/150" }}
+      source={{
+        uri: image
+          ? `${GlobalConstant.API_URL}/${image}`
+          : "https://via.placeholder.com/150",
+      }}
       style={styles.bgImage}
       resizeMode="cover"
       blurRadius={15}
@@ -363,7 +426,10 @@ const MusicPlayer: React.FC = () => {
       <SafeAreaView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
-          <Image source={{ uri: `${GlobalConstant.API_URL}/${image}` }} style={styles.albumArt} />
+          <Image
+            source={{ uri: `${GlobalConstant.API_URL}/${image}` }}
+            style={styles.albumArt}
+          />
           <View style={{ marginLeft: 12 }}>
             <Text style={styles.songTitle}>{title}</Text>
             <Text style={styles.artist}>{singer}</Text>
