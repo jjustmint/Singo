@@ -348,8 +348,9 @@ const MusicPlayer: React.FC = () => {
 
       console.log("Record created successfully:", response);
 
-      if (response.success && response.data?.score !== undefined) {
-        navigation.navigate("Result", { score: response.data.score });
+      const responseData = typeof response.data === "number" ? response.data : JSON.parse(response.data);
+      if (response.success && responseData?.score !== undefined) {
+        navigation.navigate("Result", { score: responseData.score, song_id: responseData.song_id, recordId: responseData.record_id });
       } else {
         console.error("No score returned from backend:", response);
       }
