@@ -36,20 +36,29 @@ export const updateUserController = async (c: Context) => {
         }
         const body = await c.req.json<ProfilePayload>();
         // Validate input
-        if (!body.username||!body.oldpassword || !body.password) {
-            return c.json(ConstructResponse(false, "Missing password", 400));
+        if (!body.username||!body.password) {
+            return c.json(ConstructResponse(false, "Missing username or password", 400));
         }
         // Check if username & password already exists
         const checkUser = await checkUsername(parseInt(user_id),body.username);
         if (checkUser) {
             return c.json(ConstructResponse(false, "Username already exists", 400));
         }
-        const checkPass = await checkPassword(parseInt(user_id), body.oldpassword);
+        const checkPass = await checkPassword(parseInt(user_id), body.password);
         if(!checkPass){
-            return c.json(ConstructResponse(false, "Old password is incorrect", 400));
+            return c.json(ConstructResponse(false, "Password is incorrect", 400));
         }
-        const update = await updateUser(user_id, { username: body.username, password: body.password });
-        return c.json(ConstructResponse(true, "update username successfully", update), 200);
+        if(body.newPassword){
+            if(body.password === body.newPassword){
+                return c.json(ConstructResponse(false, "New password cannot be the same as the old password", 400));
+            }
+            const update = await updateUser(user_id, { username: body.username, password: body.newPassword });
+            return c.json(ConstructResponse(true, "update username successfully", update), 200);
+        }
+        else{
+            const update = await updateUser(user_id, { username: body.username });
+            return c.json(ConstructResponse(true, "update username successfully", update), 200);
+        }
     } catch (e) {
         return c.json(ConstructResponse(false, `Error: ${e}`), 500)
     }
