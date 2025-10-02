@@ -5,13 +5,16 @@ export const FindAllSong = async() => {
     return songs;
 }
 
-export const FindSongKeyBySongId = async(songId: number) => {
-    const keys = await prisma.audio_version.findMany({
-        where:{
-            song_id: songId
-        }
-    });
-    return keys;
+export const FindSongKeyBySongId = async (songId: number) => {
+  const keys = await prisma.audio_version.findMany({
+      where: {
+          song_id: songId
+      },
+      orderBy: {
+          semitone_shift: "asc"
+      }
+  });
+  return keys;
 }
 
 export const FindSongById = async(songId: number) => {

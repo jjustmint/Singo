@@ -9,6 +9,7 @@ import { HistoryController } from "../controllers/History";
 import { UserController } from "../controllers/User";
 import { uploadRecordAndScoreController } from "../controllers/uploadRecord";
 import { CreateSongAndVersionController } from "../controllers/CreateSongAndVersionController";
+import { updateProfilePicController, updateUserController } from "../controllers/Profile";
 
 const privateRouter = new Hono()
 
@@ -25,6 +26,7 @@ privateRouter.post("/getsongkey", getSongKeyController);
 privateRouter.get("/getuser", UserController);
 privateRouter.post("/getaudiobyid", getAudioVerByIdController);
 privateRouter.post("/uploaduserrecord", uploadRecordAndScoreController);
-privateRouter.post("/uploadsong", CreateSongAndVersionController); // Placeholder for song upload
-
+privateRouter.post("/uploadsong", CreateSongAndVersionController);
+privateRouter.post("/updatepic", updateProfilePicController);
+privateRouter.post("/updateuser", updateUserController);
 export { privateRouter }

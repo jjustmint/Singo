@@ -56,3 +56,35 @@ export const createUserFolder = (userId: number) => {
     console.log(`Folder already exists: ${userFolderPath}`);
   }
 };
+
+export const checkUsername = async (user_id: number,username: string) => {
+  const checkUsername = await prisma.user.findFirst({
+    where: {
+      username: username,
+      NOT: {
+        user_id: user_id,
+      },
+    },
+  })
+  return checkUsername ? true : false
+}
+
+export const checkPassword = async (user_id: number, password: string) => {
+  const checkPassword = await prisma.user.findFirst({
+    where: {
+      user_id: user_id,
+    }
+  })
+  return (checkPassword?.password == password) ? true : false
+}
+
+export const updateUser = async (user_id: number,
+  data: { username?: string; password?: string; photo?: string | null }) => {
+  const updateUser = await prisma.user.update({
+    where: {
+      user_id: user_id,
+    },
+    data
+  })
+  return updateUser
+}
