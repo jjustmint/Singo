@@ -23,7 +23,6 @@ export const CreateSongAndVersionController = async (c: Context) => {
       const buf = Buffer.from(await album_coverFile.arrayBuffer());
       fs.writeFileSync(albumPath, buf);
       album_cover = albumPath.replace(/^data[\\/]/, "");
-
     }
 
     // === Save previewsong if provided ===
