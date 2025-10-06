@@ -3,6 +3,8 @@ import {
   Text,
   Dimensions,
   FlatList,
+  TouchableOpacity,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
@@ -11,21 +13,31 @@ import TopRateTabs from "../components/TopRateTabs";
 import Recent from "../components/Recent";
 import ProfileInfo from "../components/ProfileInfo";
 import History from "../components/History";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { getUser } from "@/api/getUser";
 import { GlobalConstant } from "@/constant";
 import { getHistory } from "@/api/getHistory";
 import { getUserId } from "@/util/cookies";
 import { HistoryType } from "../../../backend/src/types/getHistory";
+import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const { width } = Dimensions.get("window");
 
 export default function Profile() {
-
+  const router = useRouter();
   const sections = [{ key: "content" }];
   const [username, setUsername] = useState<string>("");
   const [profileImage, setProfileImage] = useState<string>("");
   const [history, setHistory] = useState<HistoryType[]>([]);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  
+  // Animation values
+  const dropdownHeight = useRef(new Animated.Value(0)).current;
+  const dropdownOpacity = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     const fetchData = async () => {
       await handleGetUser();
@@ -35,27 +47,94 @@ export default function Profile() {
   }, []);
 
   const handleGetUser = async () => {
-    const fetchedUsername =  await getUser();
+    const fetchedUsername = await getUser();
     const user = fetchedUsername.data.username;
     const photo = fetchedUsername.data.photo;
     setUsername(user);
     setProfileImage(photo || "https://images.genius.com/282a0165862d48f70b0f9c5ce8531eb5.1000x1000x1.png");
     console.log("Fetched username:", fetchedUsername);
-    console.log("photo: "+`${GlobalConstant.API_URL}${profileImage}`);
-    };
+    console.log("photo: " + `${GlobalConstant.API_URL}${profileImage}`);
+  };
 
-  const handleHistory = async() => {
+  const handleHistory = async () => {
     const userId = await getUserId();
     const history = await getHistory(userId as number);
     setHistory(history.data);
     console.log("Fetched history:", history);
-  }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await handleGetUser();
+      await handleHistory();
+    } catch (error) {
+      console.error("Error refreshing data:", error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const toggleDropdown = () => {
+    if (isDropdownOpen) {
+      // Close animation
+      Animated.parallel([
+        Animated.timing(dropdownHeight, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: false,
+        }),
+        Animated.timing(dropdownOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: false,
+        }),
+      ]).start(() => setIsDropdownOpen(false));
+    } else {
+      // Open animation
+      setIsDropdownOpen(true);
+      Animated.parallel([
+        Animated.timing(dropdownHeight, {
+          toValue: 120,
+          duration: 250,
+          useNativeDriver: false,
+        }),
+        Animated.timing(dropdownOpacity, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: false,
+        }),
+      ]).start();
+    }
+  };
+
+  const handleEditProfile = () => {
+    toggleDropdown();
+    router.push("/page/EditProfile"); // Adjust the route as needed
+  };
+
+  const handleSignOut = async () => {
+    try {
+      // Clear cookies/tokens
+      await AsyncStorage.clear();
+      // You can also clear specific keys:
+      // await AsyncStorage.removeItem('userToken');
+      // await AsyncStorage.removeItem('userId');
+      
+      toggleDropdown();
+      router.replace("/pages/Login"); // Adjust the route to your sign-in page
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
+
   return (
     <SafeAreaView
       style={{ flex: 1, backgroundColor: "#131313" }}
-      edges={["left", "right"]} 
+      edges={["left", "right"]}
     >
       <View style={{ flex: 1, position: "relative" }}>
+        {/* Background blur effect */}
         <View
           style={{
             position: "absolute",
@@ -113,18 +192,106 @@ export default function Profile() {
           />
         </View>
 
+        {/* Settings Icon */}
+        <TouchableOpacity
+          onPress={toggleDropdown}
+          style={{
+            position: "absolute",
+            top: 60,
+            right: 20,
+            zIndex: 10,
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: "rgba(255, 255, 255, 0.1)",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <Ionicons name="settings-outline" size={24} color="white" />
+        </TouchableOpacity>
+
+        {/* Dropdown Menu */}
+        {isDropdownOpen && (
+          <Animated.View
+            style={{
+              position: "absolute",
+              top: 110,
+              right: 20,
+              zIndex: 10,
+              width: 180,
+              height: dropdownHeight,
+              opacity: dropdownOpacity,
+              backgroundColor: "rgba(30, 30, 30, 0.95)",
+              borderRadius: 12,
+              overflow: "hidden",
+              shadowColor: "#000",
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 8,
+              elevation: 5,
+            }}
+          >
+              <TouchableOpacity
+                onPress={handleEditProfile}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  padding: 15,
+                  borderBottomWidth: 1,
+                  borderBottomColor: "rgba(255, 255, 255, 0.1)",
+                }}
+              >
+                <Ionicons name="person-outline" size={20} color="white" />
+                <Text
+                  style={{
+                    color: "white",
+                    fontSize: 16,
+                    marginLeft: 12,
+                    fontWeight: "500",
+                  }}
+                >
+                  Edit Profile
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleSignOut}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  padding: 15,
+                }}
+              >
+                <Ionicons name="log-out-outline" size={20} color="#FF6B6B" />
+                <Text
+                  style={{
+                    color: "#FF6B6B",
+                    fontSize: 16,
+                    marginLeft: 12,
+                    fontWeight: "500",
+                  }}
+                >
+                  Sign Out
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+
         {/* Use FlatList as wrapper instead of ScrollView */}
         <FlatList
           data={sections}
           keyExtractor={(item) => item.key}
           contentContainerStyle={{ paddingBottom: 150 }}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
           renderItem={() => (
             <View style={{ zIndex: 2 }}>
               {/* Profile */}
               <View style={{ padding: 20, marginTop: 50 }}>
-                <ProfileInfo 
-                  name="John Doe" 
-                  songCount={30} 
+                <ProfileInfo
+                  name="John Doe"
+                  songCount={30}
                   profileImage={`${GlobalConstant.API_URL}${profileImage}` || "https://images.genius.com/282a0165862d48f70b0f9c5ce8531eb5.1000x1000x1.png"}
                 />
               </View>
@@ -140,8 +307,8 @@ export default function Profile() {
                   ]}
                 />
               </View>
-              <View style={{ padding: 20,}}>
-                <History/>
+              <View style={{ padding: 20 }}>
+                <History />
               </View>
             </View>
           )}
@@ -150,4 +317,3 @@ export default function Profile() {
     </SafeAreaView>
   );
 }
-

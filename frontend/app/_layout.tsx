@@ -10,7 +10,7 @@ import Leaderboard from "./page/Leaderboard";
 import Profile from "./page/Profile";
 import BottomNav from "./components/BottomNav";
 import ChooseKey from "./page/ChooseKey";
-import MusicPlayer from "./page/MusicPlayer";  
+import MusicPlayer from "./page/MusicPlayer";   // (keep if used elsewhere)         // (keep if used elsewhere)
 import LoginScreen from "./pages/Login";
 import SignupScreen from "./pages/Signup";
 import VoiceTestScreen from "./page/voicetest";
