@@ -50,10 +50,10 @@ export const createSong = async (title: string, key: string, lyrics: string, sin
     return createSong
   }
   
-  export const createVersion = async (songId: number, instru_path: string, ori_path: string, key_signature: string, semitone_shift: number, is_original: boolean ) => {
-    const createVersion = await prisma.audio_version.create({
-      data: {
-        song_id: songId,
+export const createVersion = async (songId: number, instru_path: string, ori_path: string, key_signature: string, semitone_shift: number, is_original: boolean ) => {
+  const createVersion = await prisma.audio_version.create({
+    data: {
+      song_id: songId,
         instru_path,
         ori_path,
         key_signature,
