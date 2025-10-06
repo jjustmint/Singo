@@ -10,6 +10,7 @@ import { UserController } from "../controllers/User";
 import { uploadRecordAndScoreController } from "../controllers/uploadRecord";
 import { CreateSongAndVersionController } from "../controllers/CreateSongAndVersionController";
 import { updateProfilePicController, updateUserController } from "../controllers/Profile";
+import { AddLyricController, GetLyricController } from "../controllers/Lyrics";
 
 const privateRouter = new Hono()
 
@@ -29,4 +30,7 @@ privateRouter.post("/uploaduserrecord", uploadRecordAndScoreController);
 privateRouter.post("/uploadsong", CreateSongAndVersionController);
 privateRouter.post("/updatepic", updateProfilePicController);
 privateRouter.post("/updateuser", updateUserController);
+privateRouter.post("/addlyric", AddLyricController);
+privateRouter.post("/getlyric", GetLyricController);
+
 export { privateRouter }
