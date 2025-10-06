@@ -19,7 +19,7 @@ export type RootStackParamList = {
   voicetest: undefined;
   params?: { song?: SongType & { selectedKey?: string } };
   MusicPlayer: { songKey: any };
-  Result: { score: number }; 
+  Result: { score: number, song_id: number, recordId: number }; 
   Summary: undefined;
   Signup: undefined;
 };
