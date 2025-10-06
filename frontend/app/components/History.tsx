@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -6,97 +6,283 @@ import {
   Image,
   TouchableOpacity,
   StyleSheet,
+  ActivityIndicator,
 } from "react-native";
-import { AntDesign } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import type { HistoryType } from "../../../backend/src/types/getHistory";
+import { getAudioVerById } from "@/api/song/getAudioById";
+import { getSong } from "@/api/song/getSong";
+import { GlobalConstant } from "@/constant";
 
-interface HistoryItem {
+type HistoryProps = {
+  data?: HistoryType[];
+  isLoading?: boolean;
+};
+
+type HistoryDetail = {
   id: string;
   title: string;
-  artist: string;
-  date: string;
-  image: string;
-}
+  key: string;
+  albumCover: string;
+  dateLabel: string;
+  accuracyLabel: string;
+};
 
-const mockData: HistoryItem[] = [
-  {
-    id: "1",
-    title: "Let It Go",
-    artist: "Idina Menzel",
-    date: "2025-09-01",
-    image: "https://images.genius.com/282a0165862d48f70b0f9c5ce8531eb5.1000x1000x1.png",
-  },
-  {
-    id: "2",
-    title: "If I Ain't Got You",
-    artist: "Alicia Keys",
-    date: "2025-09-02",
-    image: "https://images.genius.com/282a0165862d48f70b0f9c5ce8531eb5.1000x1000x1.png",
-  },
-  {
-    id: "3",
-    title: "Snacks and Wine",
-    artist: "Unknown Artist",
-    date: "2025-09-03",
-    image: "https://images.genius.com/282a0165862d48f70b0f9c5ce8531eb5.1000x1000x1.png",
-  },
-  {
-    id: "4",
-    title: "Test Song",
-    artist: "Test Artist",
-    date: "2025-09-03",
-    image: "https://images.genius.com/282a0165862d48f70b0f9c5ce8531eb5.1000x1000x1.png",
-  },
-  {
-    id: "5",
-    title: "Another Test Song",
-    artist: "Another Artist",
-    date: "2025-09-03",
-    image: "https://images.genius.com/282a0165862d48f70b0f9c5ce8531eb5.1000x1000x1.png",
-  },
-];
+const formatDate = (value?: string | Date | null) => {
+  if (!value) {
+    return "Unknown date";
+  }
 
-const History: React.FC<{ data?: HistoryItem[] }> = ({ data = mockData }) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Unknown date";
+  }
+
+  return date.toLocaleDateString();
+};
+
+const formatAccuracy = (value?: number | null) => {
+  if (value == null) {
+    return "N/A";
+  }
+
+  const percent = value <= 1 ? value * 100 : value;
+  return `${Math.round(percent)}%`;
+};
+
+const resolveImage = (path?: string | null) => {
+  if (!path) {
+    return null;
+  }
+
+  const normalised = path.replace(/\\/g, "/");
+
+  if (normalised.startsWith("http://") || normalised.startsWith("https://")) {
+    return normalised;
+  }
+
+  const trimmed = normalised.replace(/^\/+/, "");
+  const withoutDataPrefix = trimmed.startsWith("data/")
+    ? trimmed.replace(/^data\//, "")
+    : trimmed;
+
+  return `${GlobalConstant.API_URL}/${withoutDataPrefix}`;
+};
+
+const buildDetail = async (record: HistoryType): Promise<HistoryDetail> => {
+  let title = `Recording #${record.record_id}`;
+  let albumCover: string | null = null;
+  let keyLabel = record.key ?? "Unknown key";
+
+  try {
+    if (record.version_id) {
+      const audioRes = await getAudioVerById(record.version_id);
+      if (audioRes.success && audioRes.data?.song_id) {
+        const songRes = await getSong(audioRes.data.song_id);
+        if (songRes.success && songRes.data) {
+          const { title: songTitle, album_cover, key_signature } = songRes.data;
+          title = songTitle || title;
+          albumCover = resolveImage(album_cover);
+          keyLabel = record.key ?? key_signature ?? keyLabel;
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Failed to enrich history detail:", error);
+  }
+
+  return {
+    id: record.record_id.toString(),
+    title,
+    key: keyLabel || "Unknown key",
+    albumCover: albumCover ?? "",
+    dateLabel: formatDate(record.created_at),
+    accuracyLabel: formatAccuracy(record.accuracy_score),
+  };
+};
+
+const History: React.FC<HistoryProps> = ({ data = [], isLoading }) => {
   const navigation = useNavigation();
   const [visibleCount, setVisibleCount] = useState(10);
+  const [detailsMap, setDetailsMap] = useState<Record<string, HistoryDetail>>({});
+  const [isFetching, setIsFetching] = useState(false);
 
-  const loadMore = () => {
+  useEffect(() => {
+    setVisibleCount(10);
+    setDetailsMap({});
+  }, [data]);
+
+  const recordings = useMemo(() => {
+    if (data.length <= 1) {
+      return [];
+    }
+    return data.slice(1, 1 + visibleCount);
+  }, [data, visibleCount]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadDetails = async () => {
+      const missing = recordings.filter(
+        (record) => !detailsMap[record.record_id.toString()]
+      );
+
+      if (!missing.length) {
+        return;
+      }
+
+      setIsFetching(true);
+
+      try {
+        const results = await Promise.all(missing.map((item) => buildDetail(item)));
+
+        if (!isActive) {
+          return;
+        }
+
+        setDetailsMap((prev) => {
+          const next = { ...prev };
+          results.forEach((detail) => {
+            next[detail.id] = detail;
+          });
+          return next;
+        });
+      } catch (error) {
+        if (isActive) {
+          console.error("Failed to load history details:", error);
+        }
+      } finally {
+        if (isActive) {
+          setIsFetching(false);
+        }
+      }
+    };
+
+    loadDetails();
+
+    return () => {
+      isActive = false;
+    };
+  }, [recordings, detailsMap]);
+
+  const handleCardPress = () => {
+    navigation.navigate("Summary");
+  };
+
+  const handleLoadMore = () => {
     setVisibleCount((prev) => prev + 10);
   };
 
-  const handleCardPress = () => {
-    navigation.navigate("Summary"); // Navigate to Summary without passing parameters
+  const renderItem = ({ item }: { item: HistoryType }) => {
+    const detail = detailsMap[item.record_id.toString()];
+
+    if (!detail) {
+      return (
+        <View style={styles.skeletonItem}>
+          <View style={styles.skeletonCard}>
+            <View style={styles.skeletonImage} />
+            <LinearGradient
+              colors={["rgba(0,0,0,0.75)", "rgba(0,0,0,0)"]}
+              start={{ x: 0.5, y: 1 }}
+              end={{ x: 0.5, y: 0 }}
+              style={styles.overlayShade}
+            />
+            <View style={styles.overlaySkeleton}>
+              <View style={styles.skeletonLineLarge} />
+              <View style={styles.skeletonLineMedium} />
+              <View style={styles.skeletonLineSmall} />
+            </View>
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <TouchableOpacity onPress={handleCardPress} style={styles.card}>
+        {detail.albumCover ? (
+          <Image source={{ uri: detail.albumCover }} style={styles.image} />
+        ) : (
+          <View style={styles.coverFallback} />
+        )}
+        <LinearGradient
+          colors={["rgba(0,0,0,0.75)", "rgba(0,0,0,0)"]}
+          start={{ x: 0.5, y: 1 }}
+          end={{ x: 0.5, y: 0 }}
+          style={styles.overlayShade}
+        />
+        <View style={styles.overlay}>
+          <View style={styles.textBlock}>
+            <Text style={styles.title}>{detail.title}</Text>
+            <Text style={styles.subtitle}>
+              Key: {detail.key ?? item.key ?? "Unknown key"}
+            </Text>
+            <Text style={styles.meta}>
+              {detail.dateLabel ?? formatDate(item.created_at)} • Accuracy {detail.accuracyLabel ?? formatAccuracy(item.accuracy_score)}
+            </Text>
+          </View>
+          <View style={styles.iconWrapper}>
+            <Ionicons name="chevron-forward" size={24} color="#fff" />
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
   };
 
-  const renderItem = ({ item }: { item: HistoryItem }) => (
-    <TouchableOpacity
-      key={item.id}
-      onPress={() => handleCardPress()}
-      style={styles.card}
-    >
-      <Image source={{ uri: item.image }} style={styles.image} />
-      <View style={styles.info}>
-        <Text style={styles.title}>{item.title}</Text>
-        <Text style={styles.artist}>{item.artist}</Text>
-        <Text style={styles.date}>Date: {item.date}</Text>
-      </View>
-      <TouchableOpacity>
-        <AntDesign name="playcircleo" size={28} color="white" />
-      </TouchableOpacity>
-    </TouchableOpacity>
-  );
+  const totalAvailable = Math.max(0, data.length - 1);
+  const hasMore = recordings.length < totalAvailable;
+  const showSkeleton = (isLoading || isFetching) && !recordings.length;
 
   return (
     <View style={styles.container}>
       <Text style={styles.header}>History</Text>
-      <FlatList
-        data={data.slice(0, visibleCount)}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-      />
-      {visibleCount < data.length && (
-        <TouchableOpacity style={styles.loadMore} onPress={loadMore}>
-          <Text style={styles.loadMoreText}>Load More</Text>
+      {showSkeleton ? (
+        <View>
+          {Array.from({ length: 3 }).map((_, index, array) => (
+            <View
+              key={index}
+              style={[
+                styles.skeletonItem,
+                index !== array.length - 1 && styles.skeletonItemSpacing,
+              ]}
+            >
+              <View style={styles.skeletonCard}>
+                <View style={styles.skeletonImage} />
+                <LinearGradient
+                  colors={["rgba(0,0,0,0.75)", "rgba(0,0,0,0)"]}
+                  start={{ x: 0.5, y: 1 }}
+                  end={{ x: 0.5, y: 0 }}
+                  style={styles.overlayShade}
+                />
+                <View style={styles.overlaySkeleton}>
+                  <View style={styles.skeletonLineLarge} />
+                  <View style={styles.skeletonLineMedium} />
+                  <View style={styles.skeletonLineSmall} />
+                </View>
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : recordings.length === 0 ? (
+        <Text style={styles.emptyText}>No additional recordings yet.</Text>
+      ) : (
+        <FlatList
+          data={recordings}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.record_id.toString()}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListFooterComponent={
+            isFetching ? (
+              <ActivityIndicator style={styles.loader} color="#5B5BF1" />
+            ) : undefined
+          }
+          extraData={detailsMap}
+        />
+      )}
+      {hasMore && !showSkeleton && (
+        <TouchableOpacity style={styles.loadMore} onPress={handleLoadMore}>
+          <Text style={styles.loadMoreText}>See More</Text>
         </TouchableOpacity>
       )}
     </View>
@@ -111,51 +297,129 @@ const styles = StyleSheet.create({
   header: {
     color: "#fff",
     fontSize: 24,
-    marginBottom: 8,
+    marginBottom: 5,
     fontWeight: "bold",
   },
   card: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1e1e1e",
+    position: "relative",
     borderRadius: 12,
-    marginTop: 5,
-    marginBottom: 10,
-    padding: 10,
+    overflow: "hidden",
+    height: 100,
   },
   image: {
-    width: 60,
-    height: 60,
-    borderRadius: 8,
+    width: "100%",
+    height: "100%",
   },
-  info: {
+  overlayShade: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  overlay: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    top: 0,
+    bottom: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: 0,
+  },
+  textBlock: {
     flex: 1,
-    marginLeft: 10,
+    marginRight: 12,
+    justifyContent: "center",
+  },
+  iconWrapper: {
+    justifyContent: "center",
+    alignItems: "center",
+    paddingBottom: 6,
   },
   title: {
     color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  subtitle: {
+    color: "#ddd",
     fontSize: 14,
-    fontWeight: "bold",
+    marginTop: 4,
   },
-  artist: {
+  meta: {
+    color: "#ddd",
+    fontSize: 13,
+    marginTop: 4,
+  },
+  emptyText: {
     color: "#bbb",
-    fontSize: 12,
+    fontSize: 16,
   },
-  date: {
-    color: "#777",
-    fontSize: 12,
+  separator: {
+    height: 18,
+  },
+  loader: {
+    marginTop: 12,
   },
   loadMore: {
-    marginTop: 10,
+    marginTop: 16,
     alignSelf: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     backgroundColor: "#5B5BF1",
     borderRadius: 20,
   },
   loadMoreText: {
     color: "#fff",
     fontWeight: "bold",
+  },
+  skeletonItem: {
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  skeletonItemSpacing: {
+    marginBottom: 18,
+  },
+  skeletonCard: {
+    position: "relative",
+    borderRadius: 12,
+    overflow: "hidden",
+    height: 120,
+    backgroundColor: "#1c1c1c",
+  },
+  skeletonImage: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#1c1c1c",
+  },
+  overlaySkeleton: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 20,
+  },
+  skeletonLineLarge: {
+    width: "70%",
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#2b2b2b",
+  },
+  skeletonLineMedium: {
+    width: "55%",
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#2b2b2b",
+    marginTop: 10,
+  },
+  skeletonLineSmall: {
+    width: "45%",
+    height: 14,
+    borderRadius: 8,
+    backgroundColor: "#2b2b2b",
+    marginTop: 8,
+  },
+  coverFallback: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#1c1c1c",
   },
 });
 

@@ -6,6 +6,7 @@ import ProfileInfo from "../components/ProfileInfo";
 import History from "../components/History";
 import { useEffect, useState, useRef } from "react";
 import { getHistory } from "@/api/getHistory";
+import { getUser } from "@/api/getUser";
 import { getUserId, removeAuthToken } from "@/util/cookies";
 import { HistoryType } from "../../../backend/src/types/getHistory";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,26 +23,55 @@ export default function Profile() {
   const [history, setHistory] = useState<HistoryType[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [userProfile, setUserProfile] = useState<{ name: string; photo: string | null }>(
+    { name: "", photo: null }
+  );
   
   // Animation values
   const dropdownHeight = useRef(new Animated.Value(0)).current;
   const dropdownOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    handleHistory();
+    fetchProfileData();
   }, []);
 
-  const handleHistory = async () => {
-    const userId = await getUserId();
-    const history = await getHistory(userId as number);
-    setHistory(history.data);
-    console.log("Fetched history:", history);
+  const fetchProfileData = async () => {
+    setIsLoading(true);
+    setHistory([]);
+    setUserProfile({ name: "", photo: null });
+    try {
+      const [userResponse, userId] = await Promise.all([getUser(), getUserId()]);
+
+      if (userResponse.success && userResponse.data) {
+        setUserProfile({
+          name: userResponse.data.username ?? "",
+          photo: userResponse.data.photo ?? null,
+        });
+      }
+
+      if (userId) {
+        const historyResponse = await getHistory(userId as number);
+        if (historyResponse.success) {
+          setHistory(historyResponse.data ?? []);
+        } else {
+          setHistory([]);
+        }
+      } else {
+        setHistory([]);
+      }
+    } catch (error) {
+      console.error("Failed to load profile data:", error);
+      setHistory([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await handleHistory();
+      await fetchProfileData();
     } catch (error) {
       console.error("Error refreshing data:", error);
     } finally {
@@ -268,22 +298,18 @@ export default function Profile() {
             <View style={{ zIndex: 2 }}>
               {/* Profile */}
               <View style={{ padding: 20, marginTop: 50 }}>
-                <ProfileInfo songCount={history.length} />
-              </View>
-              <View style={{ padding: 20 }}>
-                <Recent
-                  data={[
-                    {
-                      id: "1",
-                      title: "Sample Song",
-                      artist: "Sample Artist",
-                      image: "https://images.genius.com/282a0165862d48f70b0f9c5ce8531eb5.1000x1000x1.png",
-                    },
-                  ]}
+                <ProfileInfo
+                  songCount={history.length}
+                  isLoading={isLoading}
+                  name={userProfile.name}
+                  photo={userProfile.photo}
                 />
               </View>
               <View style={{ padding: 20 }}>
-                <History />
+                <Recent data={history} isLoading={isLoading} />
+              </View>
+              <View style={{ padding: 20 }}>
+                <History data={history} isLoading={isLoading} />
               </View>
             </View>
           )}
