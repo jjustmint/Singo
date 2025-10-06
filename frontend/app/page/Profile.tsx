@@ -1,35 +1,24 @@
-import {
-  View,
-  Text,
-  Dimensions,
-  FlatList,
-  TouchableOpacity,
-  Animated,
-} from "react-native";
+import { View, Text, FlatList, TouchableOpacity, Animated } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
-import TrendingCard from "../components/TrendingCard";
-import TopRateTabs from "../components/TopRateTabs";
 import Recent from "../components/Recent";
 import ProfileInfo from "../components/ProfileInfo";
 import History from "../components/History";
 import { useEffect, useState, useRef } from "react";
-import { getUser } from "@/api/getUser";
-import { GlobalConstant } from "@/constant";
 import { getHistory } from "@/api/getHistory";
-import { getUserId } from "@/util/cookies";
+import { getUserId, removeAuthToken } from "@/util/cookies";
 import { HistoryType } from "../../../backend/src/types/getHistory";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
+import { useNavigation } from "@react-navigation/native";
+import type { StackNavigationProp } from "@react-navigation/stack";
+import type { RootStackParamList } from "../Types/Navigation";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-
-const { width } = Dimensions.get("window");
 
 export default function Profile() {
   const router = useRouter();
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const sections = [{ key: "content" }];
-  const [username, setUsername] = useState<string>("");
-  const [profileImage, setProfileImage] = useState<string>("");
   const [history, setHistory] = useState<HistoryType[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -39,22 +28,8 @@ export default function Profile() {
   const dropdownOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const fetchData = async () => {
-      await handleGetUser();
-      await handleHistory();
-    };
-    fetchData();
+    handleHistory();
   }, []);
-
-  const handleGetUser = async () => {
-    const fetchedUsername = await getUser();
-    const user = fetchedUsername.data.username;
-    const photo = fetchedUsername.data.photo;
-    setUsername(user);
-    setProfileImage(photo || "https://images.genius.com/282a0165862d48f70b0f9c5ce8531eb5.1000x1000x1.png");
-    console.log("Fetched username:", fetchedUsername);
-    console.log("photo: " + `${GlobalConstant.API_URL}${profileImage}`);
-  };
 
   const handleHistory = async () => {
     const userId = await getUserId();
@@ -66,7 +41,6 @@ export default function Profile() {
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await handleGetUser();
       await handleHistory();
     } catch (error) {
       console.error("Error refreshing data:", error);
@@ -115,14 +89,19 @@ export default function Profile() {
 
   const handleSignOut = async () => {
     try {
-      // Clear cookies/tokens
-      await AsyncStorage.clear();
-      // You can also clear specific keys:
-      // await AsyncStorage.removeItem('userToken');
-      // await AsyncStorage.removeItem('userId');
-      
-      toggleDropdown();
-      router.replace("/pages/Login"); // Adjust the route to your sign-in page
+      await removeAuthToken();
+      await AsyncStorage.removeItem("user_id");
+
+      setHistory([]);
+
+      if (isDropdownOpen) {
+        toggleDropdown();
+      }
+
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "SignIn" as never }],
+      });
     } catch (error) {
       console.error("Error signing out:", error);
     }
@@ -247,7 +226,7 @@ export default function Profile() {
                   style={{
                     color: "white",
                     fontSize: 16,
-                    marginLeft: 12,
+                    marginLeft: 16,
                     fontWeight: "500",
                   }}
                 >
@@ -268,7 +247,7 @@ export default function Profile() {
                   style={{
                     color: "#FF6B6B",
                     fontSize: 16,
-                    marginLeft: 12,
+                    marginLeft: 16,
                     fontWeight: "500",
                   }}
                 >
@@ -289,11 +268,7 @@ export default function Profile() {
             <View style={{ zIndex: 2 }}>
               {/* Profile */}
               <View style={{ padding: 20, marginTop: 50 }}>
-                <ProfileInfo
-                  name="John Doe"
-                  songCount={30}
-                  profileImage={`${GlobalConstant.API_URL}${profileImage}` || "https://images.genius.com/282a0165862d48f70b0f9c5ce8531eb5.1000x1000x1.png"}
-                />
+                <ProfileInfo songCount={history.length} />
               </View>
               <View style={{ padding: 20 }}>
                 <Recent

@@ -14,7 +14,7 @@ const Recent: React.FC<{ data?: HistoryItem[] }> = ({ data = [] }) => {
   const navigation = useNavigation();
 
   const handleCardPress = () => {
-    navigation.navigate("Summary"); // Navigate to Summary without passing parameters
+    navigation.navigate("Summary"); 
   };
 
   return (
