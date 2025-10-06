@@ -26,6 +26,7 @@ model song {
   singer        String?         @db.VarChar(255)
   previewsong   String?         @db.VarChar(255)
   audio_version audio_version[]
+  lyric         lyric[]
 }
 
 model recording {
@@ -61,4 +62,12 @@ model mistakes {
   reason          String?    @db.VarChar(255)
   pitch_diff      Int?
   recording       recording? @relation(fields: [recording_id], references: [record_id], onDelete: Cascade, onUpdate: NoAction, map: "missedpart_recording_id_fkey")
+}
+
+model lyric {
+  lyric_id  Int    @id(map: "lyrics_id") @default(autoincrement())
+  song_id   Int
+  lyric     String @db.VarChar(255)
+  timestart Int
+  song      song   @relation(fields: [song_id], references: [song_id], onDelete: NoAction, onUpdate: NoAction, map: "song_id")
 }
