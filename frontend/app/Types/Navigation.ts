@@ -22,6 +22,7 @@ export type RootStackParamList = {
   Result: { score: number, song_id: number, recordId: number }; 
   Summary: undefined;
   Signup: undefined;
+  EditProfile: undefined;
 };
 
 export type ChooseKeyParams = { song: SongType };

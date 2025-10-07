@@ -87,11 +87,14 @@ const LoginScreen: React.FC = () => {
           });
         }
       } else {
-        Alert.alert(loginResponse.message || "Login failed");
+        Alert.alert(
+          "Login failed",
+          "Incorrect username or password. Please try again."
+        );
       }
     } catch (e) {
       console.error(e);
-      Alert.alert("Network error " + e);
+      Alert.alert("Network error", "We couldn't reach the server. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }

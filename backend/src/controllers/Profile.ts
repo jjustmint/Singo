@@ -52,7 +52,8 @@ export const updateUserController = async (c: Context) => {
             if(body.password === body.newPassword){
                 return c.json(ConstructResponse(false, "New password cannot be the same as the old password", 400));
             }
-            const update = await updateUser(user_id, { username: body.username, password: body.newPassword });
+            const hashedNewPassword = await Bun.password.hash(body.newPassword);
+            const update = await updateUser(user_id, { username: body.username, password: hashedNewPassword });
             return c.json(ConstructResponse(true, "update username successfully", update), 200);
         }
         else{
