@@ -1,28 +1,25 @@
-import { View, Text, FlatList, TouchableOpacity, Animated } from "react-native";
+import { View, Text, FlatList, TouchableOpacity, Animated, RefreshControl } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
 import Recent from "../components/Recent";
 import ProfileInfo from "../components/ProfileInfo";
 import History from "../components/History";
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useState, useRef } from "react";
 import { getHistory } from "@/api/getHistory";
 import { getUser } from "@/api/getUser";
 import { getUserId, removeAuthToken } from "@/util/cookies";
 import { HistoryType } from "../../../backend/src/types/getHistory";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { StackNavigationProp } from "@react-navigation/stack";
 import type { RootStackParamList } from "../Types/Navigation";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function Profile() {
-  const router = useRouter();
   const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
   const sections = [{ key: "content" }];
   const [history, setHistory] = useState<HistoryType[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [userProfile, setUserProfile] = useState<{ name: string; photo: string | null }>(
     { name: "", photo: null }
@@ -32,11 +29,7 @@ export default function Profile() {
   const dropdownHeight = useRef(new Animated.Value(0)).current;
   const dropdownOpacity = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    fetchProfileData();
-  }, []);
-
-  const fetchProfileData = async () => {
+  const fetchProfileData = useCallback(async () => {
     setIsLoading(true);
     setHistory([]);
     setUserProfile({ name: "", photo: null });
@@ -44,9 +37,12 @@ export default function Profile() {
       const [userResponse, userId] = await Promise.all([getUser(), getUserId()]);
 
       if (userResponse.success && userResponse.data) {
+        const stampedPhoto = userResponse.data.photo
+          ? `${userResponse.data.photo}?t=${Date.now()}`
+          : null;
         setUserProfile({
           name: userResponse.data.username ?? "",
-          photo: userResponse.data.photo ?? null,
+          photo: stampedPhoto,
         });
       }
 
@@ -66,16 +62,19 @@ export default function Profile() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchProfileData();
+    }, [fetchProfileData])
+  );
 
   const onRefresh = async () => {
-    setRefreshing(true);
     try {
       await fetchProfileData();
     } catch (error) {
       console.error("Error refreshing data:", error);
-    } finally {
-      setRefreshing(false);
     }
   };
 
@@ -114,7 +113,7 @@ export default function Profile() {
 
   const handleEditProfile = () => {
     toggleDropdown();
-    router.push("/page/EditProfile"); // Adjust the route as needed
+    navigation.navigate("EditProfile");
   };
 
   const handleSignOut = async () => {
@@ -292,8 +291,15 @@ export default function Profile() {
           data={sections}
           keyExtractor={(item) => item.key}
           contentContainerStyle={{ paddingBottom: 150 }}
-          refreshing={refreshing}
-          onRefresh={onRefresh}
+          refreshControl={
+            <RefreshControl
+              refreshing={false}
+              onRefresh={onRefresh}
+              tintColor="transparent"
+              colors={["transparent"]}
+              progressBackgroundColor="transparent"
+            />
+          }
           renderItem={() => (
             <View style={{ zIndex: 2 }}>
               {/* Profile */}
