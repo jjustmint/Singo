@@ -9,6 +9,7 @@ import {
   TextInput,
   Alert,
   Platform,
+  DeviceEventEmitter,
 } from "react-native";
 import { BlurView } from "expo-blur";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
@@ -65,7 +66,11 @@ const EditProfile: React.FC = () => {
         if (response.success && response.data) {
           setUsername(response.data.username ?? "");
           setInitialUsername(response.data.username ?? "");
-          setRemotePhoto(response.data.photo ?? null);
+          const stampedPhoto = response.data.photo
+            ? `${response.data.photo}?t=${Date.now()}`
+            : null;
+          setRemotePhoto(stampedPhoto);
+          setLocalPhoto(null);
         }
       } catch (error) {
         console.error("Failed to load profile", error);
@@ -187,7 +192,10 @@ const EditProfile: React.FC = () => {
       Alert.alert("Success", "Your profile has been updated.", [
         {
           text: "OK",
-          onPress: () => navigation.goBack(),
+          onPress: () => {
+            DeviceEventEmitter.emit("profile:updated");
+            navigation.goBack();
+          },
         },
       ]);
     } catch (error) {
