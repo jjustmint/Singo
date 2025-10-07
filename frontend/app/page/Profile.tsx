@@ -1,10 +1,10 @@
-import { View, Text, FlatList, TouchableOpacity, Animated, RefreshControl } from "react-native";
+import { View, Text, FlatList, TouchableOpacity, Animated, RefreshControl, DeviceEventEmitter } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
 import Recent from "../components/Recent";
 import ProfileInfo from "../components/ProfileInfo";
 import History from "../components/History";
-import { useCallback, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { getHistory } from "@/api/getHistory";
 import { getUser } from "@/api/getUser";
 import { getUserId, removeAuthToken } from "@/util/cookies";
@@ -21,6 +21,8 @@ export default function Profile() {
   const [history, setHistory] = useState<HistoryType[]>([]);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasFetchedOnce, setHasFetchedOnce] = useState(false);
+  const [isStale, setIsStale] = useState(false);
   const [userProfile, setUserProfile] = useState<{ name: string; photo: string | null }>(
     { name: "", photo: null }
   );
@@ -31,8 +33,6 @@ export default function Profile() {
 
   const fetchProfileData = useCallback(async () => {
     setIsLoading(true);
-    setHistory([]);
-    setUserProfile({ name: "", photo: null });
     try {
       const [userResponse, userId] = await Promise.all([getUser(), getUserId()]);
 
@@ -61,21 +61,31 @@ export default function Profile() {
       setHistory([]);
     } finally {
       setIsLoading(false);
+      setHasFetchedOnce(true);
+      setIsStale(false);
     }
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      fetchProfileData();
-    }, [fetchProfileData])
+      if (!hasFetchedOnce || isStale) {
+        fetchProfileData();
+      }
+    }, [fetchProfileData, hasFetchedOnce, isStale])
   );
 
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener("profile:updated", () => {
+      setIsStale(true);
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   const onRefresh = async () => {
-    try {
-      await fetchProfileData();
-    } catch (error) {
-      console.error("Error refreshing data:", error);
-    }
+    setIsStale(true);
+    fetchProfileData();
   };
 
   const toggleDropdown = () => {

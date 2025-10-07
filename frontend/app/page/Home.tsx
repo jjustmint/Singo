@@ -1,10 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   View,
   Text,
   Image,
   Dimensions,
-  ScrollView,
+  FlatList,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
@@ -13,7 +13,9 @@ import NewReleaseTabs from "../components/NewReleaseTabs";
 import TrendingList from "../components/TrendingCard";
 import TopRateTabs from "../components/TopRateTabs";
 import { getUser } from "@/api/getUser";
+import { GlobalConstant } from "@/constant";
 import { getAllsongs } from "@/api/song/getAll";
+import { useFocusEffect } from "@react-navigation/native";
 
 const { width } = Dimensions.get("window");
 
@@ -25,26 +27,39 @@ interface Song {
 }
 
 export default function Home() {
-  const scrollViewRef = useRef<ScrollView>(null);
+  const listRef = useRef<FlatList<any>>(null);
   const [username, setUsername] = useState<string>("");
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      await handleGetUsername();
-      await handleGetSongs();
-    };
-    fetchData();
+  const buildPhotoUrl = useCallback((photo?: string | null) => {
+    if (typeof photo !== "string" || photo.length === 0) {
+      return null;
+    }
+
+    const normalised = photo.replace(/\\/g, "/");
+
+    if (normalised.startsWith("http://") || normalised.startsWith("https://")) {
+      return `${normalised}?t=${Date.now()}`;
+    }
+
+    const trimmed = normalised.replace(/^\/+/, "");
+    const withoutDataPrefix = trimmed.startsWith("data/")
+      ? trimmed.replace(/^data\//, "")
+      : trimmed;
+    return `${GlobalConstant.API_URL}/${withoutDataPrefix}?t=${Date.now()}`;
   }, []);
 
-  const handleGetUsername = async () => {
-    const fetchedUsername =  await getUser();
+  const handleGetUsername = useCallback(async () => {
+    const fetchedUsername = await getUser();
     const user = fetchedUsername.data.username;
+    const photo = fetchedUsername.data.photo ?? null;
     setUsername(user);
+    setPhotoUrl(buildPhotoUrl(photo));
     console.log("Fetched username:", fetchedUsername);
-  };
+  }, [buildPhotoUrl]);
 
-  const handleGetSongs = async () => {
+  const handleGetSongs = useCallback(async () => {
     const fetchedSongs = await getAllsongs();
     const mappedSongs: Song[] = fetchedSongs.data.map((song: any) => ({
       id: song.song_id.toString(),
@@ -56,22 +71,23 @@ export default function Home() {
     }));
     setSongs(mappedSongs);
     console.log("Fetched songs:", fetchedSongs.data);
-  };  
+  }, []);
 
-  const scrollToSection = (section: "New Release" | "Trending" | "Top Rated") => { // Add explicit type for 'section'
-    if (scrollViewRef.current) {
-      scrollViewRef.current.scrollTo({
-        y:
-          section === "New Release"
-            ? 0 // Adjust this value to the Y-offset of the "New Release" section
-            : section === "Trending"
-            ? 300 // Adjust this value to the Y-offset of the "Trending" section
-            : section === "Top Rated"
-            ? 900 // Adjust this value to the Y-offset of the "Top Rated" section
-            : 0,
-        animated: true,
-      });
-    }
+  const loadHomeData = useCallback(async () => {
+    await Promise.all([handleGetUsername(), handleGetSongs()]);
+  }, [handleGetUsername, handleGetSongs]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadHomeData();
+    }, [loadHomeData])
+  );
+
+  const scrollToSection = (section: "New Release" | "Trending" | "Top Rated") => {
+    const offset =
+      section === "New Release" ? 0 : section === "Trending" ? 300 : section === "Top Rated" ? 900 : 0;
+
+    listRef.current?.scrollToOffset({ offset, animated: true });
   };
 
   return (
@@ -137,22 +153,43 @@ export default function Home() {
           />
         </View>
 
-        <ScrollView ref={scrollViewRef} contentContainerStyle={{ paddingBottom: 150 }}>
-          <View style={{ zIndex: 2 }}>
+        <FlatList
+          ref={listRef}
+          data={[{ key: "content" }]}
+          keyExtractor={(item) => item.key}
+          contentContainerStyle={{ paddingBottom: 150 }}
+          renderItem={() => (
+            <View style={{ zIndex: 2 }}>
             {/* Profile */}
             <View style={{ padding: 20, marginTop: 50 }}>
               <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Image
-                  source={{
-                    uri: "https://static.vecteezy.com/system/resources/previews/024/966/233/non_2x/businesswoman-portrait-beautiful-woman-in-business-suit-employee-of-business-institution-in-uniform-lady-office-worker-woman-business-avatar-profile-picture-illustration-vector.jpg",
-                  }}
-                  style={{
-                    width: 70,
-                    height: 70,
-                    borderRadius: 40,
-                    marginRight: 10,
-                  }}
-                />
+                {photoUrl ? (
+                  <Image
+                    source={{ uri: photoUrl }}
+                    style={{
+                      width: 70,
+                      height: 70,
+                      borderRadius: 40,
+                      marginRight: 10,
+                    }}
+                  />
+                ) : (
+                  <View
+                    style={{
+                      width: 70,
+                      height: 70,
+                      borderRadius: 40,
+                      marginRight: 10,
+                      backgroundColor: "rgba(255,255,255,0.1)",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Text style={{ color: "#fff", fontSize: 26, fontWeight: "bold" }}>
+                      {(username || "G").charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
                 <Text
                   style={{
                     fontSize: 24,
@@ -211,10 +248,10 @@ export default function Home() {
             <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
               <TopRateTabs />
             </View>
-          </View>
-        </ScrollView>
+            </View>
+          )}
+        />
       </View>
     </SafeAreaView>
   );
 }
-
