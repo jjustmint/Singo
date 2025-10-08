@@ -64,3 +64,12 @@ export const createVersion = async (songId: number, instru_path: string, ori_pat
   
     return createVersion
   }
+
+export const getRecordById = async ( recordId: number) => {
+  const record = await prisma.recording.findUnique({
+      where: {
+          record_id: recordId
+      }
+  })
+  return record
+}

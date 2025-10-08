@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { jwtMiddleware } from "../middlewares/jwt";
 import { UpdateKeyController } from "../controllers/updateKey";
 import { CompareVocalController } from "../controllers/CompareVocal";
-import { DisplaySongsController, getAudioVerByIdController, getSongController, getSongKeyController } from "../controllers/Song";
+import { DisplaySongsController, getAudioVerByIdController, getRecordController, getSongController, getSongKeyController } from "../controllers/Song";
 import { FindLeaderBoardController } from "../controllers/LeaderBoard";
 import { DisplayMistakesController } from "../controllers/Mistake";
 import { HistoryController } from "../controllers/History";
@@ -32,5 +32,6 @@ privateRouter.post("/updatepic", updateProfilePicController);
 privateRouter.post("/updateuser", updateUserController);
 privateRouter.post("/addlyric", AddLyricController);
 privateRouter.post("/getlyric", GetLyricController);
+privateRouter.post("/getrecord", getRecordController);
 
 export { privateRouter }

@@ -1,6 +1,6 @@
 import { audio_version } from './../generated/prisma/index.d';
 import { FindLyricsBySongId } from "../models/Lyrics";
-import { FindAllSong, FindAudioVerById, FindSongKeyBySongId } from "../models/Song";
+import { FindAllSong, FindAudioVerById, FindSongKeyBySongId, getRecordById } from "../models/Song";
 import { ConstructResponse } from "../utils/responseConstructor";
 import { Context } from "hono";
 
@@ -56,6 +56,22 @@ export const getAudioVerByIdController = async (c: Context) => {
             return c.json(ConstructResponse(false, "Song not found", 404));
         }
         return c.json(ConstructResponse(true, "Song found", song), 200);
+    }catch (e) {
+        return c.json(ConstructResponse(false, `Error: ${e}`), 500)
+    }
+}
+
+export const getRecordController = async (c: Context) => {
+    try{
+        const { record_id } = await c.req.json<{ record_id: number }>();
+        if(!record_id){
+            return c.json(ConstructResponse(false, "Missing record id", 400));
+        }
+        const record = await getRecordById(record_id);
+        if(!record){
+            return c.json(ConstructResponse(false, "Record not found", 404));
+        }
+        return c.json(ConstructResponse(true, "Record found", record), 200);
     }catch (e) {
         return c.json(ConstructResponse(false, `Error: ${e}`), 500)
     }
