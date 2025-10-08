@@ -35,12 +35,11 @@ export const FindAudioVerById = async(versionId: number) => {
     return audio;
 }
 
-export const createSong = async (title: string, key: string, lyrics: string, singer: string, album_cover: string | null, previewsong: string | null) => {
+export const createSong = async (title: string, key: string, singer: string, album_cover: string | null, previewsong: string | null) => {
     const createSong = await prisma.song.create({
       data: {
         title,
         key_signature: key,
-        lyrics,
         singer,
         album_cover,
         previewsong
