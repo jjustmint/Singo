@@ -3,5 +3,4 @@ export type SongLyricsType = {
     title: string,
     key_signature: string,
     parent_song_id: number | null,
-    lyrics: string
 }   

@@ -54,7 +54,7 @@ const MusicPlayer: React.FC = () => {
 
   const songName = songKey.song_id;
   const [title, setTitle] = useState<string | undefined>(undefined);
-  const [lyrics, setLyrics] = useState<string[] | undefined>(undefined);
+  // const [lyrics, setLyrics] = useState<string[] | undefined>(undefined);
   const [image, setImage] = useState<string | undefined>(undefined);
   const [singer, setSinger] = useState<string | undefined>(undefined);
 
@@ -170,7 +170,7 @@ const MusicPlayer: React.FC = () => {
     try {
       const response = await getSong(song_id);
       setTitle(response.data.title);
-      setLyrics(response.data.lyrics?.split("\n") || ["No lyrics available"]);
+      // setLyrics(response.data.lyrics?.split("\n") || ["No lyrics available"]);
       setImage(response.data.album_cover || "");
       setSinger(response.data.singer);
 
@@ -438,7 +438,7 @@ const MusicPlayer: React.FC = () => {
         </View>
 
         {/* Lyrics */}
-        <View style={styles.lyricsWrapper}>
+        {/* <View style={styles.lyricsWrapper}>
           <ScrollView
             contentContainerStyle={styles.lyricsContainer}
             showsVerticalScrollIndicator={false}
@@ -449,7 +449,7 @@ const MusicPlayer: React.FC = () => {
               </Text>
             ))}
           </ScrollView>
-        </View>
+        </View> */}
 
         {/* Slider */}
         <View style={styles.progressContainer}>
