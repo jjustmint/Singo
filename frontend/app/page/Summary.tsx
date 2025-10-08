@@ -1,5 +1,5 @@
 // app/screens/Summary.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   View,
   Text,
@@ -13,87 +13,111 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
+import { StackNavigationProp } from "@react-navigation/stack";
+
+import { RootStackParamList } from "../Types/Navigation";
 import { getMistakes } from "@/api/getMistakes";
+import { getSong } from "@/api/song/getSong";
+import { SongType as ApiSongType } from "@/api/types/song"; // API version
+
+// ------------------- APP TYPES -------------------
+export type SongType = {
+  id: string;
+  songName: string;
+  artist: string;
+  image: string;
+};
 
 type Issue = {
-  /** seconds from start of track */
   at: number;
-  /** e.g., "Duration : Too slow" */
   label: string;
 };
 
-type Track = {
-  title: string;
-  artist: string;
-  image: string;
-  /** seconds */
-  durationSec: number;
-};
+// ------------------- MAPPER -------------------
+function mapApiSongToAppSong(song: ApiSongType): SongType {
+  return {
+    id: song.song_id.toString(),
+    songName: song.title,
+    artist: song.singer,
+    image: song.album_cover ?? "https://placehold.co/300x300",
+  };
+}
 
-type RouteParams = {
-  track?: Track;
-  score?: number; 
-  issues?: Issue[];
-};
+// ------------------- SUMMARY SCREEN -------------------
+type SummaryRouteProp = RouteProp<RootStackParamList, "Summary">;
 
-const DEFAULT_TRACK: Track = {
-  title: "Snacks & Wine",
-  artist: "WIM",
-  image:
-    "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg",
-  durationSec: 210, // 3:30
-};
+export default function SummaryScreen() {
+  const route = useRoute<SummaryRouteProp>();
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList>>();
 
-const DEFAULT_ISSUES: Issue[] = [
-  { at: 5, label: "Duration : Too slow" },
-  { at: 30, label: "Off Key : Too high" },
-  { at: 40, label: "Off Key : Too high" },
-  { at: 45, label: "Duration : Too slow" },
-  { at: 59, label: "Off Key : Too high" },
-  { at: 100, label: "Off Key : Too low" }, // 1:40
-  { at: 115, label: "Off Key : Too high" }, // 1:55
-  { at: 122, label: "Off Key : Too low" },  // 2:02
-];
+  const { score, recordId, song_id } = route.params;
 
-export default function Summary() {
-  const navigation = useNavigation();
-  const route = useRoute() as any;
-  const { track, score, issues }: RouteParams = route.params || {};
-
-  const theTrack = track ?? DEFAULT_TRACK;
-  const theIssues = issues ?? DEFAULT_ISSUES;
-  const theScore = typeof score === "number" ? score : 80;
-
+  const [track, setTrack] = useState<SongType | null>(null);
+  const [issues, setIssues] = useState<Issue[]>([]);
   const [position, setPosition] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
 
+  const DEFAULT_ISSUES: Issue[] = [
+    { at: 5, label: "Duration : Too slow" },
+    { at: 30, label: "Off Key : Too high" },
+  ];
+
+  const theTrack = track ?? {
+    id: "0",
+    songName: "Unknown Song",
+    artist: "Unknown Artist",
+    image: "https://placehold.co/300x300",
+  };
+  const theIssues = issues.length > 0 ? issues : DEFAULT_ISSUES;
+  const theScore = typeof score === "number" ? score : 0;
+
   const posLabel = useMemo(() => formatTime(position), [position]);
-  const durLabel = useMemo(
-    () => formatTime(theTrack.durationSec),
-    [theTrack.durationSec]
-  );
 
+  // ------------------- FETCH SONG -------------------
   useEffect(() => {
-  }, []);
+    const fetchSong = async () => {
+      try {
+        if (!song_id) return;
 
-  const fetchMistakes = async () => { 
-    try {
-      const response = await getMistakes(1);
-      console.log("Fetched mistakes:", response);
-    } catch (error) {
-      console.error("Error fetching mistakes:", error);
-    }}
+        const res = await getSong(song_id);
+        if (res.success && res.data) {
+          const mapped = mapApiSongToAppSong(res.data);
+          setTrack(mapped);
+        }
+      } catch (err) {
+        console.error("Error fetching song:", err);
+      }
+    };
+    fetchSong();
+  }, [song_id]);
 
+  // ------------------- FETCH MISTAKES -------------------
+  useEffect(() => {
+    const fetchMistakes = async () => {
+      if (!recordId) return;
+      try {
+        const res = await getMistakes(recordId);
+        if (res.success && res.data.length > 0) {
+          const mappedIssues = res.data.map(mistakeToIssue);
+          setIssues(mappedIssues);
+        } else {
+          setIssues(DEFAULT_ISSUES);
+        }
+      } catch (err) {
+        console.error("Error fetching mistakes:", err);
+        setIssues(DEFAULT_ISSUES);
+      }
+    };
+    fetchMistakes();
+  }, [recordId]);
+
+  // ------------------- RENDER -------------------
   return (
-    <LinearGradient
-      colors={["#8C5BFF", "#8C5BFF", "#120a1a"]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 0.5 }}
-      style={{ flex: 1 }}
-    >
+    <LinearGradient colors={["#8C5BFF", "#120a1a"]} style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }}>
         <StatusBar barStyle="light-content" />
+
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
@@ -110,11 +134,11 @@ export default function Summary() {
           contentContainerStyle={{ paddingBottom: 28 }}
           showsVerticalScrollIndicator={false}
         >
-          {/* Top card: artwork + title + score */}
+          {/* Top card */}
           <View style={styles.topRow}>
             <Image source={{ uri: theTrack.image }} style={styles.art} />
             <View style={{ flex: 1, marginLeft: 14 }}>
-              <Text style={styles.title}>{theTrack.title}</Text>
+              <Text style={styles.title}>{theTrack.songName}</Text>
               <Text style={styles.artist}>{theTrack.artist}</Text>
             </View>
             <Text style={styles.scoreText}>{theScore}%</Text>
@@ -124,7 +148,7 @@ export default function Summary() {
           <View style={{ marginTop: 18, paddingHorizontal: 22 }}>
             <Slider
               minimumValue={0}
-              maximumValue={theTrack.durationSec}
+              maximumValue={120} // placeholder duration
               value={position}
               onValueChange={setPosition}
               minimumTrackTintColor="#ff82c6"
@@ -133,32 +157,12 @@ export default function Summary() {
             />
             <View style={styles.timeRow}>
               <Text style={styles.timeLabel}>{posLabel}</Text>
-              <Text style={styles.timeLabel}>{durLabel}</Text>
+              <Text style={styles.timeLabel}>2:00</Text>
             </View>
           </View>
 
-          {/* Controls */}
-          <View style={styles.controlsRow}>
-            <RoundIcon
-              name="play-skip-back"
-              onPress={() => setPosition((p) => Math.max(0, p - 10))}
-            />
-            <RoundIcon
-              big
-              name={isPlaying ? "pause" : "play"}
-              onPress={() => setIsPlaying((s) => !s)}
-            />
-            <RoundIcon
-              name="play-skip-forward"
-              onPress={() =>
-                setPosition((p) => Math.min(theTrack.durationSec, p + 10))
-              }
-            />
-          </View>
-
           {/* Missing Part */}
-          <Text style={styles.sectionTitle}>Missing part</Text>
-
+          <Text style={styles.sectionTitle}>Mistakes</Text>
           <View style={styles.issueFrame}>
             {theIssues.map((it, idx) => (
               <TouchableOpacity
@@ -178,39 +182,44 @@ export default function Summary() {
   );
 }
 
-/** Helpers & small components */
-function formatTime(totalSec: number) {
-  const mm = Math.floor(totalSec / 60);
-  const ss = Math.floor(totalSec % 60);
+// ------------------- HELPERS -------------------
+function mistakeToIssue(m: any): Issue {
+  const at = Math.max(0, m.start_time ?? 0);
+  let label = "";
+
+  switch (m.reason) {
+    case "missing":
+      label = `Missing part (${formatSeconds(m.duration)})`;
+      break;
+    case "off-key":
+      label = `Off-key issue`;
+      break;
+    default:
+      label = m.reason ?? "Unknown issue";
+  }
+
+  return { at, label };
+}
+
+function formatTime(sec: number) {
+  const mm = Math.floor(sec / 60);
+  const ss = Math.floor(sec % 60);
   return `${mm}:${ss.toString().padStart(2, "0")}`;
 }
 
-function RoundIcon({
-  name,
-  onPress,
-  big = false,
-}: {
-  name: keyof typeof Ionicons.glyphMap;
-  onPress?: () => void;
-  big?: boolean;
-}) {
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      activeOpacity={0.85}
-      style={[styles.iconWrap, big && styles.iconWrapBig]}
-    >
-      <Ionicons name={name} size={big ? 26 : 22} color="#fff" />
-    </TouchableOpacity>
-  );
+function formatSeconds(sec?: number) {
+  if (!sec || sec <= 0) return "0s";
+  if (sec < 60) return `${Math.round(sec)}s`;
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${m}m${s ? ` ${s}s` : ""}`;
 }
 
-/** Styles */
+// ------------------- STYLES -------------------
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 6,
     flexDirection: "row",
     alignItems: "center",
   },
@@ -222,7 +231,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "rgba(255,255,255,0.12)",
   },
-
   topRow: {
     marginTop: 8,
     paddingHorizontal: 22,
@@ -235,55 +243,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: "#ffffff22",
   },
-  title: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  artist: {
-    color: "#ffffffcc",
-    fontSize: 12,
-    marginTop: 2,
-  },
-  scoreText: {
-    color: "#fff",
-    fontSize: 28,
-    fontWeight: "800",
-    marginLeft: 8,
-  },
-
+  title: { color: "#fff", fontSize: 18, fontWeight: "700" },
+  artist: { color: "#ffffffcc", fontSize: 12, marginTop: 2 },
+  scoreText: { color: "#fff", fontSize: 28, fontWeight: "800", marginLeft: 8 },
   timeRow: {
     marginTop: 6,
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  timeLabel: {
-    color: "#ffffffcc",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-
-  controlsRow: {
-    paddingHorizontal: 22,
-    marginTop: 8,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  iconWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: "rgba(255,255,255,0.14)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  iconWrapBig: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-  },
-
+  timeLabel: { color: "#ffffffcc", fontSize: 12, fontWeight: "600" },
   sectionTitle: {
     marginTop: 24,
     paddingHorizontal: 22,
@@ -291,7 +259,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontSize: 18,
   },
-
   issueFrame: {
     marginTop: 12,
     marginHorizontal: 18,
@@ -309,21 +276,7 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     flexDirection: "row",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 6,
-    elevation: 4,
   },
-  issueTime: {
-    width: 60,
-    color: "#111",
-    fontWeight: "800",
-    fontSize: 14,
-  },
-  issueText: {
-    color: "#111",
-    fontSize: 14,
-    fontWeight: "600",
-  },
+  issueTime: { width: 60, color: "#111", fontWeight: "800", fontSize: 14 },
+  issueText: { color: "#111", fontSize: 14, fontWeight: "600" },
 });

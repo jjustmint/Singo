@@ -361,19 +361,6 @@ const MusicPlayer: React.FC = () => {
     }
   };
 
-  // ✅ Navigate to Result if score is returned
-  //     if (response.success && response.data?.score !== undefined) {
-  //       navigation.navigate("Result", { score: response.data.score, });
-  //     } else {
-  //       console.error("No score returned from backend:", response);
-  //     }
-  //   } catch (e) {
-  //     console.error("Error creating record:", e);
-  //   } finally {
-  //     console.log("Stop recording process completed.");
-  //   }
-  // };
-
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
     const mins = Math.floor(seconds / 60);
