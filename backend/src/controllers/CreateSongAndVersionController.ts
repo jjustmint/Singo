@@ -9,7 +9,6 @@ export const CreateSongAndVersionController = async (c: Context) => {
     const formData = await c.req.formData();
     const song = formData.get("song") as File;
     const songName = formData.get("songName") as string;
-    const lyrics = formData.get("lyrics") as string;
     const singer = formData.get("singer") as string;
     const album_coverFile = formData.get("album_cover") as File | null;
     const previewsongFile = formData.get("previewsong") as File | null;
@@ -65,7 +64,6 @@ export const CreateSongAndVersionController = async (c: Context) => {
     const songRecord = await createSong(
       songName,
       result.original_key,
-      lyrics,
       singer,
       album_cover,
       previewsong

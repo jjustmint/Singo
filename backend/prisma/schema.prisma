@@ -21,7 +21,6 @@ model song {
   song_id       Int             @id @default(autoincrement())
   title         String
   key_signature String          @db.VarChar(50)
-  lyrics        String?
   album_cover   String?         @db.VarChar(255)
   singer        String?         @db.VarChar(255)
   previewsong   String?         @db.VarChar(255)
