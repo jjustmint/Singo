@@ -32,7 +32,7 @@ export const getChallengeSong = async(start_date: string) => {
     const challenge = await prisma.challenge.findFirst({
         where: {
           end_date: {
-            gt: new Date(start_date),
+            gte: new Date(start_date),
           },
         },
         orderBy: {
