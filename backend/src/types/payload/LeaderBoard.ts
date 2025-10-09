@@ -1,3 +1,4 @@
 export type LeaderBoardPayload = {
-    versionId: number;
+    version_id: number;
+    start_date: string;
 }

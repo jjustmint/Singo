@@ -1,4 +1,3 @@
-import { audio_version } from './../generated/prisma/index.d';
 import { FindLyricsBySongId } from "../models/Lyrics";
 import { FindAllSong, FindAudioVerById, FindSongKeyBySongId, getRecordById } from "../models/Song";
 import { ConstructResponse } from "../utils/responseConstructor";
