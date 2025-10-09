@@ -604,7 +604,6 @@ const MusicPlayer: React.FC = () => {
     }
   };
 
-
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
     const mins = Math.floor(seconds / 60);

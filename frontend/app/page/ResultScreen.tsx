@@ -1,19 +1,30 @@
 import React, { useEffect } from "react";
 import { View, Text, StyleSheet, SafeAreaView } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, RouteProp } from "@react-navigation/native";
+import { StackNavigationProp } from "@react-navigation/stack";
+import { RootStackParamList } from "../Types/Navigation";
 
-const ResultScreen: React.FC<{ route: { params: { score: number; recordId: number } } }> = ({ route }) => {
-  const { score, recordId } = route.params;
-  const navigation = useNavigation();
+// ✅ Type navigation and route props
+type ResultNavProp = StackNavigationProp<RootStackParamList, "Result">;
+type ResultRouteProp = RouteProp<RootStackParamList, "Result">;
+
+interface Props {
+  route: ResultRouteProp;
+}
+
+const ResultScreen: React.FC<Props> = ({ route }) => {
+  const { score, recordId, song_id } = route.params;
+  const navigation = useNavigation<ResultNavProp>();
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      navigation.navigate("Summary" as never);
+      // Navigate to Summary with all params
+      navigation.navigate("Summary", { score, recordId, song_id });
     }, 5000);
 
     return () => clearTimeout(timer);
-  }, [navigation]);
+  }, [navigation, score, recordId, song_id]);
 
   return (
     <LinearGradient
@@ -33,23 +44,8 @@ const ResultScreen: React.FC<{ route: { params: { score: number; recordId: numbe
 export default ResultScreen;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 20,
-  },
-  score: {
-    fontSize: 72,
-    fontWeight: "bold",
-    color: "#fff",
-  },
+  container: { flex: 1 },
+  content: { flex: 1, justifyContent: "center", alignItems: "center" },
+  title: { fontSize: 28, fontWeight: "bold", color: "#fff", marginBottom: 20 },
+  score: { fontSize: 72, fontWeight: "bold", color: "#fff" },
 });
