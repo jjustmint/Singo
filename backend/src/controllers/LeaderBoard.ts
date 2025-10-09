@@ -6,11 +6,8 @@ import { LeaderBoardPayload } from "../types/payload/LeaderBoard";
 export const FindLeaderBoardController = async (c: Context) => {
     try{
         const body = await c.req.json<LeaderBoardPayload>();
-        if(!body.version_id){
-            return c.json(ConstructResponse(false, "Missing version_id", 400));
-        }
         const challengeSong = await getChallengeSong(body.start_date);
-        const response = await findChartBoard(body.version_id, challengeSong?.start_date || new Date());
+        const response = await findChartBoard(challengeSong?.version_id || 0, challengeSong?.start_date || new Date());
         if(!response){
             return c.json(ConstructResponse(false, "no one sings yet", 404));
         }
