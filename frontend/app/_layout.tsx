@@ -16,6 +16,7 @@ import SignupScreen from "./pages/Signup";
 import VoiceTestScreen from "./page/voicetest";
 import Summary from "./page/Summary";
 import ResultScreen from "./page/ResultScreen";
+import EditProfile from "./page/EditProfile";
 
 const Stack = createStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -31,6 +32,7 @@ export default function MainNavigator() {
         <Stack.Screen name="Summary" component={Summary} />
         <Stack.Screen name="Signup" component={SignupScreen} />
         <Stack.Screen name="Result" component={ResultScreen} />
+        <Stack.Screen name="EditProfile" component={EditProfile} />
       </Stack.Navigator>
   );
 }

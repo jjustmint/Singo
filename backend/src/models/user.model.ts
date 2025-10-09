@@ -70,12 +70,20 @@ export const checkUsername = async (user_id: number,username: string) => {
 }
 
 export const checkPassword = async (user_id: number, password: string) => {
-  const checkPassword = await prisma.user.findFirst({
+  const user = await prisma.user.findFirst({
     where: {
-      user_id: user_id,
-    }
-  })
-  return (checkPassword?.password == password) ? true : false
+      user_id,
+    },
+    select: {
+      password: true,
+    },
+  });
+
+  if (!user?.password) {
+    return false;
+  }
+
+  return await Bun.password.verify(password, user.password);
 }
 
 export const updateUser = async (user_id: number,
