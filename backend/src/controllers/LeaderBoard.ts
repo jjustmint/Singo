@@ -7,6 +7,9 @@ export const FindLeaderBoardController = async (c: Context) => {
     try{
         const body = await c.req.json<LeaderBoardPayload>();
         const challengeSong = await getChallengeSong(body.start_date);
+        if(!challengeSong){
+            return c.json(ConstructResponse(false, "No challenge song found", 404));
+        }
         const response = await findChartBoard(challengeSong?.version_id || 0, challengeSong?.start_date || new Date());
         if(!response){
             return c.json(ConstructResponse(false, "no one sings yet", 404));
