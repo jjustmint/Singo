@@ -1,14 +1,14 @@
 import { Axios } from "@/util/AxiosInstance";
 import { BaseResponse } from "./types/baseResponse";
-import { leaderboardType } from "./types/leaderboard";
+import { LeaderboardEntryType } from "./types/leaderboard";
 
-type LeaderboardResponse = BaseResponse<leaderboardType[]>;
+type LeaderboardResponse = BaseResponse<LeaderboardEntryType[]>;
 
-export const getLeaderboard = async (versionId: number): Promise<LeaderboardResponse> => {
+export const getLeaderboard = async (startDate: string): Promise<LeaderboardResponse> => {
     try {
         const response = await Axios.post<LeaderboardResponse>(
             "/private/getleaderboard", {
-                versionId: versionId
+                start_date: startDate
             }
         );
         return response.data;

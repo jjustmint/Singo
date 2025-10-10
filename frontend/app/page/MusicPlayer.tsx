@@ -38,15 +38,6 @@ type MusicPlayerNavProp = StackNavigationProp<
   "MusicPlayer"
 >;
 
-const DEFAULT_LYRICS = [
-  "Feel the rhythm meet the night sky glow,",
-  "Let every heartbeat echo what you know.",
-  "Chasing echoes through the silver air,",
-  "Singing stories only we can share.",
-  "Hold the chorus, let the verses fly,",
-  "This melody is yours and mine to try.",
-];
-
 const FALLBACK_LYRIC_GAP_MS = 4000;
 const ESTIMATED_LYRIC_ROW_HEIGHT = 36;
 const HIGHLIGHT_ANIMATION_DURATION = 220;
@@ -55,20 +46,19 @@ const buildFallbackLyrics = (
   songId: number,
   fallbackRaw?: string | null
 ): LyricLineType[] => {
-  const source =
-    fallbackRaw && fallbackRaw.trim().length > 0
-      ? fallbackRaw
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter((line) => line.length > 0)
-      : DEFAULT_LYRICS;
-
-  return source.map((line, index) => ({
-    lyric_id: -(index + 1),
-    song_id: songId,
-    lyric: line,
-    timestart: index * FALLBACK_LYRIC_GAP_MS,
-  }));
+  if (fallbackRaw && fallbackRaw.trim().length > 0) {
+    return fallbackRaw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((line, index) => ({
+        lyric_id: -(index + 1),
+        song_id: songId,
+        lyric: line,
+        timestart: index * FALLBACK_LYRIC_GAP_MS,
+      }));
+  }
+  return [];
 };
 
 const MusicPlayer: React.FC = () => {
@@ -332,7 +322,10 @@ const MusicPlayer: React.FC = () => {
   }, [lyrics]);
 
   useEffect(() => {
-    if (!lyrics.length) return;
+    if (!lyrics.length) {
+      setHighlightIndex(-1);
+      return;
+    }
     const currentMillis = position * 1000;
     let currentIndex = -1;
     for (let i = 0; i < lyrics.length; i++) {
@@ -667,8 +660,8 @@ const MusicPlayer: React.FC = () => {
         </View>
 
         {/* Lyrics */}
-        {lyrics.length > 0 && (
-          <View style={styles.lyricsWrapper} onLayout={handleLyricsLayout}>
+        <View style={styles.lyricsWrapper} onLayout={handleLyricsLayout}>
+          {lyrics.length > 0 ? (
             <ScrollView
               ref={lyricsScrollRef}
               contentContainerStyle={styles.lyricsContainer}
@@ -734,8 +727,14 @@ const MusicPlayer: React.FC = () => {
                 );
               })}
             </ScrollView>
-          </View>
-        )}
+          ) : (
+            <View style={styles.noLyricsContainer}>
+              <Text style={styles.noLyricsText}>
+                Song is not supporting lyrics now
+              </Text>
+            </View>
+          )}
+        </View>
 
         {/* Slider */}
         <View style={styles.progressContainer}>
@@ -906,6 +905,17 @@ const styles = StyleSheet.create({
     height: 20,
     backgroundColor: "#6c5ce7",
     marginHorizontal: 5,
+  },
+  noLyricsContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  noLyricsText: {
+    color: "#ffffff",
+    fontSize: 18,
+    textAlign: "center",
   },
   countdownOverlay: {
     ...StyleSheet.absoluteFillObject,

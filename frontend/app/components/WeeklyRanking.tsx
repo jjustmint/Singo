@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, Image, StyleSheet, FlatList } from "react-native";
 import AntDesign from "@expo/vector-icons/AntDesign";
+import { GlobalConstant } from "@/constant";
 
 // ---------------- Types ----------------
 interface User {
@@ -16,32 +17,37 @@ interface WeeklyRankingProps {
 
 // ---------------- SongCard Component ----------------
 interface SongCardProps {
-  song: {
-    id: string;
-    image: string;
-    Username: string;
-    Score: number;
-  };
+  user: User;
   index: number;
 }
 
-const SongCard: React.FC<SongCardProps> = ({ song, index }) => {
+const SongCard: React.FC<SongCardProps> = ({ user, index }) => {
   const rankColors = ["#FFD700", "#C0C0C0", "#CD7F32"]; // gold, silver, bronze
   const rankColor = rankColors[index] || "#fff";
   const rankSize = index < 3 ? 50 - index * 4 : 25;
+  const accuracy = Number(user.accuracyScore ?? 0);
+  const displayScore = isNaN(accuracy) ? "0.00" : accuracy.toFixed(2);
+  const avatarUri = (() => {
+    if (user.profilePicture && user.profilePicture.trim().length > 0) {
+      return user.profilePicture.startsWith("http")
+        ? user.profilePicture
+        : `${GlobalConstant.API_URL}/${user.profilePicture}`;
+    }
+    return "https://via.placeholder.com/96";
+  })();
 
   return (
     <View style={styles.card}>
       <Text style={[styles.rank, { color: rankColor, fontSize: rankSize }]}>
         {index + 1}
       </Text>
-      <Image source={{ uri: song.image }} style={styles.image} />
+      <Image source={{ uri: avatarUri }} style={styles.image} resizeMode="cover" />
       <View style={styles.textContainer}>
         <Text style={styles.Username} numberOfLines={1}>
-          {song.Username}
+          {user.userName}
         </Text>
         <Text style={styles.Score} numberOfLines={1}>
-          {song.Score}%
+          {displayScore}%
         </Text>
       </View>
       <AntDesign name="right" size={30} color="white" style={styles.icon} />
@@ -56,15 +62,7 @@ const WeeklyRanking: React.FC<WeeklyRankingProps> = ({ data }) => {
       data={data.slice(0, 10)} // Top 10 users
       keyExtractor={(item) => item.recordId}
       renderItem={({ item, index }) => (
-        <SongCard
-          song={{
-            id: item.recordId,
-            image: item.profilePicture || "https://via.placeholder.com/96",
-            Username: item.userName,
-            Score: Number(item.accuracyScore.toFixed(2)),
-          }}
-          index={index}
-        />
+        <SongCard user={item} index={index} />
       )}
       contentContainerStyle={{ paddingBottom: 20 }}
       scrollEnabled={false}
@@ -116,4 +114,3 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
 });
-
