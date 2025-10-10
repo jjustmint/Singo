@@ -15,11 +15,15 @@ import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
-
+import { getRecordById } from "@/api/getRecordById";
 import { RootStackParamList } from "../Types/Navigation";
 import { getMistakes } from "@/api/getMistakes";
 import { getSong } from "@/api/song/getSong";
 import { SongType as ApiSongType } from "@/api/types/song"; // API version
+import { MistakeType } from "@/api/types/mistakes";
+import { Audio } from "expo-av";
+import { Axios } from "@/util/AxiosInstance";
+import { GlobalConstant } from "@/constant";
 
 // ------------------- APP TYPES -------------------
 export type SongType = {
@@ -32,6 +36,17 @@ export type SongType = {
 type Issue = {
   at: number;
   label: string;
+};
+
+type UserRecord = {
+  accuracy_score: number;
+  created_at: string;
+  key: string;
+  record_id: number;
+  user_audio_path: string;
+  user_id: number;
+  version_id: number;
+  fullPath?: string; // add this
 };
 
 // ------------------- MAPPER -------------------
@@ -57,6 +72,8 @@ export default function SummaryScreen() {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [position, setPosition] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [userRecord, setUserRecord] = useState<UserRecord | null>(null);
 
   const DEFAULT_ISSUES: Issue[] = [
     { at: 5, label: "Duration : Too slow" },
@@ -92,16 +109,94 @@ export default function SummaryScreen() {
     fetchSong();
   }, [song_id]);
 
+  useEffect(() => {
+    const fetchRecord = async () => {
+      try {
+        const res = await Axios.post("/private/getrecord", {
+          record_id: recordId,
+        });
+
+        if (res.data.success) {
+          setUserRecord(res.data.data); // just set the fetched record
+          console.log("Fetched record:", res.data.data);
+        }
+      } catch (err) {
+        console.error("Error fetching record:", err);
+      }
+    };
+
+    fetchRecord();
+  }, [recordId]);
+
+  async function togglePlayback() {
+    try {
+      // 1️⃣ Ensure userRecord and user_audio_path exist
+      if (!userRecord?.user_audio_path) {
+        console.warn("No recording path found.");
+        return;
+      }
+
+      // 2️⃣ Construct the full URL
+      const audioUri = `${
+        GlobalConstant.API_URL
+      }/${userRecord.user_audio_path.replace(/^data\//, "")}`;
+      console.log("Playing audio from:", audioUri);
+
+      // 3️⃣ If a sound already exists
+      if (sound) {
+        const status = await sound.getStatusAsync();
+        if (status.isLoaded && status.isPlaying) {
+          await sound.pauseAsync();
+          setIsPlaying(false);
+        } else {
+          await sound.playAsync();
+          setIsPlaying(true);
+        }
+        return;
+      }
+
+      // 4️⃣ Load a new sound
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: audioUri },
+        { shouldPlay: true }
+      );
+      setSound(newSound);
+      setIsPlaying(true);
+
+      // 5️⃣ Track when playback finishes
+      newSound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setIsPlaying(false);
+        }
+      });
+    } catch (err) {
+      console.error("Error playing user recording:", err);
+    }
+  }
+
+  // ------------------- CLEANUP -------------------
+  useEffect(() => {
+    return () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
+  }, [sound]);
+
   // ------------------- FETCH MISTAKES -------------------
   useEffect(() => {
     const fetchMistakes = async () => {
       if (!recordId) return;
       try {
         const res = await getMistakes(recordId);
+        console.log("Fetched mistakes:", res.data);
+
         if (res.success && res.data.length > 0) {
+          // Map API mistakes to your Issue type
           const mappedIssues = res.data.map(mistakeToIssue);
           setIssues(mappedIssues);
         } else {
+          // fallback if no mistakes
           setIssues(DEFAULT_ISSUES);
         }
       } catch (err) {
@@ -111,6 +206,43 @@ export default function SummaryScreen() {
     };
     fetchMistakes();
   }, [recordId]);
+
+  // ------------------- MAP API TO APP -------------------
+  function mistakeToIssue(m: MistakeType): Issue {
+    const at = Math.max(0, m.timestamp_start ?? 0);
+    let label = "";
+
+    switch (m.reason) {
+      case "missing":
+        const duration = m.timestamp_end - m.timestamp_start;
+        label = `Missing part (${formatSeconds(duration)})`;
+        break;
+      case "off-key":
+        label = `Off-key by ${m.pitch_diff} semitones`;
+        break;
+      default:
+        label = m.reason ?? "Unknown issue";
+    }
+
+    return { at, label };
+  }
+
+  // ------------------- HELPER -------------------
+  function formatSeconds(sec?: number) {
+    if (!sec || sec <= 0) return "0s";
+    if (sec < 60) return `${Math.round(sec)}s`;
+    const m = Math.floor(sec / 60);
+    const s = Math.round(sec % 60);
+    return `${m}m${s ? ` ${s}s` : ""}`;
+  }
+
+  useEffect(() => {
+    return sound
+      ? () => {
+          sound.unloadAsync();
+        }
+      : undefined;
+  }, [sound]);
 
   // ------------------- RENDER -------------------
   return (
@@ -160,6 +292,27 @@ export default function SummaryScreen() {
               <Text style={styles.timeLabel}>2:00</Text>
             </View>
           </View>
+
+          {/* Play User Recording */}
+          {userRecord?.user_audio_path && (
+            <View style={{ alignItems: "center", marginTop: 30 }}>
+              <TouchableOpacity
+                onPress={togglePlayback}
+                style={{
+                  backgroundColor: "#ff7abf",
+                  borderRadius: 50,
+                  paddingVertical: 12,
+                  paddingHorizontal: 28,
+                }}
+              >
+                <Text
+                  style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}
+                >
+                  {isPlaying ? "Pause Recording" : "Play Recording"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Missing Part */}
           <Text style={styles.sectionTitle}>Mistakes</Text>
