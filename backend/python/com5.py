@@ -20,31 +20,35 @@ USE_NOISE_REDUCE = True
 TRIM_TOP_DB = 30
 
 # DTW configuration
-ALPHA = 0.45
-K_DECAY = 0.30
+ALPHA = 0.40
+K_DECAY = 0.20
 
-# Component weights - simpler blend
-W_ACC  = 0.40
-W_NAS  = 0.50
-W_BASE = 0.10
+# Component weights - balanced
+W_ACC  = 0.50   # favor DTW alignment more
+W_NAS  = 0.30
+W_BASE = 0.20
 
-# Mistake detection
-MISTAKE_SLOPE   = 0.65
-MIN_GAP         = 0.35
-ENERGY_THRESH   = 0.12
-SEMITONE_THRESH = 2.0
+# Mistake detection - MORE AGGRESSIVE
+MISTAKE_SLOPE   = 0.65  # was 0.65 - steeper penalty for mistakes
+MIN_GAP         = 0.2  # was 0.35 - detect shorter mistakes
+ENERGY_THRESH   = 0.06  # was 0.12 - lower threshold to catch more mistakes
+SEMITONE_THRESH = 2.0  # was 2.0 - stricter pitch detection
+
+# Penalties - STRONGER
+TIMING_PENALTY_FACTOR = 8  # was 8
+TIMING_MAX_PENALTY = 10    # was 10
+KEY_SHIFT_PENALTY_PER_STEP = 0.04  # was 0.04 - doubled
+
+# Score calibration - BIGGER SPREAD
+SCORE_SPREAD_FACTOR = 1.3  # was 1.3 - more spread between good/bad
+POOR_PENALTY_MULTIPLIER = 2.0  # was 1.5 - harsher on poor performance
+
+# NEW: Mistake severity penalties
+MISTAKE_PENALTY_WEIGHT = 0.5 
+
+# Voiced gating thresholds
 VOICED_PCT_USER = 25
 VOICED_PCT_ORIG = 25
-
-# Penalties
-TIMING_PENALTY_FACTOR = 8
-TIMING_MAX_PENALTY = 10
-KEY_SHIFT_PENALTY_PER_STEP = 0.04
-
-# Score calibration - simplified
-SELF_MATCH_BOOST = 5.0
-SCORE_SPREAD_FACTOR = 1.3
-POOR_PENALTY_MULTIPLIER = 1.5
 
 # ----------------- Pydantic -----------------
 class CompareRequest(BaseModel):
@@ -69,7 +73,7 @@ def extract_chroma_from_song(path):
     y, sr = librosa.load(path, sr=SR, mono=True, dtype=np.float32)
     y, _ = librosa.effects.trim(y, top_db=TRIM_TOP_DB)
     if USE_NOISE_REDUCE:
-        y = nr.reduce_noise(y=y, sr=sr, prop_decrease=0.9)
+        y = nr.reduce_noise(y=y, sr=sr, prop_decrease=2.0)
     y_harm, _ = librosa.effects.hpss(y)
     chroma_raw = librosa.feature.chroma_stft(y=y_harm, sr=sr, n_fft=N_FFT, hop_length=HOP).astype(np.float32)
     energy_vec = np.sum(chroma_raw, axis=0).astype(np.float32)
@@ -103,7 +107,7 @@ def classify_pitch_error(expected_midi, actual_midi):
     Classify the type of pitch error with detailed feedback
     Returns: (reason, severity, description)
     """
-    semitone_diff = actual_midi - expected_midi  # Positive = too high, Negative = too low
+    semitone_diff = actual_midi - expected_midi
     abs_diff = abs(semitone_diff)
     
     # Check if it's harmonically related (acceptable)
@@ -115,14 +119,14 @@ def classify_pitch_error(expected_midi, actual_midi):
         return None, 0, "acceptable"
     
     # Classify based on direction and magnitude
-    if semitone_diff > 0:  # Singing too high
+    if semitone_diff > 0:
         if abs_diff >= 7:
             return "too-high-major", 3, f"Way too high (+{abs_diff} semitones)"
         elif abs_diff >= 4:
             return "too-high", 2, f"Too high (+{abs_diff} semitones)"
         else:
             return "slightly-high", 1, f"Slightly high (+{abs_diff} semitones)"
-    else:  # Singing too low
+    else:
         if abs_diff >= 7:
             return "too-low-major", 3, f"Way too low (-{abs_diff} semitones)"
         elif abs_diff >= 4:
@@ -144,11 +148,12 @@ def detect_mistake_points(orig_unit, user_unit, path, sr,
     """
     Enhanced mistake detection with detailed pitch classification
     """
-    mistakes, cur = [], None
+    mistakes = []
+    cur = None
     e_user = np.sum(user_unit, axis=0)
     e_orig = np.sum(orig_unit, axis=0)
-    thr_user = float(np.max(e_user)) * energy_threshold
-    thr_orig = float(np.max(e_orig)) * energy_threshold
+    thr_user = float(np.max(e_user)) * energy_threshold if len(e_user) > 0 else 0.01
+    thr_orig = float(np.max(e_orig)) * energy_threshold if len(e_orig) > 0 else 0.01
 
     for oi, ui in path:
         if oi >= orig_unit.shape[1] or ui >= user_unit.shape[1]:
@@ -172,8 +177,8 @@ def detect_mistake_points(orig_unit, user_unit, path, sr,
             reason = "missing"
             severity = 2
             description = "Note not sung"
-        else:
-            # Check for pitch errors
+        elif eo > thr_orig and eu > thr_user:
+            # Both singing - check for pitch errors
             reason, severity, description = classify_pitch_error(exp_midi, act_midi)
         
         if reason:
@@ -183,10 +188,10 @@ def detect_mistake_points(orig_unit, user_unit, path, sr,
                 cur['frames'] += 1
                 cur['severity'] = max(cur['severity'], severity)
             else:
-                # Save previous mistake if it's long enough
+                # Save previous mistake if it exists and is long enough
                 if cur:
                     dur = cur['end_time'] - cur['start_time']
-                    if dur > min_gap:
+                    if dur >= min_gap:
                         mistakes.append({**cur, "duration": round(dur, 2)})
                 
                 # Start new mistake
@@ -204,17 +209,17 @@ def detect_mistake_points(orig_unit, user_unit, path, sr,
                     "frames": 1
                 }
         else:
-            # No mistake, save previous if exists
+            # No mistake - save previous if it exists
             if cur:
                 dur = cur['end_time'] - cur['start_time']
-                if dur > min_gap:
+                if dur >= min_gap:
                     mistakes.append({**cur, "duration": round(dur, 2)})
                 cur = None
 
     # Don't forget the last mistake
     if cur:
         dur = cur['end_time'] - cur['start_time']
-        if dur > min_gap:
+        if dur >= min_gap:
             mistakes.append({**cur, "duration": round(dur, 2)})
     
     return mistakes
@@ -222,7 +227,6 @@ def detect_mistake_points(orig_unit, user_unit, path, sr,
 def note_agreement_score(orig_raw, user_raw, path, e_orig, e_user, thr_orig, thr_user):
     """
     Calculate how well user hits the correct notes
-    Returns both raw score and detailed pitch accuracy
     """
     correct_notes = 0
     total_notes = 0
@@ -279,20 +283,19 @@ def energy_correlation_along_path(eo, eu, path):
 def detect_vocal_quality(rms, spectral_flatness, chroma_raw):
     """
     Detect if the audio contains actual singing or just noise/silence
-    Returns: (is_valid_vocal, quality_score, reason)
     """
     avg_rms = float(np.mean(rms))
-    if avg_rms < 0.01:
+    if avg_rms < 0.002:
         return False, 0.0, "Audio is too quiet or silent"
     
     avg_flatness = float(np.mean(spectral_flatness))
-    if avg_flatness > 0.6:
+    if avg_flatness > 0.9:
         return False, 0.0, "Audio is mostly noise, no clear vocals detected"
     
     chroma_max_per_frame = np.max(chroma_raw, axis=0)
     chroma_concentration = float(np.mean(chroma_max_per_frame / (np.sum(chroma_raw, axis=0) + 1e-8)))
     
-    if chroma_concentration < 0.3:
+    if chroma_concentration < 0.10:
         return False, 0.0, "No clear pitch detected, possibly just noise"
     
     active_frames = np.sum(chroma_max_per_frame > (np.max(chroma_max_per_frame) * 0.2))
@@ -308,6 +311,7 @@ def detect_vocal_quality(rms, spectral_flatness, chroma_raw):
         0.2 * min(1.0, voicing_ratio / 0.5)
     )
     
+    quality_score = min(1.0, quality_score * 1.25)
     return True, float(quality_score), "Valid vocal detected"
 
 # ----------------- FastAPI route -----------------
@@ -355,7 +359,7 @@ async def compare(request: CompareRequest):
             C_orig_unit, C_user_unit, alpha=ALPHA, k=K_DECAY
         )
 
-        # Enhanced mistakes detection with detailed classification
+        # Enhanced mistakes detection
         mistakes = []
         for m in detect_mistake_points(C_orig_unit, C_user_unit, path, sr1):
             reason = m["reason"]
@@ -367,13 +371,10 @@ async def compare(request: CompareRequest):
             
             if reason == 'missing':
                 pitch_diff = 0.0
-                pen = duration * 1.5
             else:
                 exp_midi = m.get('expected_midi', 60)
                 act_midi = m.get('actual_midi', 60)
                 pitch_diff = abs(freq_from_midi(exp_midi) - freq_from_midi(act_midi))
-                # Higher penalty for worse pitch errors
-                pen = duration * min(pitch_diff / 2000.0, 1.0) * 1.5 * (1.0 + severity * 0.2)
             
             mistakes.append({
                 "reason": reason,
@@ -384,22 +385,22 @@ async def compare(request: CompareRequest):
                 "duration": duration,
                 "semitone_difference": m.get("semitone_diff", 0),
                 "pitch_diff_hz": round(pitch_diff, 2),
-                "penalty": round(pen, 2),
                 "frames": m.get("frames", 0)
             })
 
         mistake_frames = int(sum(m['frames'] for m in mistakes))
+        total_mistakes = len(mistakes)
 
         # Voiced gating
-        thr_user = float(np.percentile(e_user, VOICED_PCT_USER))
-        thr_orig = float(np.percentile(e_orig, VOICED_PCT_ORIG))
+        thr_user = float(np.percentile(e_user, VOICED_PCT_USER)) if len(e_user) > 0 else 0.01
+        thr_orig = float(np.percentile(e_orig, VOICED_PCT_ORIG)) if len(e_orig) > 0 else 0.01
         voiced_frames = sum(
             1 for oi, ui in path
             if (oi < len(e_orig) and ui < len(e_user) and 
                 e_orig[oi] > thr_orig and e_user[ui] > thr_user)
         )
 
-        # Base accuracy
+        # Base accuracy with stronger mistake penalty
         if voiced_frames > 0:
             ratio = min(1.0, mistake_frames / max(1, voiced_frames))
             base_accuracy = 100.0 * (1.0 - MISTAKE_SLOPE * ratio)
@@ -413,46 +414,54 @@ async def compare(request: CompareRequest):
         )
         nas_score = 100.0 * nas
 
-        # Penalties
+        # Penalties - INCREASED
         timing_penalty = compute_timing_penalty(path, sr1, hop_length=HOP)
         key_penalty = abs(shift) * KEY_SHIFT_PENALTY_PER_STEP
         r = energy_correlation_along_path(e_orig, e_user, path)
-        energy_corr_penalty = (1.0 - max(0.0, r)) * 2.5
+        energy_corr_penalty = (1.0 - max(0.0, r)) * 3.5
+
+        # NEW: Direct mistake penalty (per mistake, not per frame)
+        mistake_penalty = total_mistakes * MISTAKE_PENALTY_WEIGHT
+        if total_mistakes > 15:
+            mistake_penalty *= 1.1  # Extra penalty for many mistakes
+        if total_mistakes > 24:
+            mistake_penalty *= 1.2
+        if total_mistakes > 30:
+            mistake_penalty *= 1.5
 
         mistake_ratio = mistake_frames / max(1, voiced_frames) if voiced_frames > 0 else 0.0
 
-        # Simplified scoring system
+        # Scoring system with better separation
         base_score = (W_ACC * accuracy + W_NAS * nas_score + W_BASE * base_accuracy)
-        penalized_score = base_score - timing_penalty - key_penalty - energy_corr_penalty
+        penalized_score = base_score - timing_penalty - key_penalty - energy_corr_penalty - mistake_penalty
         
-        is_self_match = (eff_nd < 0.08 and mistake_ratio < 0.02 and accuracy > 98)
+        is_self_match = (eff_nd < 0.08 and mistake_ratio < 0.02 and accuracy > 98 and total_mistakes == 0)
         
         if is_self_match:
             final = 99.0 + min(1.0, (100.0 - penalized_score) / 10.0)
             quality_tier = "Perfect Match"
         else:
-            pitch_quality = max(0.0, 1.0 - (avg_pitch_error / 6.0))
+            pitch_quality = max(0.0, 1.0 - (avg_pitch_error / 5.0))  # stricter
             note_quality = correct_pct
             overall_quality = (0.5 * pitch_quality + 0.5 * note_quality)
             overall_quality *= vocal_quality
             
-            centered = penalized_score - 55.0
-            spread_score = 55.0 + (centered * SCORE_SPREAD_FACTOR)
+            centered = penalized_score - 50.0
+            spread_score = 50.0 + (centered * SCORE_SPREAD_FACTOR)
+            logging.debug(f"Spread Score: {spread_score}, Centered: {centered}")
             
-            if overall_quality > 0.7 and mistake_ratio < 0.2:
-                final = spread_score + 8.0
+            if overall_quality > 0.75 and mistake_ratio < 0.20 and total_mistakes < 15:
+                final = spread_score + 10.0
                 quality_tier = "Good"
-            elif overall_quality > 0.5 and mistake_ratio < 0.35:
-                final = spread_score
+            elif overall_quality > 0.55 and mistake_ratio < 0.35 and total_mistakes < 26:
+                final = spread_score + 5.0
                 quality_tier = "Average"
             else:
-                extra_penalty = mistake_ratio * 10.0 * POOR_PENALTY_MULTIPLIER
+                extra_penalty = mistake_ratio * 15.0 * POOR_PENALTY_MULTIPLIER
                 final = spread_score - extra_penalty - 5.0
                 quality_tier = "Needs Practice"
             
-            if vocal_quality < 0.5:
-                final *= 0.7
-        
+        # clamp to 0-100
         final = float(np.clip(final, 0.0, 100.0))
         
         # Generate mistake summary by type
@@ -469,10 +478,13 @@ async def compare(request: CompareRequest):
             mistake_summary[reason]["total_duration"] += m['duration']
         
         logging.info(f"=== SCORING DEBUG ===")
-        logging.info(f"Vocal Quality: {vocal_quality:.3f} ({quality_reason})")
-        logging.info(f"Mistakes by type: {mistake_summary}")
+        logging.info(f"Vocal Quality: {vocal_quality:.3f}")
+        logging.info(f"Total Mistakes: {total_mistakes}")
+        logging.info(f"Mistake Summary: {mistake_summary}")
         logging.info(f"DTW Acc: {accuracy:.2f}, NAS: {nas_score:.2f}, Base: {base_accuracy:.2f}")
+        logging.info(f"Mistake Penalty: {mistake_penalty:.2f}")
         logging.info(f"Final Score: {final:.2f} | Quality: {quality_tier}")
+        logging.info(f"=====================")
 
         return JSONResponse({
             "success": True,
@@ -481,32 +493,7 @@ async def compare(request: CompareRequest):
                 "mistakeSummary": mistake_summary,
                 "finalScore": round(final, 2),
                 "qualityTier": quality_tier,
-                "debug": {
-                    "is_valid_vocal": True,
-                    "vocal_quality_score": round(vocal_quality, 3),
-                    "accuracy_dtw": round(accuracy, 2),
-                    "nas_score": round(nas_score, 2),
-                    "nas_frames": nas_count,
-                    "avg_pitch_error_semitones": round(avg_pitch_error, 2),
-                    "correct_note_percentage": round(correct_pct * 100, 2),
-                    "base_accuracy": round(base_accuracy, 2),
-                    "timing_penalty": round(timing_penalty, 2),
-                    "key_penalty": round(key_penalty, 2),
-                    "key_shift": shift,
-                    "energy_corr_r": round(r, 3),
-                    "energy_corr_penalty": round(energy_corr_penalty, 2),
-                    "eff_nd": round(eff_nd, 4),
-                    "nd_self": round(nd_self, 4),
-                    "nd_pair": round(nd_pair, 4),
-                    "mistake_ratio": round(mistake_ratio, 3),
-                    "mistake_frames": mistake_frames,
-                    "voiced_frames": voiced_frames,
-                    "total_mistakes_detected": len(mistakes),
-                    "base_score_before_penalties": round(base_score, 2),
-                    "is_self_match": is_self_match,
-                    "avg_rms": round(float(np.mean(rms_user)), 4),
-                    "avg_spectral_flatness": round(float(np.mean(flat_user)), 3)
-                }
+                "message": "Comparison completed successfully",
             }
         })
 
