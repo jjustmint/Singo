@@ -47,7 +47,7 @@ export const CreateSongAndVersionController = async (c: Context) => {
     backendForm.append("song", song);
     backendForm.append("song_name", songName);
 
-    const response = await fetch("http://keydetector-api:8085/upload-song", {
+    const response = await fetch("http://shift-splitting-api:8083/upload-song", {
       method: "POST",
       body: backendForm,
     });
