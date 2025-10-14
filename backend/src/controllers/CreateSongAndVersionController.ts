@@ -46,12 +46,10 @@ export const CreateSongAndVersionController = async (c: Context) => {
     const backendForm = new FormData();
     backendForm.append("song", song);
     backendForm.append("song_name", songName);
-    const controller = new AbortController(); // 5 min
 
-    const response = await fetch("http://localhost:8085/upload-song", {
+    const response = await fetch("http://keydetector-api:8085/upload-song", {
       method: "POST",
       body: backendForm,
-      signal: controller.signal,
     });
     
     const result = await response.json();
