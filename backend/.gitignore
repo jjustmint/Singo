@@ -6,7 +6,6 @@ src/generated/prisma/
 .env
 
 python/.venv/
-python/pretrained_models/
 python/song/
 python/__pycache__/
 python/.DS_Store
