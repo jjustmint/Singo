@@ -22,6 +22,10 @@ type RecentDetail = {
   albumCover: string;
   dateLabel: string;
   accuracyLabel: string;
+  recordId: number;
+  score: number;
+  songId?: number | null;
+  versionId?: number | null;
 };
 
 const formatDate = (value?: string | Date | null) => {
@@ -70,7 +74,14 @@ const Recent: React.FC<RecentProps> = ({ data = [], isLoading }) => {
   const [isFetching, setIsFetching] = useState(false);
 
   const handleCardPress = () => {
-    navigation.navigate("Summary"); 
+    if (!recentDetail) return;
+    navigation.navigate("Summary", {
+      score: recentDetail.score,
+      recordId: recentDetail.recordId,
+      song_id: recentDetail.songId ?? 0,
+      version_id: recentDetail.versionId ?? null,
+      localUri: null,
+    });
   };
 
   useEffect(() => {
@@ -91,11 +102,14 @@ const Recent: React.FC<RecentProps> = ({ data = [], isLoading }) => {
       let title = `Recording #${latest.record_id}`;
       let albumCover = PLACEHOLDER_IMAGE;
       let keyLabel = latest.key ?? "Unknown key";
+      let songId: number | null = null;
+      const versionId = latest.version_id ?? null;
 
       try {
         if (latest.version_id) {
           const audioRes = await getAudioVerById(latest.version_id);
           if (audioRes.success && audioRes.data?.song_id) {
+            songId = audioRes.data.song_id;
             const songRes = await getSong(audioRes.data.song_id);
             if (songRes.success && songRes.data) {
               const { title: songTitle, album_cover, key_signature } = songRes.data;
@@ -116,6 +130,13 @@ const Recent: React.FC<RecentProps> = ({ data = [], isLoading }) => {
             albumCover,
             dateLabel: formatDate(latest.created_at),
             accuracyLabel: formatAccuracy(latest.accuracy_score),
+            recordId: latest.record_id,
+            score:
+              typeof latest.accuracy_score === "number"
+                ? latest.accuracy_score
+                : 0,
+            songId,
+            versionId,
           });
           setIsFetching(false);
         }
