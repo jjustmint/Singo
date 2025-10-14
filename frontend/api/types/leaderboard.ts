@@ -1,9 +1,8 @@
-export type leaderboardType = {
-    userName: string,
-            profilePicture: string | null,
-            accuracyScore: number,
-            recordId: number,
-            versionId: number,
-            createdAt: string,
-            userAudioPath: string | null,
-}
+export type LeaderboardEntryType = {
+    record_id: number;
+    user_id: number | null;
+    userName: string;
+    profilePicture: string | null;
+    accuracyScore: number;
+    createdAt: string;
+};

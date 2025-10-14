@@ -1,5 +1,5 @@
 // app/screens/Summary.tsx
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -21,7 +21,7 @@ import { getMistakes } from "@/api/getMistakes";
 import { getSong } from "@/api/song/getSong";
 import { SongType as ApiSongType } from "@/api/types/song"; // API version
 import { MistakeType } from "@/api/types/mistakes";
-import { Audio } from "expo-av";
+import { Audio, AVPlaybackStatus } from "expo-av";
 import { Axios } from "@/util/AxiosInstance";
 import { GlobalConstant } from "@/constant";
 
@@ -50,12 +50,25 @@ type UserRecord = {
 };
 
 // ------------------- MAPPER -------------------
+function buildAlbumCoverUri(cover: string | null): string {
+  if (!cover) {
+    return "https://placehold.co/300x300";
+  }
+
+  if (/^https?:\/\//i.test(cover)) {
+    return cover;
+  }
+
+  const sanitized = cover.replace(/^\/+/, "");
+  return `${GlobalConstant.API_URL}/${sanitized}`;
+}
+
 function mapApiSongToAppSong(song: ApiSongType): SongType {
   return {
     id: song.song_id.toString(),
     songName: song.title,
     artist: song.singer,
-    image: song.album_cover ?? "https://placehold.co/300x300",
+    image: buildAlbumCoverUri(song.album_cover),
   };
 }
 
@@ -71,8 +84,10 @@ export default function SummaryScreen() {
   const [track, setTrack] = useState<SongType | null>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [position, setPosition] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isSeeking, setIsSeeking] = useState(false);
+  const soundRef = useRef<Audio.Sound | null>(null);
   const [userRecord, setUserRecord] = useState<UserRecord | null>(null);
 
   const DEFAULT_ISSUES: Issue[] = [
@@ -90,6 +105,14 @@ export default function SummaryScreen() {
   const theScore = typeof score === "number" ? score : 0;
 
   const posLabel = useMemo(() => formatTime(position), [position]);
+  const sliderMax = useMemo(
+    () => (duration > 0 ? duration : Math.max(position, 1)),
+    [duration, position]
+  );
+  const durationLabel = useMemo(
+    () => formatTime(duration > 0 ? duration : 0),
+    [duration]
+  );
 
   // ------------------- FETCH SONG -------------------
   useEffect(() => {
@@ -128,61 +151,133 @@ export default function SummaryScreen() {
     fetchRecord();
   }, [recordId]);
 
-  async function togglePlayback() {
+  useEffect(() => {
+    setPosition(0);
+    setDuration(0);
+    setIsPlaying(false);
+    setIsSeeking(false);
+
+    if (soundRef.current) {
+      soundRef.current
+        .unloadAsync()
+        .catch((err) =>
+          console.error("Error unloading previous recording:", err)
+        );
+      soundRef.current = null;
+    }
+  }, [recordId]);
+
+  const handlePlaybackStatusUpdate = useCallback(
+    (status: AVPlaybackStatus) => {
+      if (!status.isLoaded) {
+        if ("error" in status && status.error) {
+          console.error("Playback status error:", status.error);
+        }
+        return;
+      }
+
+      if (status.durationMillis != null) {
+        setDuration(status.durationMillis / 1000);
+      }
+
+      if (status.didJustFinish) {
+        setIsPlaying(false);
+        setIsSeeking(false);
+        if (status.durationMillis != null) {
+          setPosition(status.durationMillis / 1000);
+        }
+        return;
+      }
+
+      setIsPlaying(status.isPlaying);
+
+      if (!isSeeking && status.positionMillis != null) {
+        setPosition(status.positionMillis / 1000);
+      }
+    },
+    [isSeeking]
+  );
+
+  const togglePlayback = useCallback(async () => {
     try {
-      // 1️⃣ Ensure userRecord and user_audio_path exist
       if (!userRecord?.user_audio_path) {
         console.warn("No recording path found.");
         return;
       }
 
-      // 2️⃣ Construct the full URL
-      const audioUri = `${
-        GlobalConstant.API_URL
-      }/${userRecord.user_audio_path.replace(/^data\//, "")}`;
+      const sanitizedPath = userRecord.user_audio_path
+        .replace(/^\/?data\//, "")
+        .replace(/^\/+/, "");
+      const audioUri = /^https?:\/\//i.test(userRecord.user_audio_path)
+        ? userRecord.user_audio_path
+        : `${GlobalConstant.API_URL}/${sanitizedPath}`;
       console.log("Playing audio from:", audioUri);
 
-      // 3️⃣ If a sound already exists
-      if (sound) {
-        const status = await sound.getStatusAsync();
-        if (status.isLoaded && status.isPlaying) {
-          await sound.pauseAsync();
+      const currentSound = soundRef.current;
+      if (currentSound) {
+        const status = await currentSound.getStatusAsync();
+        if (!status.isLoaded) {
+          await currentSound.unloadAsync();
+          soundRef.current = null;
+          setIsPlaying(false);
+          return;
+        }
+
+        currentSound.setOnPlaybackStatusUpdate(handlePlaybackStatusUpdate);
+
+        if (status.isPlaying) {
+          await currentSound.pauseAsync();
           setIsPlaying(false);
         } else {
-          await sound.playAsync();
+          await currentSound.playAsync();
           setIsPlaying(true);
         }
         return;
       }
 
-      // 4️⃣ Load a new sound
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: audioUri },
-        { shouldPlay: true }
-      );
-      setSound(newSound);
-      setIsPlaying(true);
-
-      // 5️⃣ Track when playback finishes
-      newSound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          setIsPlaying(false);
-        }
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: false,
       });
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: audioUri },
+        { shouldPlay: true },
+        handlePlaybackStatusUpdate
+      );
+
+      soundRef.current = sound;
+      sound.setOnPlaybackStatusUpdate(handlePlaybackStatusUpdate);
+      setIsPlaying(true);
     } catch (err) {
       console.error("Error playing user recording:", err);
     }
-  }
+  }, [userRecord?.user_audio_path, handlePlaybackStatusUpdate]);
+
+  const handleSeekComplete = useCallback(
+    async (value: number) => {
+      const target = duration > 0 ? Math.min(value, duration) : Math.max(value, 0);
+      try {
+        const currentSound = soundRef.current;
+        if (currentSound) {
+          await currentSound.setPositionAsync(target * 1000);
+          if (isPlaying) {
+            await currentSound.playAsync();
+          }
+        }
+        setPosition(target);
+      } catch (err) {
+        console.error("Error seeking user recording:", err);
+      } finally {
+        setIsSeeking(false);
+      }
+    },
+    [duration, isPlaying]
+  );
 
   // ------------------- CLEANUP -------------------
-  useEffect(() => {
-    return () => {
-      if (sound) {
-        sound.unloadAsync();
-      }
-    };
-  }, [sound]);
-
   // ------------------- FETCH MISTAKES -------------------
   useEffect(() => {
     const fetchMistakes = async () => {
@@ -207,42 +302,18 @@ export default function SummaryScreen() {
     fetchMistakes();
   }, [recordId]);
 
-  // ------------------- MAP API TO APP -------------------
-  function mistakeToIssue(m: MistakeType): Issue {
-    const at = Math.max(0, m.timestamp_start ?? 0);
-    let label = "";
-
-    switch (m.reason) {
-      case "missing":
-        const duration = m.timestamp_end - m.timestamp_start;
-        label = `Missing part (${formatSeconds(duration)})`;
-        break;
-      case "off-key":
-        label = `Off-key by ${m.pitch_diff} semitones`;
-        break;
-      default:
-        label = m.reason ?? "Unknown issue";
-    }
-
-    return { at, label };
-  }
-
-  // ------------------- HELPER -------------------
-  function formatSeconds(sec?: number) {
-    if (!sec || sec <= 0) return "0s";
-    if (sec < 60) return `${Math.round(sec)}s`;
-    const m = Math.floor(sec / 60);
-    const s = Math.round(sec % 60);
-    return `${m}m${s ? ` ${s}s` : ""}`;
-  }
-
   useEffect(() => {
-    return sound
-      ? () => {
-          sound.unloadAsync();
-        }
-      : undefined;
-  }, [sound]);
+    return () => {
+      if (soundRef.current) {
+        soundRef.current
+          .unloadAsync()
+          .catch((err) =>
+            console.error("Error unloading user recording:", err)
+          );
+        soundRef.current = null;
+      }
+    };
+  }, []);
 
   // ------------------- RENDER -------------------
   return (
@@ -280,16 +351,21 @@ export default function SummaryScreen() {
           <View style={{ marginTop: 18, paddingHorizontal: 22 }}>
             <Slider
               minimumValue={0}
-              maximumValue={120} // placeholder duration
-              value={position}
-              onValueChange={setPosition}
+              maximumValue={sliderMax}
+              value={Math.min(position, sliderMax)}
+              onSlidingStart={() => setIsSeeking(true)}
+              onValueChange={(value) => {
+                setIsSeeking(true);
+                setPosition(value);
+              }}
+              onSlidingComplete={handleSeekComplete}
               minimumTrackTintColor="#ff82c6"
               maximumTrackTintColor="#ffffff66"
               thumbTintColor="#ff7abf"
             />
             <View style={styles.timeRow}>
               <Text style={styles.timeLabel}>{posLabel}</Text>
-              <Text style={styles.timeLabel}>2:00</Text>
+              <Text style={styles.timeLabel}>{durationLabel}</Text>
             </View>
           </View>
 
@@ -322,7 +398,9 @@ export default function SummaryScreen() {
                 key={`${it.at}-${idx}`}
                 activeOpacity={0.8}
                 style={styles.issueItem}
-                onPress={() => setPosition(it.at)}
+                onPress={() => {
+                  void handleSeekComplete(it.at);
+                }}
               >
                 <Text style={styles.issueTime}>{formatTime(it.at)}</Text>
                 <Text style={styles.issueText}>{it.label}</Text>
@@ -336,16 +414,18 @@ export default function SummaryScreen() {
 }
 
 // ------------------- HELPERS -------------------
-function mistakeToIssue(m: any): Issue {
-  const at = Math.max(0, m.start_time ?? 0);
+function mistakeToIssue(m: MistakeType): Issue {
+  const at = Math.max(0, m.timestamp_start ?? 0);
   let label = "";
 
   switch (m.reason) {
-    case "missing":
-      label = `Missing part (${formatSeconds(m.duration)})`;
+    case "missing": {
+      const duration = (m.timestamp_end ?? 0) - (m.timestamp_start ?? 0);
+      label = `Missing part (${formatSeconds(duration)})`;
       break;
+    }
     case "off-key":
-      label = `Off-key issue`;
+      label = `Off-key by ${m.pitch_diff} semitones`;
       break;
     default:
       label = m.reason ?? "Unknown issue";

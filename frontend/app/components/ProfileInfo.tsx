@@ -9,7 +9,7 @@ interface Props {
   photo?: string | null;
 }
 
-const resolveProfileImage = (photo?: string | null) => {
+export const resolveProfileImage = (photo?: string | null) => {
   if (!photo) {
     return null;
   }

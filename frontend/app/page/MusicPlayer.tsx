@@ -155,7 +155,10 @@ const MusicPlayer: React.FC = () => {
         await currentRecording.stopAndUnloadAsync();
       }
     } catch (err) {
-      console.error("Error managing recording instance:", err);
+      console.warn(
+        "Skipping recording cleanup because recorder is not available:",
+        err
+      );
     } finally {
       recordingRef.current = null;
       setRecording(null);
@@ -447,6 +450,7 @@ const MusicPlayer: React.FC = () => {
     try {
       const response = await getSong(song_id);
       setTitle(response.data.title);
+      // setLyrics(response.data.lyrics?.split("\n") || ["No lyrics available"]);
       setImage(response.data.album_cover || "");
       setSinger(response.data.singer);
       await handleFetchLyrics(song_id, response.data.lyrics);
@@ -535,74 +539,100 @@ const MusicPlayer: React.FC = () => {
     }
   };
 
-  const stopRecording = async () => {
-    const currentRecording = recordingRef.current;
-    if (!currentRecording) {
-      return;
-    }
+type CreateRecordResponseData = {
+  filePath: string;
+  mistakes: any[];
+  recordId: number;
+  score: number;
+};
 
-    try {
-      const status = await currentRecording.getStatusAsync();
-      if (status.canRecord || status.isRecording || !status.isDoneRecording) {
-        await currentRecording.stopAndUnloadAsync();
-      }
-    } catch (err) {
-      console.error("Failed to stop active recording", err);
-    }
+type CreateRecordResponse = {
+  success: boolean;
+  msg?: string;
+  data: CreateRecordResponseData;
+};
 
-    const uri = currentRecording.getURI();
+const stopRecording = async () => {
+  if (!recording) return;
+
+  try {
+    // Stop and unload the recording
+    await recording.stopAndUnloadAsync();
+    const uri = recording.getURI();
     setRecordingUri(uri);
     recordingRef.current = null;
     setRecording(null);
 
-    await stopAndUnloadCurrentSound();
+    // Stop and unload instrumental
+    if (sound) {
+      await sound.stopAsync();
+      await sound.unloadAsync();
+      setSound(null);
+    }
 
     console.log("Recording stopped and instrumental audio unloaded");
 
-    try {
-      if (!uri) {
-        console.error("Recording URI is null, cannot save file.");
-        return;
-      }
-
-      // ✅ SDK 54 File API
-      const source = new File(uri);
-      const target = new File(Paths.document, "recording.m4a");
-
-      // optional: if you want to force-overwrite, delete old file first
-      if (target.exists) {
-        try {
-          target.delete();
-        } catch {}
-      }
-
-      source.copy(target); // <-- synchronous, no await
-      console.log(`Recording saved as .m4a file at: ${target.uri}`);
-
-      if (!songKey.ori_path) throw new Error("Original path is missing");
-
-      setLoadingResult(true);
-      const response = await createRecord(
-        target.uri, // use the new file’s URI
-        `${songKey.version_id}`,
-        songKey.key_signature,
-        songKey.ori_path
-      );
-
-      console.log("Record created successfully:", response);
-
-      const responseData = typeof response.data === "number" ? response.data : JSON.parse(response.data);
-      if (response.success && responseData?.score !== undefined) {
-        navigation.navigate("Result", { score: responseData.score, song_id: responseData.song_id, recordId: responseData.record_id });
-      } else {
-        console.error("No score returned from backend:", response);
-      }
-    } catch (e) {
-      console.error("Error creating record:", e);
-    } finally {
-      console.log("Stop recording process completed.");
+    if (!uri) {
+      console.error("Recording URI is null, cannot save file.");
+      return;
     }
-  };
+
+    // Save recording with Expo SDK 54 File API
+    const source = new File(uri);
+    const target = new File(Paths.document, "recording.m4a");
+
+    if (target.exists) target.delete();
+    source.copy(target);
+    console.log(`Recording saved as .m4a file at: ${target.uri}`);
+
+    if (!songKey.ori_path) throw new Error("Original path is missing");
+
+    setLoadingResult(true);
+
+    // ✅ Safe cast: BaseResponse<string> -> unknown -> CreateRecordResponse
+    const response = (await createRecord(
+      target.uri,
+      `${songKey.version_id}`,
+      songKey.key_signature,
+      songKey.ori_path
+    )) as unknown as CreateRecordResponse;
+
+    const responseData = response.data;
+
+    if (response.success && responseData?.score !== undefined) {
+      navigation.navigate("Result", {
+        score: responseData.score,
+        song_id: songKey.song_id,
+        recordId: responseData.recordId,
+        version_id: songKey.version_id,
+        localUri: target.uri,
+      });
+      console.log("Navigated to Result screen successfully");
+    } else {
+      console.error("No valid score returned from backend:", response);
+    }
+  } catch (err) {
+    console.error("Error in stopRecording:", err);
+  } finally {
+    setLoadingResult(false);
+    console.log("stopRecording process completed.");
+  }
+};
+
+
+
+  // ✅ Navigate to Result if score is returned
+  //     if (response.success && response.data?.score !== undefined) {
+  //       navigation.navigate("Result", { score: response.data.score, });
+  //     } else {
+  //       console.error("No score returned from backend:", response);
+  //     }
+  //   } catch (e) {
+  //     console.error("Error creating record:", e);
+  //   } finally {
+  //     console.log("Stop recording process completed.");
+  //   }
+  // };
 
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";

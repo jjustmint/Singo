@@ -8,6 +8,7 @@ import type { RootStackParamList, TabParamList } from "./Types/Navigation";
 import Home from "./page/Home";
 import Leaderboard from "./page/Leaderboard";
 import Profile from "./page/Profile";
+import EditProfile from "./page/EditProfile";
 import BottomNav from "./components/BottomNav";
 import ChooseKey from "./page/ChooseKey";
 import MusicPlayer from "./page/MusicPlayer";   // (keep if used elsewhere)         // (keep if used elsewhere)
@@ -31,6 +32,7 @@ export default function MainNavigator() {
         <Stack.Screen name="Summary" component={Summary} />
         <Stack.Screen name="Signup" component={SignupScreen} />
         <Stack.Screen name="Result" component={ResultScreen} />
+        <Stack.Screen name="EditProfile" component={EditProfile} />
       </Stack.Navigator>
   );
 }

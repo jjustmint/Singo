@@ -14,17 +14,23 @@ interface Props {
 }
 
 const ResultScreen: React.FC<Props> = ({ route }) => {
-  const { score, recordId, song_id } = route.params;
+  const { score, recordId, song_id, version_id, localUri } = route.params;
   const navigation = useNavigation<ResultNavProp>();
 
   useEffect(() => {
     const timer = setTimeout(() => {
       // Navigate to Summary with all params
-      navigation.navigate("Summary", { score, recordId, song_id });
+      navigation.navigate("Summary", {
+        score,
+        recordId,
+        song_id,
+        version_id,
+        localUri,
+      });
     }, 5000);
 
     return () => clearTimeout(timer);
-  }, [navigation, score, recordId, song_id]);
+  }, [navigation, score, recordId, song_id, version_id, localUri]);
 
   return (
     <LinearGradient

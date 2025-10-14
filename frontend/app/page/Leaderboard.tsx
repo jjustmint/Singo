@@ -14,14 +14,15 @@ import { BlurView } from "expo-blur";
 import AntDesign from "@expo/vector-icons/AntDesign";
 
 import { getLeaderboard } from "@/api/leaderboard";
-import { getSong } from "@/api/song/getSong";
-import { getAudioVerById } from "@/api/song/getAudioById";
+import { LeaderboardEntryType } from "@/api/types/leaderboard";
 import ScoreChart from "../components/ScoreChart";
 import WeeklyRanking from "../components/WeeklyRanking"; 
 import SongChallenge from "../components/SongChalleng";
+import { resolveProfileImage } from "../components/ProfileInfo";
 
 const { height } = Dimensions.get("window");
-const audio_id = 5;
+const CHALLENGE_DEFAULT_START = "2025-09-26";
+const WEEKLY_CHALLENGE_VERSION_ID = 5;
 
 // ---------------- Types ----------------
 interface User {
@@ -34,12 +35,11 @@ interface User {
 // ---------------- Leaderboard Screen ----------------
 export default function Leaderboard() {
   const [weeklyRanking, setWeeklyRanking] = useState<User[] | null>(null);
-  const [weeklySong, setWeeklySong] = useState<any | false | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        await Promise.all([fetchLeaderboard(), fetchWeeklySong()]);
+        await fetchLeaderboard();
       } catch (err) {
         console.error("Error fetching data:", err);
       }
@@ -48,17 +48,57 @@ export default function Leaderboard() {
   }, []);
 
   // ---------------- Fetch Leaderboard ----------------
+  const getCurrentWeekStartDate = () => {
+    const now = new Date();
+    const day = now.getDay(); // Sunday = 0
+    const diff = (day + 6) % 7; // convert to Monday = 0
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - diff);
+    monday.setHours(0, 0, 0, 0);
+    return monday.toISOString().split("T")[0];
+  };
+
   const fetchLeaderboard = async () => {
     try {
-      const leaderboardData = await getLeaderboard(audio_id);
+      const startDate = getCurrentWeekStartDate();
+      let leaderboardData = await getLeaderboard(startDate);
 
-      // map API data to User type and convert recordId to string
-      const data: User[] = (leaderboardData?.data || []).map((user: any) => ({
-        recordId: String(user.recordId), // <-- convert number to string
-        userName: user.userName,
-        accuracyScore: user.accuracyScore,
-        profilePicture: user.profilePicture,
-      }));
+      let rawEntries: LeaderboardEntryType[] = Array.isArray(leaderboardData?.data)
+        ? (leaderboardData.data as LeaderboardEntryType[])
+        : [];
+
+      if (rawEntries.length === 0 && startDate !== CHALLENGE_DEFAULT_START) {
+        try {
+          const fallbackData = await getLeaderboard(CHALLENGE_DEFAULT_START);
+          if (Array.isArray(fallbackData?.data)) {
+            rawEntries = fallbackData.data as LeaderboardEntryType[];
+          }
+        } catch (fallbackErr) {
+          console.warn("Fallback leaderboard fetch failed", fallbackErr);
+        }
+      }
+
+      if (!Array.isArray(rawEntries)) {
+        rawEntries = [];
+      }
+
+      const data: User[] = rawEntries.map(
+        (entry: LeaderboardEntryType) => {
+          const profilePicturePath: string | null = entry.profilePicture ?? null;
+          const normalizedProfile = resolveProfileImage(profilePicturePath ?? undefined) ?? undefined;
+
+        return {
+          recordId: String(
+            entry.record_id ??
+              entry.user_id ??
+              Math.floor(Date.now() + Math.random() * 1000)
+          ),
+            userName: entry.userName ?? "Unknown",
+            accuracyScore: entry.accuracyScore ?? 0,
+            profilePicture: normalizedProfile,
+          };
+        }
+      );
 
       const sortedData = [...data].sort(
         (a, b) => b.accuracyScore - a.accuracyScore
@@ -68,30 +108,6 @@ export default function Leaderboard() {
     } catch (err) {
       console.error("Failed to fetch leaderboard:", err);
       setWeeklyRanking([]);
-    }
-  };
-
-  // ---------------- Fetch Weekly Song ----------------
-  const fetchWeeklySong = async () => {
-    try {
-      const audioData = await getAudioVerById(audio_id);
-      if (!audioData?.data?.song_id) {
-        setWeeklySong(false);
-        return;
-      }
-      const songData = await getSong(audioData.data.song_id);
-      if (!songData?.data) {
-        setWeeklySong(false);
-        return;
-      }
-      setWeeklySong({
-        title: songData.data.title || "Unknown Title",
-        singer: songData.data.singer || "Unknown Singer",
-        key: audioData.data.key_signature || "N/A",
-      });
-    } catch (err) {
-      console.error("Failed to fetch weekly song info:", err);
-      setWeeklySong(false);
     }
   };
 
@@ -158,7 +174,7 @@ export default function Leaderboard() {
   </Text>
 
   {/* Use the modular SongChallenge component */}
-  <SongChallenge audioId={audio_id} />
+  <SongChallenge audioId={WEEKLY_CHALLENGE_VERSION_ID} />
 </View>
 
 

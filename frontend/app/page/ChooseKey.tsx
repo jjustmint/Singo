@@ -25,11 +25,12 @@ const ChooseKey: React.FC = () => {
   const route = useRoute<ChooseKeyRouteProp>();
   const navigation = useNavigation<ChooseKeyNavProp>();
 
-  const { song } = route.params;
+  const { song, selectedKey, versionId } = route.params;
   
   const [songList, setSongList] = useState<SongKeyType[]>([]);
   const [keys, setKeys] = useState<String[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [isLockedWeekly, setIsLockedWeekly] = useState(false);
   const songName = song.songName;
   const artist = song.artist;
   const song_id = song.id;
@@ -37,8 +38,23 @@ const ChooseKey: React.FC = () => {
    // Use songKey.id for the song ID
  // Adjust type to match your navigation structure
 
-  // Fetch keys from backend
   useEffect(() => {
+    if (selectedKey && versionId) {
+      setKeys([selectedKey]);
+      setSongList([
+        {
+          version_id: versionId,
+          song_id: parseInt(song_id, 10),
+          instru_path: "",
+          ori_path: null,
+          key_signature: selectedKey,
+        },
+      ]);
+      setCurrentIndex(0);
+      setIsLockedWeekly(true);
+      return;
+    }
+
     const fetchKeys = async () => {
       try {
         const result = await getKey(parseInt(song_id, 10));
@@ -54,7 +70,7 @@ const ChooseKey: React.FC = () => {
       }
     };
     fetchKeys();
-  }, []);
+  }, [song_id, songName, artist, selectedKey, versionId]);
 
   const getKey = async (song_id: number) =>{
     try {
@@ -75,10 +91,12 @@ const ChooseKey: React.FC = () => {
   }
 
   const handleNext = () => {
+    if (isLockedWeekly) return;
     if (currentIndex < keys.length - 1) setCurrentIndex(currentIndex + 1);
   };
 
   const handlePrev = () => {
+    if (isLockedWeekly) return;
     if (currentIndex > 0) setCurrentIndex(currentIndex - 1);
   };
 
@@ -122,15 +140,25 @@ const ChooseKey: React.FC = () => {
       
       {/* Key Selector */}
       <View style={styles.keyContainer}>
-        <TouchableOpacity onPress={handlePrev} style={styles.chevronButton}>
+        <TouchableOpacity
+          onPress={handlePrev}
+          style={[styles.chevronButton, isLockedWeekly && styles.disabledChevron]}
+          disabled={isLockedWeekly}
+        >
           <Feather name="chevron-left" size={40} color="white" right={40} />
         </TouchableOpacity>
         <Text style={styles.keyText}>{keys[currentIndex]}</Text>
-        <TouchableOpacity onPress={handleNext} style={styles.chevronButton}>
+        <TouchableOpacity
+          onPress={handleNext}
+          style={[styles.chevronButton, isLockedWeekly && styles.disabledChevron]}
+          disabled={isLockedWeekly}
+        >
           <Feather name="chevron-right" size={40} color="white" left={40} />
         </TouchableOpacity>
       </View>
-      <Text style={styles.suggested}>Suggested</Text>
+      <Text style={styles.suggested}>
+        {isLockedWeekly ? "Weekly challenge key" : "Suggested"}
+      </Text>
       
       {/* Song List */}
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
@@ -192,6 +220,9 @@ const styles = StyleSheet.create({
   },
   chevronButton: {
     padding: 10,
+  },
+  disabledChevron: {
+    opacity: 0.4,
   },
   keyText: {
     fontSize: 50,
