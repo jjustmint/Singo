@@ -3,7 +3,8 @@
   "scripts": {
     "dev": "bun run --hot src/index.ts",
     "pull": "bunx prisma db pull && bunx prisma generate",
-    "compile": "bun build src/index.ts --outdir dist --target bun"
+    "compile": "bun build src/index.ts --outdir dist --target bun",
+    "start" : "bun run dist/index.js"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.1",

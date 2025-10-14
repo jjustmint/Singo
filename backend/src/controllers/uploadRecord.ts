@@ -64,7 +64,7 @@ export const uploadRecordAndScoreController = async (c: Context) => {
     });
 
     // Call compare service
-    const response = await fetch("http://localhost:8080/compare", {
+    const response = await fetch("http://com5-api:8080/compare", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

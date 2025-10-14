@@ -3,7 +3,7 @@ import { jwtMiddleware } from "../middlewares/jwt";
 import { UpdateKeyController } from "../controllers/updateKey";
 import { CompareVocalController } from "../controllers/CompareVocal";
 import { DisplaySongsController, getAudioVerByIdController, getRecordController, getSongController, getSongKeyController } from "../controllers/Song";
-import { FindLeaderBoardController } from "../controllers/LeaderBoard";
+import { FindLeaderBoardController, setChallengeSongController } from "../controllers/LeaderBoard";
 import { DisplayMistakesController } from "../controllers/Mistake";
 import { HistoryController } from "../controllers/History";
 import { UserController } from "../controllers/User";
@@ -33,5 +33,6 @@ privateRouter.post("/updateuser", updateUserController);
 privateRouter.post("/addlyric", AddLyricController);
 privateRouter.post("/getlyric", GetLyricController);
 privateRouter.post("/getrecord", getRecordController);
+privateRouter.post("/setChallenge", setChallengeSongController);
 
 export { privateRouter }

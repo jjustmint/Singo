@@ -50,6 +50,7 @@ model audio_version {
   semitone_shift Int?
   is_original    Boolean?
   song           song?       @relation(fields: [song_id], references: [song_id], onDelete: Cascade, onUpdate: NoAction, map: "songaudioversion_song_id_fkey")
+  challenge      challenge[]
   recording      recording[]
 }
 
@@ -67,6 +68,14 @@ model lyric {
   lyric_id  Int    @id(map: "lyrics_id") @default(autoincrement())
   song_id   Int
   lyric     String @db.VarChar(255)
-  timestart Int
+  timestart Int?
   song      song   @relation(fields: [song_id], references: [song_id], onDelete: NoAction, onUpdate: NoAction, map: "song_id")
+}
+
+model challenge {
+  challenge_id  Int           @id(map: "challenge_id") @default(autoincrement())
+  version_id    Int
+  start_date    DateTime      @db.Date
+  end_date      DateTime      @db.Date
+  audio_version audio_version @relation(fields: [version_id], references: [version_id], onDelete: NoAction, onUpdate: NoAction, map: "version_id")
 }
