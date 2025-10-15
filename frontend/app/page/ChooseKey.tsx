@@ -1,22 +1,22 @@
 import React, { useEffect, useState } from "react";
-import { GlobalConstant } from "@/constant";
 import {
   View,
   Text,
   StyleSheet,
   ImageBackground,
   TouchableOpacity,
-  FlatList,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { LinearGradient } from 'expo-linear-gradient';
-import { get } from "react-native/Libraries/TurboModule/TurboModuleRegistry";
+import { getSong } from "@/api/song/getSong";
 import { getSongkey } from "@/api/getSongKey";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { RootStackParamList } from "../Types/Navigation";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { SongKeyType } from "../Types/SongKey";
-import { SongType } from "../Types/Song";
+import { buildAssetUri } from "../utils/assetUri";
+
+const FALLBACK_COVER = "https://via.placeholder.com/600x600?text=No+Cover";
 
 type ChooseKeyRouteProp = RouteProp<RootStackParamList, "ChooseKey">;
 type ChooseKeyNavProp = StackNavigationProp<RootStackParamList, "ChooseKey">;
@@ -35,16 +35,25 @@ const ChooseKey: React.FC = () => {
   const artist = song.artist;
   const song_id = song.id;
   const image = song.image;
+  const numericSongId = Number.parseInt(song_id, 10);
+  const [coverUri, setCoverUri] = useState<string>(
+    buildAssetUri(image) ?? FALLBACK_COVER
+  );
    // Use songKey.id for the song ID
  // Adjust type to match your navigation structure
 
   useEffect(() => {
+    if (Number.isNaN(numericSongId)) {
+      console.warn("Invalid song id provided to ChooseKey:", song_id);
+      return;
+    }
+
     if (selectedKey && versionId) {
       setKeys([selectedKey]);
       setSongList([
         {
           version_id: versionId,
-          song_id: parseInt(song_id, 10),
+          song_id: numericSongId,
           instru_path: "",
           ori_path: null,
           key_signature: selectedKey,
@@ -57,7 +66,7 @@ const ChooseKey: React.FC = () => {
 
     const fetchKeys = async () => {
       try {
-        const result = await getKey(parseInt(song_id, 10));
+        const result = await getKey(numericSongId);
         console.log("Song ID:", song_id);
         console.log("songName:", songName);
         console.log("artist:", artist);
@@ -70,7 +79,36 @@ const ChooseKey: React.FC = () => {
       }
     };
     fetchKeys();
-  }, [song_id, songName, artist, selectedKey, versionId]);
+  }, [song_id, songName, artist, selectedKey, versionId, numericSongId]);
+
+  useEffect(() => {
+    if (Number.isNaN(numericSongId)) {
+      return;
+    }
+
+    const resolvedCover = buildAssetUri(image);
+    if (resolvedCover) {
+      setCoverUri(resolvedCover);
+    } else {
+      setCoverUri(FALLBACK_COVER);
+    }
+
+    const fetchCover = async () => {
+      try {
+        const response = await getSong(numericSongId);
+        if (response.success && response.data?.album_cover) {
+          const apiCover = buildAssetUri(response.data.album_cover);
+          if (apiCover) {
+            setCoverUri(apiCover);
+          }
+        }
+      } catch (error) {
+        console.error("Error fetching song cover:", error);
+      }
+    };
+
+    fetchCover();
+  }, [image, song_id, numericSongId]);
 
   const getKey = async (song_id: number) =>{
     try {
@@ -108,15 +146,8 @@ const ChooseKey: React.FC = () => {
     }
   };
 
-
-  const renderSong = ({ item }: { item: SongType }) => (
-    <View>
-      <Text>{item.songName}</Text>
-    </View>
-  );
-
   return (
-    <ImageBackground source={{ uri: `${GlobalConstant.API_URL}/${song.image}` }} style={styles.bg}>
+    <ImageBackground source={{ uri: coverUri }} style={styles.bg}>
       {/* Gradient overlay - black from bottom fading to transparent at top */}
       <LinearGradient
         colors={['transparent', 'transparent', 'rgba(0,0,0,0.8)', '#000000']}

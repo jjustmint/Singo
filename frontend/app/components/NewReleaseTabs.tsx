@@ -17,8 +17,13 @@ import { SongType } from '@/api/types/song';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.8;
 const CARD_SPACING = 20;
+const STEP = CARD_WIDTH + CARD_SPACING;
 const VISIBLE_INDEX = 5;
+const AUTO_SCROLL_INTERVAL = 5000;
+const RESET_ANIMATION_DELAY = 650;
 const FALLBACK_IMAGE = 'https://placehold.co/400x400?text=Singo';
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type ReleaseSong = {
   id: string;
@@ -58,6 +63,7 @@ const NewReleaseTabs = () => {
   const rotationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [songs, setSongs] = useState<ReleaseSong[]>([]);
   const [loading, setLoading] = useState(true);
+  const offsetRef = useRef(STEP * VISIBLE_INDEX);
 
   const unloadCurrentSound = useCallback(async () => {
     const currentSound = soundRef.current;
@@ -91,6 +97,30 @@ const NewReleaseTabs = () => {
     );
   };
 
+  const ensurePlayback = useCallback(async (sound: Audio.Sound) => {
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      const status = await sound.getStatusAsync();
+      if (!status.isLoaded) {
+        return false;
+      }
+      if (status.isPlaying) {
+        return true;
+      }
+
+      const position = typeof status.positionMillis === 'number' ? status.positionMillis : 0;
+
+      try {
+        await sound.playFromPositionAsync(position);
+      } catch (error) {
+        console.error('Unable to trigger preview playback', error);
+      }
+
+      await wait(120);
+    }
+
+    return false;
+  }, []);
+
   const stopRotation = useCallback(() => {
     if (rotationIntervalRef.current) {
       clearInterval(rotationIntervalRef.current);
@@ -104,6 +134,19 @@ const NewReleaseTabs = () => {
     }
     return [...songs, ...songs, ...songs];
   }, [songs]);
+
+  useEffect(() => {
+    if (!loopedSongs.length) {
+      return;
+    }
+    const initialIndex = Math.min(VISIBLE_INDEX, loopedSongs.length - 1);
+    positionIndex.current = initialIndex;
+    offsetRef.current = STEP * initialIndex;
+    flatListRef.current?.scrollToOffset({
+      offset: offsetRef.current,
+      animated: false,
+    });
+  }, [loopedSongs.length]);
 
   const resetPosition = useCallback(
     (forceCenter = false) => {
@@ -122,8 +165,9 @@ const NewReleaseTabs = () => {
       }
 
       try {
-        flatListRef.current?.scrollToIndex({
-          index: positionIndex.current,
+        offsetRef.current = STEP * positionIndex.current;
+        flatListRef.current?.scrollToOffset({
+          offset: offsetRef.current,
           animated: false,
         });
       } catch (err) {
@@ -145,21 +189,37 @@ const NewReleaseTabs = () => {
 
     rotationIntervalRef.current = setInterval(() => {
       positionIndex.current += 1;
+      offsetRef.current = STEP * positionIndex.current;
 
-      const total = loopedSongs.length;
-      const boundary = total - VISIBLE_INDEX;
-
-      if (positionIndex.current >= boundary) {
-        resetPosition();
-        return;
-      }
-
-      flatListRef.current?.scrollToIndex({
-        index: positionIndex.current,
+      flatListRef.current?.scrollToOffset({
+        offset: offsetRef.current,
         animated: true,
       });
-    }, 5000);
-  }, [loopedSongs, resetPosition, stopRotation]);
+
+      const boundaryIndex = loopedSongs.length - VISIBLE_INDEX - 1;
+      if (positionIndex.current >= boundaryIndex) {
+        const resetIndex = Math.min(VISIBLE_INDEX, loopedSongs.length - 1);
+        positionIndex.current = resetIndex;
+        offsetRef.current = STEP * resetIndex;
+
+        setTimeout(() => {
+          flatListRef.current?.scrollToOffset({
+            offset: offsetRef.current,
+            animated: false,
+          });
+        }, RESET_ANIMATION_DELAY);
+      }
+    }, AUTO_SCROLL_INTERVAL);
+  }, [loopedSongs, stopRotation]);
+
+  const getItemLayout = useCallback(
+    (_: unknown, index: number) => ({
+      length: STEP,
+      offset: STEP * index,
+      index,
+    }),
+    []
+  );
 
   const playOrPause = async (item: ReleaseSong) => {
     if (!item.preview) {
@@ -190,7 +250,7 @@ const NewReleaseTabs = () => {
           startRotation();
         } else {
           stopRotation();
-         setPreviewLoadingId(item.id);
+          setPreviewLoadingId(item.id);
           await currentSound.playAsync();
           setPlayingId(item.id);
         }
@@ -258,12 +318,7 @@ const NewReleaseTabs = () => {
         }
       };
 
-      const sound = new Audio.Sound();
-      soundRef.current = sound;
-      currentPreviewIdRef.current = item.id;
-      sound.setOnPlaybackStatusUpdate(statusHandler);
-
-      const status = await sound.loadAsync(
+      const { sound, status } = await Audio.Sound.createAsync(
         { uri: item.preview },
         {
           shouldPlay: true,
@@ -272,8 +327,12 @@ const NewReleaseTabs = () => {
           rate: 1,
           shouldCorrectPitch: true,
           progressUpdateIntervalMillis: 250,
-        }
+        },
+        statusHandler
       );
+
+      soundRef.current = sound;
+      currentPreviewIdRef.current = item.id;
 
       console.log('Preview loaded status:', status);
 
@@ -421,12 +480,8 @@ const NewReleaseTabs = () => {
         showsHorizontalScrollIndicator={false}
         renderItem={renderItem}
         keyExtractor={(item, index) => `${item.id}-${index}`}
-        getItemLayout={(_, index) => ({
-          length: CARD_WIDTH + CARD_SPACING,
-          offset: (CARD_WIDTH + CARD_SPACING) * index,
-          index,
-        })}
-        snapToInterval={CARD_WIDTH + CARD_SPACING}
+        getItemLayout={getItemLayout}
+        snapToInterval={STEP}
         decelerationRate="fast"
         initialScrollIndex={
           loopedSongs.length ? Math.min(VISIBLE_INDEX, loopedSongs.length - 1) : undefined

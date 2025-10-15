@@ -29,8 +29,8 @@ import { getSong } from "@/api/song/getSong";
 import { createRecord } from "@/api/createRecord";
 import { getAudioVerById } from "@/api/song/getAudioById";
 import { getLyrics } from "@/api/song/getLyrics";
-import { GlobalConstant } from "@/constant";
 import { LyricLineType } from "@/api/types/lyrics";
+import { buildAssetUri } from "../utils/assetUri";
 
 type MusicPlayerRouteProp = RouteProp<RootStackParamList, "MusicPlayer">;
 type MusicPlayerNavProp = StackNavigationProp<
@@ -50,6 +50,7 @@ const DEFAULT_LYRICS = [
 const FALLBACK_LYRIC_GAP_MS = 4000;
 const ESTIMATED_LYRIC_ROW_HEIGHT = 36;
 const HIGHLIGHT_ANIMATION_DURATION = 220;
+const FALLBACK_COVER = "https://via.placeholder.com/150";
 
 const buildFallbackLyrics = (
   songId: number,
@@ -194,7 +195,15 @@ const MusicPlayer: React.FC = () => {
       await stopAndUnloadCurrentSound();
       const response = await getAudioVerById(songKey.version_id);
       console.log("GETAUDIOVERBYID", response.data);
-      const audioUri = `${GlobalConstant.API_URL}/${response.data.instru_path}`;
+      const audioUri =
+        buildAssetUri(response.data?.instru_path) ??
+        buildAssetUri(response.data?.ori_path);
+
+      if (!audioUri) {
+        console.error("Unable to resolve audio URI from response:", response.data);
+        return;
+      }
+
       console.log("Audio URI:", audioUri);
 
       const { sound: newSound } = await Audio.Sound.createAsync(
@@ -656,7 +665,7 @@ const stopRecording = async () => {
   if (loading) {
     return (
       <ImageBackground
-        source={{ uri: "https://via.placeholder.com/150" }} // Placeholder image
+        source={{ uri: FALLBACK_COVER }}
         style={styles.bgImage}
         resizeMode="cover"
         blurRadius={15}
@@ -669,12 +678,12 @@ const stopRecording = async () => {
     );
   }
 
+  const resolvedCover = buildAssetUri(image) ?? FALLBACK_COVER;
+
   return (
     <ImageBackground
       source={{
-        uri: image
-          ? `${GlobalConstant.API_URL}/${image}`
-          : "https://via.placeholder.com/150",
+        uri: resolvedCover,
       }}
       style={styles.bgImage}
       resizeMode="cover"
@@ -687,7 +696,7 @@ const stopRecording = async () => {
         {/* Header */}
         <View style={styles.header}>
           <Image
-            source={{ uri: `${GlobalConstant.API_URL}/${image}` }}
+            source={{ uri: resolvedCover }}
             style={styles.albumArt}
           />
           <View style={{ marginLeft: 12 }}>
