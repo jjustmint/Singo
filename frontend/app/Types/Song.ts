@@ -3,4 +3,5 @@ export type SongType = {
   image: string;
   songName: string;
   artist: string;
+  previewUrl?: string | null;
 };
