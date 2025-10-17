@@ -51,6 +51,7 @@ const FALLBACK_LYRIC_GAP_MS = 4000;
 const ESTIMATED_LYRIC_ROW_HEIGHT = 36;
 const HIGHLIGHT_ANIMATION_DURATION = 220;
 const FALLBACK_COVER = "https://via.placeholder.com/150";
+const LYRIC_TIMING_UPPER_BOUND_SECONDS = 600;
 
 const buildFallbackLyrics = (
   songId: number,
@@ -69,6 +70,39 @@ const buildFallbackLyrics = (
     song_id: songId,
     lyric: line,
     timestart: index * FALLBACK_LYRIC_GAP_MS,
+  }));
+};
+
+const normaliseLyricTimings = (entries: LyricLineType[]): LyricLineType[] => {
+  if (!entries.length) {
+    return entries;
+  }
+
+  const validTimes = entries
+    .map((item) => item.timestart)
+    .filter(
+      (time): time is number =>
+        typeof time === "number" && !Number.isNaN(time) && time >= 0
+    );
+
+  if (!validTimes.length) {
+    return entries;
+  }
+
+  const maxTime = Math.max(...validTimes);
+  const shouldScaleToMillis =
+    maxTime > 0 && maxTime <= LYRIC_TIMING_UPPER_BOUND_SECONDS;
+
+  if (!shouldScaleToMillis) {
+    return entries;
+  }
+
+  return entries.map((item) => ({
+    ...item,
+    timestart:
+      typeof item.timestart === "number" && !Number.isNaN(item.timestart)
+        ? item.timestart * 1000
+        : item.timestart,
   }));
 };
 
@@ -99,6 +133,7 @@ const MusicPlayer: React.FC = () => {
   );
   const [highlightIndex, setHighlightIndex] = useState(-1);
   const [lyricsContainerHeight, setLyricsContainerHeight] = useState(0);
+  const [lyricsContentHeight, setLyricsContentHeight] = useState(0);
   const lyricsScrollRef = useRef<ScrollView | null>(null);
   const lyricHeightsRef = useRef<Record<number, number>>({});
   const lyricAnimationsRef = useRef<Record<number, Animated.Value>>({});
@@ -250,7 +285,7 @@ const MusicPlayer: React.FC = () => {
         Array.isArray(response.data) &&
         response.data.length > 0
       ) {
-        const sortedLyrics = [...response.data].sort(
+        const sortedLyrics = normaliseLyricTimings([...response.data]).sort(
           (a, b) => a.timestart - b.timestart
         );
         setLyrics(sortedLyrics);
@@ -335,6 +370,7 @@ const MusicPlayer: React.FC = () => {
     lyricAnimationsRef.current = {};
     previousHighlightRef.current = -1;
     setHighlightIndex(-1);
+    setLyricsContentHeight(0);
     setTimeout(() => {
       lyricsScrollRef.current?.scrollTo({
         y: 0,
@@ -364,27 +400,40 @@ const MusicPlayer: React.FC = () => {
     setLyricsContainerHeight(event.nativeEvent.layout.height);
   }, []);
 
-  const getScrollOffsetForIndex = useCallback(
+  const handleContentSizeChange = useCallback((_: number, height: number) => {
+    setLyricsContentHeight(height);
+  }, []);
+
+  const getLineMetrics = useCallback(
     (index: number) => {
-      if (index < 0) {
+      let top = 0;
+      for (let i = 0; i < index; i++) {
+        top += lyricHeightsRef.current[i] ?? ESTIMATED_LYRIC_ROW_HEIGHT;
+      }
+      const height =
+        lyricHeightsRef.current[index] ?? ESTIMATED_LYRIC_ROW_HEIGHT;
+      return { top, height };
+    },
+    []
+  );
+
+  const computeCenteredOffset = useCallback(
+    (index: number) => {
+      if (lyricsContainerHeight <= 0) {
         return 0;
       }
 
-      let offset = 0;
-      for (let i = 0; i < index; i++) {
-        offset += lyricHeightsRef.current[i] ?? ESTIMATED_LYRIC_ROW_HEIGHT;
-      }
-
-      const lineHeight =
-        lyricHeightsRef.current[index] ?? ESTIMATED_LYRIC_ROW_HEIGHT;
-      const centerOffset = Math.max(
-        lyricsContainerHeight / 2 - lineHeight / 2,
+      const { top, height } = getLineMetrics(index);
+      const lineMidpoint = top + height / 2;
+      const desiredOffset = lineMidpoint - lyricsContainerHeight / 2;
+      const maxOffset = Math.max(
+        lyricsContentHeight - lyricsContainerHeight,
         0
       );
 
-      return Math.max(offset - centerOffset, 0);
+      return Math.min(Math.max(desiredOffset, 0), maxOffset);
     },
-    [lyricsContainerHeight]
+    [getLineMetrics, lyricsContainerHeight, lyricsContentHeight]
   );
 
   const scrollToHighlight = useCallback(
@@ -397,16 +446,16 @@ const MusicPlayer: React.FC = () => {
         return;
       }
 
-      const scrollOffset = getScrollOffsetForIndex(index);
+      const targetOffset = computeCenteredOffset(index);
 
       requestAnimationFrame(() => {
         lyricsScrollRef.current?.scrollTo({
-          y: scrollOffset,
+          y: targetOffset,
           animated,
         });
       });
     },
-    [getScrollOffsetForIndex, lyricsContainerHeight]
+    [computeCenteredOffset, lyricsContainerHeight]
   );
 
   const ensureLineAnimation = useCallback(
@@ -439,7 +488,7 @@ const MusicPlayer: React.FC = () => {
     if (highlightIndex >= 0) {
       scrollToHighlight(highlightIndex, false);
     }
-  }, [lyricsContainerHeight, highlightIndex, scrollToHighlight]);
+  }, [lyricsContainerHeight, lyricsContentHeight, highlightIndex, scrollToHighlight]);
 
   useEffect(() => {
     const previousIndex = previousHighlightRef.current;
@@ -712,6 +761,7 @@ const stopRecording = async () => {
               ref={lyricsScrollRef}
               contentContainerStyle={styles.lyricsContainer}
               showsVerticalScrollIndicator={false}
+              onContentSizeChange={handleContentSizeChange}
             >
               {lyrics.map((line, index) => {
                 const isActive = index === highlightIndex;
@@ -885,7 +935,7 @@ const styles = StyleSheet.create({
   },
   lyricsWrapper: {
     flex: 1,
-    justifyContent: "center", // vertical center
+    justifyContent: "flex-start",
     width: "90%",
     marginTop: 40,
   },
