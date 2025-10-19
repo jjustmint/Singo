@@ -8,6 +8,12 @@ from fastapi import FastAPI, UploadFile, Form
 from fastapi.responses import JSONResponse
 from spleeter.separator import Separator
 import requests
+import gc
+import os
+
+os.environ["TF_FORCE_GPU_ALLOW_GROWTH"] = "true"
+os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
+os.environ["TF_NUM_INTEROP_THREADS"] = "1"
 
 app = FastAPI()
 
@@ -71,12 +77,12 @@ def shift_key(original_key: str, steps: int) -> str:
     return NOTES[new_idx]
 
 
-# === Pitch Shift Function ===
 def change_pitch_librosa(input_file: str, output_file: str, pitch_steps: int):
-    """Loads audio, applies pitch shifting, and saves it."""
     y, sr = librosa.load(input_file, sr=None)
     y_shifted = librosa.effects.pitch_shift(y, sr=sr, n_steps=pitch_steps)
     sf.write(output_file, y_shifted, sr)
+    del y, y_shifted
+    gc.collect()
 
 
 # === Create Pitch-Shifted Versions ===
@@ -107,14 +113,12 @@ def create_versions(input_audio: str, song_name: str, original_key: str):
     return version_files
 
 
-# === Separate Vocals & Instrumental ===
+separator = Separator("spleeter:2stems", MWF=True)
+
 def separate_audio(file_path: str, vocal_out: str, instru_out: str):
     """
-    Use Spleeter to separate the provided file into vocals/instrumental and move them
-    to the provided output paths.
+    Separate audio into vocals and instrumental using a persistent Spleeter instance.
     """
-    separator = Separator("spleeter:2stems", MWF=True)
-    # use a temporary dir next to vocal_out so separators output is predictable
     temp_dir = os.path.dirname(vocal_out)
     os.makedirs(temp_dir, exist_ok=True)
 

@@ -23,7 +23,7 @@ app.use(
 
 app.use('/song/*',
   serveStatic({
-    root: './python',
+    root: './',
   })
 )
 

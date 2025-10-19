@@ -3,6 +3,7 @@ import { ConstructResponse } from "../utils/responseConstructor";
 import { createSong, createVersion } from "../models/Song";
 import * as fs from "fs";
 import path = require("path");
+import axios from "axios";
 
 export const CreateSongAndVersionController = async (c: Context) => {
   try {
@@ -13,49 +14,65 @@ export const CreateSongAndVersionController = async (c: Context) => {
     const album_coverFile = formData.get("album_cover") as File | null;
     const previewsongFile = formData.get("previewsong") as File | null;
 
+    const baseUploadDir = path.join(process.cwd(), "data", "uploads", "song", songName);
+    fs.mkdirSync(baseUploadDir, { recursive: true });
+
     // === Save album_cover if provided ===
     let album_cover: string | null = null;
     if (album_coverFile) {
-      const albumDir = path.join("data", "uploads", "song", songName, "albumCover");
+      const albumDir = path.join(baseUploadDir, "albumCover");
       fs.mkdirSync(albumDir, { recursive: true });
       const albumPath = path.join(albumDir, album_coverFile.name);
       const buf = Buffer.from(await album_coverFile.arrayBuffer());
       fs.writeFileSync(albumPath, buf);
-      album_cover = albumPath.replace(/^data[\\/]/, "");
+      album_cover = albumPath.replace(path.join(process.cwd(), "data"), "data");
     }
 
     // === Save previewsong if provided ===
     let previewsong: string | null = null;
     if (previewsongFile) {
-      const previewDir = path.join("data", "uploads", "song", songName, "preview");
+      const previewDir = path.join(baseUploadDir, "preview");
       fs.mkdirSync(previewDir, { recursive: true });
       const previewPath = path.join(previewDir, previewsongFile.name);
       const buf = Buffer.from(await previewsongFile.arrayBuffer());
       fs.writeFileSync(previewPath, buf);
-      previewsong = previewPath.replace(/^data[\\/]/, "");
+      previewsong = previewPath.replace(path.join(process.cwd(), "data"), "data");
     }
 
-    const songBaseDir = path.join("python","song", songName);
-        const vocalDir = path.join(songBaseDir, "vocal");
-        const instruDir = path.join(songBaseDir, "instru");
+    // === Create extra folders for song versions ===
+    const songBaseDir = path.join(process.cwd(), "song", songName);
+    const vocalDir = path.join(songBaseDir, "vocal");
+    const instruDir = path.join(songBaseDir, "instru");
 
-        fs.mkdirSync(vocalDir, { recursive: true });
-        fs.mkdirSync(instruDir, { recursive: true });
+    fs.mkdirSync(vocalDir, { recursive: true });
+    fs.mkdirSync(instruDir, { recursive: true });
 
     // === Send main audio file to FastAPI ===
     const backendForm = new FormData();
     backendForm.append("song", song);
     backendForm.append("song_name", songName);
 
-    const response = await fetch("http://shift-splitting-api:8085/upload-song", {
-      method: "POST",
-      body: backendForm,
-    });
-    
-    const result = await response.json();
+    let result;
+    try {
+      const response = await axios.post(
+        "http://localhost:8085/upload-song",
+        backendForm,
+        {
+          timeout: 1800000, // 30 minutes
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity,
+        }
+      );
+      result = response.data;
+    } catch (error: any) {
+      console.error("Error calling shift-splitting API:", error.message);
+      return c.json(ConstructResponse(false, `Shift-splitting API error: ${error.message}`, 500));
+    }
 
-    if (!response.ok || result.status !== "success") {
-      return c.json(ConstructResponse(false, result.message || "Error from compare API", 400));
+    if (!result || result.status !== "success") {
+      return c.json(
+        ConstructResponse(false, result?.message || "Error from split API", 400)
+      );
     }
 
     // === Step 1: Create song record in DB ===

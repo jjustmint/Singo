@@ -4,13 +4,15 @@
     "dev": "bun run --hot src/index.ts",
     "pull": "bunx prisma db pull && bunx prisma generate",
     "compile": "bun build src/index.ts --outdir dist --target bun",
-    "start" : "bun run dist/index.js"
+    "start": "bun run dist/index.js"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.1",
     "@prisma/client": "^6.7.0",
     "@types/fluent-ffmpeg": "^2.1.27",
+    "axios": "^1.12.2",
     "fluent-ffmpeg": "^2.1.3",
+    "form-data": "^4.0.4",
     "hono": "^4.9.7",
     "uvicorn": "^0.0.1-security"
   },
