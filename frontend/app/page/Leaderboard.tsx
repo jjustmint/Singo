@@ -22,7 +22,7 @@ import { resolveProfileImage } from "../components/ProfileInfo";
 
 const { height } = Dimensions.get("window");
 const CHALLENGE_DEFAULT_START = "2025-09-26";
-const WEEKLY_CHALLENGE_VERSION_ID = 5;
+const WEEKLY_CHALLENGE_VERSION_ID = 5; //comment: replace with actual version ID
 
 // ---------------- Types ----------------
 interface User {
