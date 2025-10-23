@@ -139,11 +139,18 @@ const MusicPlayer: React.FC = () => {
   const lyricAnimationsRef = useRef<Record<number, Animated.Value>>({});
   const previousHighlightRef = useRef(-1);
   const soundRef = useRef<Audio.Sound | null>(null);
+  const vocalSoundRef = useRef<Audio.Sound | null>(null);
+  const vocalResumePositionRef = useRef(0);
+  const vocalSyncingRef = useRef(false);
+  const autoSubmitInProgressRef = useRef(false);
   const recordingRef = useRef<Audio.Recording | null>(null);
   const [image, setImage] = useState<string | undefined>(undefined);
   const [singer, setSinger] = useState<string | undefined>(undefined);
 
   const [loadingResult, setLoadingResult] = useState(false);
+  const [vocalEnabled, setVocalEnabled] = useState(true);
+  const vocalEnabledRef = useRef(vocalEnabled);
+  const [hasVocalTrack, setHasVocalTrack] = useState(false);
 
   useEffect(() => {
     soundRef.current = sound;
@@ -153,28 +160,143 @@ const MusicPlayer: React.FC = () => {
     recordingRef.current = recording;
   }, [recording]);
 
-  const stopAndUnloadCurrentSound = useCallback(async () => {
-    const currentSound = soundRef.current;
-    if (!currentSound) {
+  useEffect(() => {
+    vocalEnabledRef.current = vocalEnabled;
+  }, [vocalEnabled]);
+
+  const stopVocalPlayback = useCallback(async (resetPosition = false) => {
+    const vocalSound = vocalSoundRef.current;
+    if (!vocalSound) {
       return;
     }
 
     try {
-      const status = await currentSound.getStatusAsync();
-      if (status.isLoaded) {
-        if (status.isPlaying) {
-          await currentSound.stopAsync();
-        }
-        await currentSound.unloadAsync();
+      const status = await vocalSound.getStatusAsync();
+      if (!status.isLoaded) {
+        return;
       }
-    } catch (err) {
-      console.error("Error managing sound instance:", err);
-    } finally {
-      soundRef.current = null;
-      setSound(null);
-      setIsPlaying(false);
-      setPosition(0);
+
+      if (status.isPlaying) {
+        if (resetPosition) {
+          await vocalSound.stopAsync();
+        } else {
+          await vocalSound.pauseAsync();
+        }
+      } else if (resetPosition) {
+        await vocalSound.stopAsync();
+      }
+
+      if (resetPosition) {
+        await vocalSound.setPositionAsync(0);
+        vocalResumePositionRef.current = 0;
+      }
+    } catch (error) {
+      console.warn("Failed to stop vocal playback", error);
     }
+  }, []);
+
+  const alignVocalWithInstrument = useCallback(
+    async (shouldPlay: boolean, forceEnable?: boolean) => {
+      const vocalSound = vocalSoundRef.current;
+      const instrumentSound = soundRef.current;
+      if (!vocalSound || !instrumentSound) {
+        return;
+      }
+
+      try {
+        const [instrumentStatus, vocalStatus] = await Promise.all([
+          instrumentSound.getStatusAsync(),
+          vocalSound.getStatusAsync(),
+        ]);
+
+        if (!instrumentStatus.isLoaded || !vocalStatus.isLoaded) {
+          return;
+        }
+
+        const allowPlayback = forceEnable ?? vocalEnabled;
+
+        if (!allowPlayback) {
+          vocalResumePositionRef.current = instrumentStatus.positionMillis ?? vocalResumePositionRef.current;
+          if (vocalStatus.isPlaying) {
+            await vocalSound.pauseAsync();
+          }
+          return;
+        }
+
+        const targetPosition = instrumentStatus.positionMillis ?? 0;
+
+        const difference = Math.abs((vocalStatus.positionMillis ?? 0) - targetPosition);
+        if (difference > 220) {
+          if (vocalSyncingRef.current) {
+            return;
+          }
+          vocalSyncingRef.current = true;
+          try {
+            await vocalSound.setPositionAsync(targetPosition);
+          } finally {
+            vocalSyncingRef.current = false;
+          }
+        }
+
+        vocalResumePositionRef.current = targetPosition;
+
+        if (shouldPlay) {
+          if (!vocalStatus.isPlaying) {
+            await vocalSound.playAsync();
+          }
+        } else if (vocalStatus.isPlaying) {
+          await vocalSound.pauseAsync();
+        }
+      } catch (error) {
+        console.warn("Failed to align vocal track", error);
+      }
+    },
+    [vocalEnabled]
+  );
+
+  const stopAndUnloadCurrentSound = useCallback(async () => {
+    const currentInstrument = soundRef.current;
+    const currentVocal = vocalSoundRef.current;
+
+    if (currentInstrument) {
+      try {
+        const status = await currentInstrument.getStatusAsync();
+        if (status.isLoaded) {
+          if (status.isPlaying) {
+            await currentInstrument.stopAsync();
+          }
+          await currentInstrument.unloadAsync();
+        }
+      } catch (err) {
+        console.error("Error managing sound instance:", err);
+      } finally {
+        soundRef.current = null;
+      }
+    }
+
+    if (currentVocal) {
+      try {
+        const vocalStatus = await currentVocal.getStatusAsync();
+        if (vocalStatus.isLoaded) {
+          if (vocalStatus.isPlaying) {
+            await currentVocal.stopAsync();
+          }
+          await currentVocal.unloadAsync();
+        }
+      } catch (err) {
+        console.error("Error unloading vocal sound:", err);
+      } finally {
+        vocalSoundRef.current = null;
+        vocalSyncingRef.current = false;
+      }
+    }
+
+    setSound(null);
+    setIsPlaying(false);
+    setPosition(0);
+    setHasVocalTrack(false);
+    setVocalEnabled(false);
+    vocalResumePositionRef.current = 0;
   }, []);
 
   const stopActiveRecording = useCallback(async () => {
@@ -230,30 +352,59 @@ const MusicPlayer: React.FC = () => {
       await stopAndUnloadCurrentSound();
       const response = await getAudioVerById(songKey.version_id);
       console.log("GETAUDIOVERBYID", response.data);
-      const audioUri =
-        buildAssetUri(response.data?.instru_path) ??
-        buildAssetUri(response.data?.ori_path);
+      const instrumentUri = buildAssetUri(response.data?.instru_path);
+      const vocalUri = buildAssetUri(response.data?.ori_path);
+      const playbackUri = instrumentUri ?? vocalUri;
 
-      if (!audioUri) {
+      if (!playbackUri) {
         console.error("Unable to resolve audio URI from response:", response.data);
         return;
       }
 
-      console.log("Audio URI:", audioUri);
+      console.log("Instrumental URI:", instrumentUri);
+      console.log("Original URI:", vocalUri);
 
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: audioUri },
+      const { sound: newInstrumentSound } = await Audio.Sound.createAsync(
+        { uri: playbackUri },
         { shouldPlay: false }
       );
-      soundRef.current = newSound;
-      setSound(newSound);
+      soundRef.current = newInstrumentSound;
+      setSound(newInstrumentSound);
 
-      const st = await newSound.getStatusAsync();
+      const st = await newInstrumentSound.getStatusAsync();
       if (st.isLoaded && typeof st.durationMillis === "number") {
         setDuration(st.durationMillis / 1000); // keep seconds in state
       }
 
-      newSound.setOnPlaybackStatusUpdate((status) => {
+      const hasSeparateVocal = Boolean(instrumentUri && vocalUri && instrumentUri !== vocalUri);
+      setHasVocalTrack(hasSeparateVocal);
+      setVocalEnabled(hasSeparateVocal);
+
+      if (hasSeparateVocal && vocalUri) {
+        try {
+          const { sound: vocalSound } = await Audio.Sound.createAsync(
+            { uri: vocalUri },
+            { shouldPlay: false, volume: 0.6 }
+          );
+          vocalSoundRef.current = vocalSound;
+        } catch (error) {
+          console.error("Failed to load vocal track:", error);
+          vocalSoundRef.current = null;
+          setHasVocalTrack(false);
+          setVocalEnabled(false);
+        }
+      } else {
+        if (vocalSoundRef.current) {
+          try {
+            await vocalSoundRef.current.unloadAsync();
+          } catch (error) {
+            console.warn("Failed to unload existing vocal sound:", error);
+          }
+        }
+        vocalSoundRef.current = null;
+      }
+
+      newInstrumentSound.setOnPlaybackStatusUpdate((status) => {
         if (!status.isLoaded) return;
 
         if (typeof status.positionMillis === "number") {
@@ -264,9 +415,27 @@ const MusicPlayer: React.FC = () => {
         }
         setIsPlaying(status.isPlaying === true);
 
+        const vocalSound = vocalSoundRef.current;
+        if (vocalSound) {
+          const isVocalEnabled = vocalEnabledRef.current;
+          if (status.didJustFinish) {
+            void stopVocalPlayback(true);
+          } else if (isVocalEnabled) {
+            void alignVocalWithInstrument(status.isPlaying === true);
+          } else {
+            vocalResumePositionRef.current = status.positionMillis ?? vocalResumePositionRef.current;
+          }
+        }
+
         if (status.didJustFinish) {
           setIsPlaying(false);
           setPosition(0);
+          if (!autoSubmitInProgressRef.current) {
+            const activeRecording = recordingRef.current ?? recording;
+            if (activeRecording) {
+              void stopRecording(true);
+            }
+          }
         }
       });
     } catch (e) {
@@ -304,6 +473,13 @@ const MusicPlayer: React.FC = () => {
     getAudioById();
   }, []);
 
+  useEffect(() => {
+    if (!hasVocalTrack || !vocalSoundRef.current || !vocalEnabled) {
+      return;
+    }
+    void alignVocalWithInstrument(isPlaying, true);
+  }, [alignVocalWithInstrument, hasVocalTrack, isPlaying, vocalEnabled]);
+
   const playInstrumental = async () => {
     try {
       const currentSound = soundRef.current;
@@ -311,20 +487,76 @@ const MusicPlayer: React.FC = () => {
         console.error("Sound is not loaded");
         return;
       }
-      // await Audio.setAudioModeAsync({
-      //   allowsRecordingIOS: false,
-      //   playsInSilentModeIOS: true,
-      //   staysActiveInBackground: true,
-      //   interruptionModeIOS: InterruptionModeIOS.DoNotMix,
-      //   interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-      //   shouldDuckAndroid: false,
-      //   playThroughEarpieceAndroid: false,
-      // });
-      await currentSound.playAsync();
+      const status = await currentSound.getStatusAsync();
+      if (!status.isLoaded) {
+        console.error("Instrumental sound is not fully loaded");
+        return;
+      }
+
+      if (!status.isPlaying) {
+        if (typeof status.positionMillis === "number" && status.positionMillis > 0) {
+          await currentSound.playFromPositionAsync(status.positionMillis);
+        } else {
+          await currentSound.playAsync();
+        }
+      }
+
+      if (vocalSoundRef.current && vocalEnabledRef.current) {
+        await alignVocalWithInstrument(true);
+      }
     } catch (error) {
       console.error("Error playing instrumental:", error);
     }
   };
+
+  const toggleVocalLayer = useCallback(async () => {
+    if (!hasVocalTrack) {
+      return;
+    }
+
+    const nextEnabled = !vocalEnabled;
+    setVocalEnabled(nextEnabled);
+
+    const instrumentSound = soundRef.current;
+    const vocalSound = vocalSoundRef.current;
+
+    if (!vocalSound) {
+      return;
+    }
+
+    try {
+      if (!nextEnabled) {
+        if (instrumentSound) {
+          const status = await instrumentSound.getStatusAsync();
+          if (status.isLoaded) {
+            vocalResumePositionRef.current = status.positionMillis ?? vocalResumePositionRef.current;
+          }
+        }
+        await stopVocalPlayback(false);
+      } else {
+        const instrumentStatus = instrumentSound ? await instrumentSound.getStatusAsync() : null;
+        const targetPosition =
+          instrumentStatus && instrumentStatus.isLoaded
+            ? instrumentStatus.positionMillis ?? vocalResumePositionRef.current
+            : vocalResumePositionRef.current;
+
+        vocalSyncingRef.current = true;
+        try {
+          await vocalSound.setPositionAsync(targetPosition);
+        } finally {
+          vocalSyncingRef.current = false;
+        }
+
+        vocalResumePositionRef.current = targetPosition;
+
+        if (instrumentStatus?.isLoaded && instrumentStatus.isPlaying) {
+          await vocalSound.playAsync();
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to toggle vocal layer", error);
+    }
+  }, [hasVocalTrack, stopVocalPlayback, vocalEnabled]);
 
   useEffect(() => {
     (async () => {
@@ -564,6 +796,7 @@ const MusicPlayer: React.FC = () => {
 
   const startRecording = async () => {
     try {
+      autoSubmitInProgressRef.current = false;
       console.log("Requesting microphone permissions...");
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
@@ -610,13 +843,24 @@ type CreateRecordResponse = {
   data: CreateRecordResponseData;
 };
 
-const stopRecording = async () => {
-  if (!recording) return;
+const stopRecording = async (triggeredByAuto = false) => {
+  const activeRecording = recordingRef.current ?? recording;
+  if (!activeRecording) {
+    return;
+  }
+
+  if (autoSubmitInProgressRef.current && triggeredByAuto) {
+    return;
+  }
+
+  if (!autoSubmitInProgressRef.current) {
+    autoSubmitInProgressRef.current = true;
+  }
 
   try {
     // Stop and unload the recording
-    await recording.stopAndUnloadAsync();
-    const uri = recording.getURI();
+    await activeRecording.stopAndUnloadAsync();
+    const uri = activeRecording.getURI();
     setRecordingUri(uri);
     recordingRef.current = null;
     setRecording(null);
@@ -626,6 +870,20 @@ const stopRecording = async () => {
       await sound.stopAsync();
       await sound.unloadAsync();
       setSound(null);
+    }
+
+    if (vocalSoundRef.current) {
+      try {
+        await stopVocalPlayback(true);
+        await vocalSoundRef.current.unloadAsync();
+      } catch (error) {
+        console.warn("Failed to reset vocal track after recording", error);
+      } finally {
+        vocalSoundRef.current = null;
+        vocalSyncingRef.current = false;
+        setHasVocalTrack(false);
+        setVocalEnabled(false);
+      }
     }
 
     console.log("Recording stopped and instrumental audio unloaded");
@@ -846,10 +1104,14 @@ const stopRecording = async () => {
 
         {/* Controls */}
         <View style={styles.controls}>
-          <TouchableOpacity onPress={() => {}}>
+          <TouchableOpacity
+            onPress={toggleVocalLayer}
+            style={[styles.vocalToggle, !hasVocalTrack && styles.vocalToggleDisabled]}
+            disabled={!hasVocalTrack}
+          >
             <Ionicons
-              name={isPlaying ? "pause" : "play"}
-              size={36}
+              name={vocalEnabled ? "volume-high" : "volume-mute"}
+              size={28}
               color="white"
             />
           </TouchableOpacity>
@@ -858,7 +1120,11 @@ const stopRecording = async () => {
             <Ionicons name="mic" size={50} color="white" />
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={stopRecording}>
+          <TouchableOpacity
+            onPress={stopRecording}
+            disabled={!recording}
+            style={!recording ? styles.confirmDisabled : undefined}
+          >
             <MaterialIcons name="done" size={28} color="white" />
           </TouchableOpacity>
         </View>
@@ -977,12 +1243,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 80,
   },
+  vocalToggle: {
+    backgroundColor: "rgba(107, 107, 107, 0.5)",
+    padding: 12,
+    borderRadius: 30,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  vocalToggleDisabled: {
+    opacity: 0.4,
+  },
   micButton: {
     backgroundColor: "rgba(107, 107, 107, 0.5)",
     padding: 20,
     borderRadius: 50,
     justifyContent: "center",
     alignItems: "center",
+  },
+  confirmDisabled: {
+    opacity: 0.4,
   },
   animationContainer: {
     flexDirection: "row",
