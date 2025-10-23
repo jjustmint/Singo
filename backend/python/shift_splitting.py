@@ -144,7 +144,7 @@ async def upload_song(song: UploadFile, song_name: str = Form(...)):
             f.write(await song.read())
 
         # === Step 1: Call external FastAPI to detect original key ===
-        key_api = "http://localhost:8083/keydetect"
+        key_api = "http://keydetector-api:8083/keydetect"
         with open(input_path, "rb") as f:
             resp = requests.post(key_api, files={"file": (f"{song_name}.mp3", f, "audio/mpeg")})
         if resp.status_code != 200:

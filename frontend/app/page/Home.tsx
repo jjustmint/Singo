@@ -46,6 +46,7 @@ export default function Home() {
   const [username, setUsername] = useState<string>("");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
+  const [userKey, setUserKey] = useState<string | null>(null);
 
   const buildPhotoUrl = useCallback((photo?: string | null) => {
     if (typeof photo !== "string" || photo.length === 0) {
@@ -69,8 +70,11 @@ export default function Home() {
     const fetchedUsername = await getUser();
     const user = fetchedUsername.data.username;
     const photo = fetchedUsername.data.photo ?? null;
+    const preferredKey = fetchedUsername.data.user_key ?? null; 
     setUsername(user);
     setPhotoUrl(buildPhotoUrl(photo));
+    setUserKey(preferredKey);
+    console.log("🎵 userKey:", preferredKey); 
     console.log("Fetched username:", fetchedUsername);
   }, [buildPhotoUrl]);
 
@@ -244,7 +248,7 @@ export default function Home() {
               </Text>
             </View>
             <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
-              <TrendingList song={songs}/>
+              {userKey !== null && <TrendingList song={songs} userKey={userKey} />}
             </View>
 
             {/* Top Rate */}

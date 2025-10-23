@@ -13,7 +13,7 @@ export type TabParamList = {
 // Root stack references the tabs via NavigatorScreenParams
 export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<TabParamList>; // <-- important
-  ChooseKey: { song: SongType; selectedKey?: string | null; versionId?: number };
+  ChooseKey: { song: SongType; selectedKey?: string | null; versionId?: number; userKey?: string | null; };
   SettingScreen: undefined;
   SignIn: undefined;
   voicetest: undefined;

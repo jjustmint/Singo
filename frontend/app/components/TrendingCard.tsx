@@ -11,7 +11,7 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 type RootStackParamList = {
   MainTabs: undefined;
-  ChooseKey: { song: { id: string; songName: string; artist: string; image: string } };
+  ChooseKey: { song: { id: string; songName: string; artist: string; image: string }; userKey?: string | null; };
 };
 
 type NavigationProp = StackNavigationProp<RootStackParamList, "MainTabs">;
@@ -21,18 +21,19 @@ type TrendingSong = SongType & { previewUrl?: string | null };
 
 type TrendingCardProps = {
   song: TrendingSong;
+  userKey?: string | null; 
   isPlaying: boolean;
   isLoading: boolean;
   onToggle: () => void;
 };
 
-const TrendingCard: React.FC<TrendingCardProps> = ({ song, isPlaying, isLoading, onToggle }) => {
+const TrendingCard: React.FC<TrendingCardProps> = ({ song, isPlaying, isLoading, onToggle, userKey }) => {
   const navigation = useNavigation<NavigationProp>();
 
   const imageUri = useMemo(() => buildAssetUri(song.image) ?? "https://i.pinimg.com/564x/11/8e/7f/118e7f4d22f1e5ff4f6e2f1f2d1f3c4b5.jpg", [song.image]);
 
   const handleCardPress = () => {
-    navigation.navigate("ChooseKey", { song });
+    navigation.navigate("ChooseKey", { song, userKey});
   };
 
   return (
@@ -85,7 +86,7 @@ const buildAssetUri = (path?: string | null) => {
   return encodeURI(`${GlobalConstant.API_URL}/${withoutDataPrefix}`);
 };
 
-const TrendingList: React.FC<{ song: TrendingSong[] }> = ({ song }) => {
+const TrendingList: React.FC<{ song: TrendingSong[]; userKey?: string | null }> = ({ song, userKey }) => {
   const soundRef = useRef<Audio.Sound | null>(null);
   const currentIdRef = useRef<string | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
@@ -240,6 +241,7 @@ const TrendingList: React.FC<{ song: TrendingSong[] }> = ({ song }) => {
     ({ item }: { item: TrendingSong }) => (
       <TrendingCard
         song={item}
+        userKey={userKey}
         isPlaying={playingId === item.id}
         isLoading={loadingId === item.id}
         onToggle={() => togglePreview(item)}

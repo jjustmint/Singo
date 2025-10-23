@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { LinearGradient } from 'expo-linear-gradient';
+import { LinearGradient } from "expo-linear-gradient";
 import { getSong } from "@/api/song/getSong";
 import { getSongkey } from "@/api/getSongKey";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
@@ -25,29 +25,29 @@ const ChooseKey: React.FC = () => {
   const route = useRoute<ChooseKeyRouteProp>();
   const navigation = useNavigation<ChooseKeyNavProp>();
 
-  const { song, selectedKey, versionId } = route.params;
-  
-  const [songList, setSongList] = useState<SongKeyType[]>([]);
-  const [keys, setKeys] = useState<String[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isLockedWeekly, setIsLockedWeekly] = useState(false);
+  const { song, selectedKey, versionId, userKey } = route.params;
   const songName = song.songName;
   const artist = song.artist;
   const song_id = song.id;
   const image = song.image;
   const numericSongId = Number.parseInt(song_id, 10);
+
+  const [songList, setSongList] = useState<SongKeyType[]>([]);
+  const [keys, setKeys] = useState<string[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isLockedWeekly, setIsLockedWeekly] = useState(false);
   const [coverUri, setCoverUri] = useState<string>(
     buildAssetUri(image) ?? FALLBACK_COVER
   );
-   // Use songKey.id for the song ID
- // Adjust type to match your navigation structure
 
+  // === Fetch keys and set initial index ===
   useEffect(() => {
     if (Number.isNaN(numericSongId)) {
-      console.warn("Invalid song id provided to ChooseKey:", song_id);
+      console.warn("Invalid song id:", song_id);
       return;
     }
 
+    // Weekly challenge case
     if (selectedKey && versionId) {
       setKeys([selectedKey]);
       setSongList([
@@ -64,70 +64,66 @@ const ChooseKey: React.FC = () => {
       return;
     }
 
+    // Normal case: fetch all keys
     const fetchKeys = async () => {
       try {
-        const result = await getKey(numericSongId);
-        console.log("Song ID:", song_id);
-        console.log("songName:", songName);
-        console.log("artist:", artist);
-        
-        if (result) {
-          console.log("Fetched keys successfully:", result);
+        const data = await getSongkey(numericSongId);
+        const keySignatures = data.data.map((item) => item.key_signature);
+        setKeys(keySignatures);
+        setSongList(data.data);
+
+        console.log("🎵 userKey:", userKey);
+        console.log("🎵 Available keys:", keySignatures);
+
+        if (userKey) {
+          const normalizedUserKey = userKey.toLowerCase().trim();
+
+          // Find best match
+          let index = keySignatures.findIndex(
+            (k) => k.toLowerCase().trim() === normalizedUserKey
+          );
+
+          // Try tonic match if no exact match
+          if (index === -1) {
+            const userTonic = normalizedUserKey.split(" ")[0]; // e.g. "g" from "g minor"
+            index = keySignatures.findIndex((k) =>
+              k.toLowerCase().includes(userTonic)
+            );
+          }
+
+          console.log("🎯 Found index for userKey:", index);
+          setCurrentIndex(index !== -1 ? index : 0);
+        } else {
+          setCurrentIndex(0);
         }
       } catch (error) {
-        console.log("Error fetching keys:", error);
+        console.error("Error fetching keys:", error);
       }
     };
+
     fetchKeys();
-  }, [song_id, songName, artist, selectedKey, versionId, numericSongId]);
+  }, [numericSongId, selectedKey, versionId, userKey, song_id]);
 
+  // === Fetch cover ===
   useEffect(() => {
-    if (Number.isNaN(numericSongId)) {
-      return;
-    }
-
-    const resolvedCover = buildAssetUri(image);
-    if (resolvedCover) {
-      setCoverUri(resolvedCover);
-    } else {
-      setCoverUri(FALLBACK_COVER);
-    }
+    const resolvedCover = buildAssetUri(image) ?? FALLBACK_COVER;
+    setCoverUri(resolvedCover);
 
     const fetchCover = async () => {
       try {
         const response = await getSong(numericSongId);
         if (response.success && response.data?.album_cover) {
           const apiCover = buildAssetUri(response.data.album_cover);
-          if (apiCover) {
-            setCoverUri(apiCover);
-          }
+          if (apiCover) setCoverUri(apiCover);
         }
       } catch (error) {
         console.error("Error fetching song cover:", error);
       }
     };
-
     fetchCover();
-  }, [image, song_id, numericSongId]);
+  }, [image, numericSongId]);
 
-  const getKey = async (song_id: number) =>{
-    try {
-      const data = await getSongkey(song_id);
-      setKeys(data.data.map(item => item.key_signature));
-      setSongList(data.data);
-      console.log("Fetched keys:", keys);
-      if (data.success) {
-        return data;
-      } else {
-        console.error("Failed to fetch key:", data.message);
-        return null;
-      }
-    } catch (error) {
-      console.error("Error fetching key:", error);
-      return null;
-    }
-  }
-
+  // === Navigation buttons ===
   const handleNext = () => {
     if (isLockedWeekly) return;
     if (currentIndex < keys.length - 1) setCurrentIndex(currentIndex + 1);
@@ -148,59 +144,54 @@ const ChooseKey: React.FC = () => {
 
   return (
     <ImageBackground source={{ uri: coverUri }} style={styles.bg}>
-      {/* Gradient overlay - black from bottom fading to transparent at top */}
       <LinearGradient
-        colors={['transparent', 'transparent', 'rgba(0,0,0,0.8)', '#000000']}
+        colors={["transparent", "transparent", "rgba(0,0,0,0.8)", "#000"]}
         locations={[0, 0.3, 0.7, 1]}
         style={styles.gradientOverlay}
       />
-      
-      {/* Back Arrow */}
+
       <TouchableOpacity style={styles.backButton}>
         <Feather name="arrow-left" size={28} color="white" />
       </TouchableOpacity>
-      
-      {/* Song Info */}
+
       <View style={styles.songInfo}>
-        <Text style={styles.title}>{songName ? songName : 'No Title'}</Text>
+        <Text style={styles.title}>{songName ?? "No Title"}</Text>
         <View style={styles.artistRow}>
           <Feather name="user" size={16} color="white" />
-          <Text style={styles.artist}> {artist ? artist : 'Unknown Artist'}</Text>
+          <Text style={styles.artist}>{artist ?? "Unknown Artist"}</Text>
         </View>
       </View>
-      
-      {/* Key Selector */}
+
       <View style={styles.keyContainer}>
         <TouchableOpacity
           onPress={handlePrev}
-          style={[styles.chevronButton, isLockedWeekly && styles.disabledChevron]}
           disabled={isLockedWeekly}
+          style={[
+            styles.chevronButton,
+            isLockedWeekly && styles.disabledChevron,
+          ]}
         >
-          <Feather name="chevron-left" size={40} color="white" right={40} />
+          <Feather name="chevron-left" size={40} color="white" />
         </TouchableOpacity>
+
         <Text style={styles.keyText}>{keys[currentIndex]}</Text>
+
         <TouchableOpacity
           onPress={handleNext}
-          style={[styles.chevronButton, isLockedWeekly && styles.disabledChevron]}
           disabled={isLockedWeekly}
+          style={[
+            styles.chevronButton,
+            isLockedWeekly && styles.disabledChevron,
+          ]}
         >
-          <Feather name="chevron-right" size={40} color="white" left={40} />
+          <Feather name="chevron-right" size={40} color="white" />
         </TouchableOpacity>
       </View>
+
       <Text style={styles.suggested}>
         {isLockedWeekly ? "Weekly challenge key" : "Suggested"}
       </Text>
-      
-      {/* Song List */}
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        {/* <FlatList
-          data={songList}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={renderSong}
-        /> */}
-      </View>
 
-      {/* Confirm Button */}
       <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
         <Feather name="check" size={32} color="#3A6DFF" />
       </TouchableOpacity>
@@ -211,56 +202,27 @@ const ChooseKey: React.FC = () => {
 export default ChooseKey;
 
 const styles = StyleSheet.create({
-  bg: {
-    flex: 1,
-    justifyContent: "flex-start",
-  },
-  gradientOverlay: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  backButton: {
-    position: "absolute",
-    top: 80,
-    left: 20,
-    zIndex: 2,
-  },
-  songInfo: {
-    marginTop: 350,
-    paddingHorizontal: 20,
-  },
+  bg: { flex: 1, justifyContent: "flex-start" },
+  gradientOverlay: { ...StyleSheet.absoluteFillObject },
+  backButton: { position: "absolute", top: 80, left: 20, zIndex: 2 },
+  songInfo: { marginTop: 350, paddingHorizontal: 20 },
   title: {
     fontSize: 24,
     fontWeight: "bold",
     color: "white",
     textTransform: "uppercase",
   },
-  artistRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 5,
-  },
-  artist: {
-    fontSize: 16,
-    color: "white",
-  },
+  artistRow: { flexDirection: "row", alignItems: "center", marginTop: 5 },
+  artist: { fontSize: 16, color: "white" },
   keyContainer: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     marginTop: 100,
   },
-  chevronButton: {
-    padding: 10,
-  },
-  disabledChevron: {
-    opacity: 0.4,
-  },
-  keyText: {
-    fontSize: 50,
-    color: "white",
-    fontWeight: "bold",
-    marginHorizontal: 0,
-  },
+  chevronButton: { padding: 10 },
+  disabledChevron: { opacity: 0.4 },
+  keyText: { fontSize: 50, color: "white", fontWeight: "bold" },
   suggested: {
     textAlign: "center",
     color: "white",
