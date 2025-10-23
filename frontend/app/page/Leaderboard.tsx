@@ -21,7 +21,7 @@ import SongChallenge from "../components/SongChalleng";
 import { resolveProfileImage } from "../components/ProfileInfo";
 
 const { height } = Dimensions.get("window");
-const CHALLENGE_DEFAULT_START = "2025-09-26";
+const CHALLENGE_DEFAULT_START = "2025-09-26"; //comment: replace with actual default start date
 const WEEKLY_CHALLENGE_VERSION_ID = 5; //comment: replace with actual version ID
 
 // ---------------- Types ----------------
