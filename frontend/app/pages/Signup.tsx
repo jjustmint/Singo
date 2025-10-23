@@ -376,7 +376,7 @@ const styles = StyleSheet.create({
     fontFamily: "Kanit_400Regular",
   },
   linkText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#5A5DFF",
     fontWeight: "500",
     fontFamily: "Kanit_500Medium",

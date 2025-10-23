@@ -55,6 +55,10 @@ const LoginScreen: React.FC = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{
+    username?: string;
+    password?: string;
+  }>({});
 
   const router = useRouter();
   const navigation = useNavigation();
@@ -67,11 +71,20 @@ const LoginScreen: React.FC = () => {
   });
 
   const handleLogin = async () => {
-    if (!username || !password) {
-      return Alert.alert("Please enter username and password");
+    const nextErrors: typeof fieldErrors = {};
+    if (!username) {
+      nextErrors.username = "Username is required";
+    }
+    if (!password) {
+      nextErrors.password = "Password is required";
+    }
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors);
+      return;
     }
     setLoading(true);
     try {
+      setFieldErrors({});
       const loginResponse = await LoginApi(username, password);
       if (loginResponse.success) {
         setAuthToken(loginResponse.data);
@@ -144,10 +157,11 @@ const LoginScreen: React.FC = () => {
             style={{ flex: 1, backgroundColor: "transparent" }}
             contentContainerStyle={{ flexGrow: 1 }}
             enableOnAndroid
-            extraScrollHeight={30}
+            enableAutomaticScroll
+            extraScrollHeight={80}
             keyboardOpeningTime={0}
             keyboardShouldPersistTaps="handled"
-            scrollEnabled={false}
+            showsVerticalScrollIndicator={false}
             
           >
             {/* Transparent header content (gradient shows through) */}
@@ -199,11 +213,17 @@ const LoginScreen: React.FC = () => {
                   placeholder="Username"
                   placeholderTextColor="#B7BAC5"
                   value={username}
-                  onChangeText={setUsername}
+                  onChangeText={(value) => {
+                    setUsername(value);
+                    setFieldErrors((prev) => ({ ...prev, username: undefined }));
+                  }}
                   autoCapitalize="none"
                   returnKeyType="next"
                 />
               </View>
+              {fieldErrors.username ? (
+                <Text style={styles.errorText}>{fieldErrors.username}</Text>
+              ) : null}
 
               {/* Password */}
               <View style={styles.inputRow}>
@@ -214,7 +234,10 @@ const LoginScreen: React.FC = () => {
                   placeholderTextColor="#B7BAC5"
                   secureTextEntry={!passwordVisible}
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={(value) => {
+                    setPassword(value);
+                    setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                  }}
                   autoCapitalize="none"
                 />
                 <TouchableOpacity
@@ -228,6 +251,9 @@ const LoginScreen: React.FC = () => {
                   />
                 </TouchableOpacity>
               </View>
+              {fieldErrors.password ? (
+                <Text style={styles.errorText}>{fieldErrors.password}</Text>
+              ) : null}
               {/* Login */}
               <TouchableOpacity style={styles.cta} onPress={handleLogin} activeOpacity={0.9}>
                 {loading ? (
@@ -366,5 +392,13 @@ const styles = StyleSheet.create({
     color: "#6C6F7A",
     fontSize: 14,
     fontFamily: "Kanit_500Medium",
+  },
+  errorText: {
+    color: "#FF6B6B",
+    fontSize: 12,
+    fontFamily: "Kanit_500Medium",
+    marginTop: -8,
+    marginBottom: 12,
+    marginLeft: 6,
   },
 });

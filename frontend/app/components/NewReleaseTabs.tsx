@@ -10,7 +10,9 @@ import {
 } from 'react-native';
 import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { Audio, AVPlaybackStatus } from 'expo-av';
+import { LinearGradient } from 'expo-linear-gradient';
 import { getLatestSongs } from '@/api/song/getLatest';
+import { getAllsongs } from '@/api/song/getAll';
 import { GlobalConstant } from '@/constant';
 import { SongType } from '@/api/types/song';
 
@@ -51,6 +53,8 @@ const mapSongToRelease = (song: SongType): ReleaseSong => ({
   image: toMediaUri(song.album_cover) ?? FALLBACK_IMAGE,
   preview: toMediaUri(song.previewsong),
 });
+
+const LATEST_LIMIT = 5;
 
 const NewReleaseTabs = () => {
   const flatListRef = useRef<FlatList>(null);
@@ -360,12 +364,20 @@ const NewReleaseTabs = () => {
     const fetchSongs = async () => {
       try {
         setLoading(true);
-        const response = await getLatestSongs(5);
-        if (mounted && response.success && response.data) {
-          const mapped = response.data.map(mapSongToRelease);
-          setSongs(mapped);
-        } else if (mounted) {
-          setSongs([]);
+        const response = await getLatestSongs(LATEST_LIMIT);
+        let workingList: SongType[] = Array.isArray(response?.data) ? response.data : [];
+
+        if ((!response?.success || workingList.length === 0)) {
+          const fallbackResponse = await getAllsongs();
+          if (fallbackResponse.success && Array.isArray(fallbackResponse.data)) {
+            workingList = [...fallbackResponse.data]
+              .sort((a, b) => b.song_id - a.song_id)
+              .slice(0, LATEST_LIMIT);
+          }
+        }
+
+        if (mounted) {
+          setSongs(workingList.map(mapSongToRelease));
         }
       } catch (error) {
         console.error('Failed to fetch latest songs', error);
@@ -413,9 +425,6 @@ const NewReleaseTabs = () => {
   }, [loopedSongs.length, playingId, resetPosition, startRotation, stopRotation, unloadCurrentSound]);
 
   const renderItem = ({ item }: { item: ReleaseSong }) => {
-    const isLiked = liked.includes(item.id);
-    const isPlaying = playingId === item.id;
-
     return (
       <View style={{ marginHorizontal: CARD_SPACING / 2 }}>
         <ImageBackground
@@ -423,21 +432,17 @@ const NewReleaseTabs = () => {
           style={styles.card}
           imageStyle={{ borderRadius: 20 }}
         >
+          <LinearGradient
+            colors={['rgba(0,0,0,0.75)', 'rgba(0,0,0,0)']}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={[StyleSheet.absoluteFillObject, { borderRadius: 20 }]}
+            pointerEvents="none"
+          />
           <View style={styles.textContainer}>
             <Text style={styles.songName}>{item.name}</Text>
             <Text style={styles.singer}>{item.singer}</Text>
           </View>
-
-          <TouchableOpacity
-            style={styles.likeIcon}
-            onPress={() => toggleLike(item.id)}
-          >
-            <FontAwesome
-              name={isLiked ? 'heart' : 'heart-o'}
-              size={24}
-              color="#fff"
-            />
-          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.previewButton}
@@ -445,7 +450,7 @@ const NewReleaseTabs = () => {
             disabled={!item.preview}
           >
             <MaterialIcons
-              name={isPlaying ? 'pause' : 'play-arrow'}
+              name={playingId === item.id ? 'pause' : 'play-arrow'}
               size={28}
               color={item.preview ? '#3D35FF' : '#999'}
             />
@@ -512,11 +517,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     marginTop: 2,
-  },
-  likeIcon: {
-    position: 'absolute',
-    bottom: 16,
-    left: 16,
   },
   previewButton: {
     position: 'absolute',
