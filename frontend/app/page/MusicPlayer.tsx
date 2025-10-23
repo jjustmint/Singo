@@ -1121,7 +1121,7 @@ const stopRecording = async (triggeredByAuto = false) => {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={stopRecording}
+            onPress={() => stopRecording()}
             disabled={!recording}
             style={!recording ? styles.confirmDisabled : undefined}
           >
