@@ -1,12 +1,15 @@
 import React from "react";
-import { View, Text, Image, StyleSheet } from "react-native";
+import { View, Text, Image, StyleSheet, TouchableOpacity } from "react-native";
 import { GlobalConstant } from "@/constant";
+import { Ionicons } from "@expo/vector-icons";
 
 interface Props {
   songCount: number;
   isLoading?: boolean;
   name?: string;
   photo?: string | null;
+  userKey?: string | null;
+  onTestKeyPress?: () => void;
 }
 
 export const resolveProfileImage = (photo?: string | null) => {
@@ -28,7 +31,14 @@ export const resolveProfileImage = (photo?: string | null) => {
   return `${GlobalConstant.API_URL}/${withoutDataPrefix}`;
 };
 
-const ProfileInfo: React.FC<Props> = ({ songCount, isLoading, name = "Guest", photo }) => {
+const ProfileInfo: React.FC<Props> = ({
+  songCount,
+  isLoading,
+  name = "Guest",
+  photo,
+  userKey,
+  onTestKeyPress,
+}) => {
   const resolvedImage = resolveProfileImage(photo);
   const initials = name ? name.charAt(0).toUpperCase() : "U";
 
@@ -41,7 +51,14 @@ const ProfileInfo: React.FC<Props> = ({ songCount, isLoading, name = "Guest", ph
           <View style={styles.skeletonImage} />
           <View style={styles.info}>
             <View style={styles.skeletonLineLarge} />
-            <View style={styles.skeletonLineSmall} />
+            <View style={styles.skeletonKeyRow}>
+              <View style={styles.skeletonIcon} />
+              <View style={styles.skeletonLineMedium} />
+            </View>
+            <View style={styles.skeletonActionsRow}>
+              <View style={styles.skeletonTag} />
+              <View style={styles.skeletonButton} />
+            </View>
           </View>
         </>
       ) : (
@@ -55,7 +72,25 @@ const ProfileInfo: React.FC<Props> = ({ songCount, isLoading, name = "Guest", ph
           )}
           <View style={styles.info}>
             <Text style={styles.name}>{name || "Guest"}</Text>
-            <Text style={styles.countValue}>{songCount}</Text>
+            <View style={styles.keyRow}>
+              <Ionicons name="musical-notes-outline" size={16} color="#fff" />
+              <Text style={styles.keyText}>
+                {userKey ? `Vocal Key: ${userKey}` : "No vocal key detected yet"}
+              </Text>
+            </View>
+            <View style={styles.actionsRow}>
+              <Text style={styles.countValue}>Songs practised: {songCount}</Text>
+              {onTestKeyPress && (
+                <TouchableOpacity
+                  style={styles.testKeyButton}
+                  onPress={onTestKeyPress}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="mic-outline" size={16} color="#131313" />
+                  <Text style={styles.testKeyLabel}>Test Key</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </>
       )}
@@ -89,29 +124,90 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
     marginTop: 2,
+    marginRight: 12,
     backgroundColor: "#6C63FF",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 20,
   },
+  keyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  keyText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "500",
+    marginLeft: 6,
+  },
+  actionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 12,
+  },
+  testKeyButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 18,
+  },
+  testKeyLabel: {
+    marginLeft: 6,
+    color: "#131313",
+    fontSize: 14,
+    fontWeight: "600",
+  },
   skeletonImage: {
     width: 80,
     height: 80,
     borderRadius: 50,
-    backgroundColor: "#2b2b2b",
+    backgroundColor: "#1c1c1c",
   },
   skeletonLineLarge: {
     width: 160,
     height: 20,
     borderRadius: 10,
     backgroundColor: "#2b2b2b",
+    marginBottom: 10,
   },
-  skeletonLineSmall: {
-    width: 100,
-    height: 14,
+  skeletonLineMedium: {
+    width: 140,
+    height: 16,
     borderRadius: 8,
     backgroundColor: "#2b2b2b",
-    marginTop: 10,
+  },
+  skeletonKeyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 14,
+  },
+  skeletonIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#2b2b2b",
+    marginRight: 10,
+  },
+  skeletonActionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 16,
+  },
+  skeletonTag: {
+    width: 140,
+    height: 18,
+    borderRadius: 10,
+    backgroundColor: "#2b2b2b",
+    marginRight: 12,
+  },
+  skeletonButton: {
+    width: 100,
+    height: 32,
+    borderRadius: 18,
+    backgroundColor: "#2b2b2b",
   },
   placeholder: {
     width: 80,

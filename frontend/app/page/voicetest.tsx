@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  DeviceEventEmitter,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -18,6 +19,7 @@ import {
   Kanit_700Bold,
 } from "@expo-google-fonts/kanit";
 import { updateKey } from "@/api/updateKey";
+import { CommonActions } from "@react-navigation/native";
 
 const VoiceTestScreen = ({ navigation }: any) => {
   const [step, setStep] = useState(0);
@@ -92,9 +94,14 @@ const VoiceTestScreen = ({ navigation }: any) => {
     try {
       setProcessing(true);
       const response = await updateKey(uri);
-      setKey(response?.data ?? null);
-      if (response?.success) setStep(4);
-      else Alert.alert("Error", response?.message || "Failed to update key.");
+      if (response?.success) {
+        setKey(response?.data ?? null);
+        DeviceEventEmitter.emit("profile:updated");
+        setStep(4);
+      } else {
+        setKey(null);
+        Alert.alert("Error", response?.message || "Failed to update key.");
+      }
     } catch (error) {
       console.error("Update key error", error);
       Alert.alert("Error", "An error occurred while updating the key.");
@@ -301,18 +308,17 @@ const VoiceTestScreen = ({ navigation }: any) => {
                 <TouchableOpacity
                   style={[styles.mainButton, styles.step4NextBtn]}
                   onPress={() => {
-                    navigation.reset({
-                      index: 0,
-                      routes: [
-                        {
-                          name: "MainTabs" as never, // must match your Stack.Screen
-                          state: {
-                            index: 0,
-                            routes: [{ name: "Home" as never }], // a tab inside MainTabs
+                    navigation.dispatch(
+                      CommonActions.reset({
+                        index: 0,
+                        routes: [
+                          {
+                            name: "MainTabs",
+                            params: { screen: "Profile" },
                           },
-                        },
-                      ],
-                    });
+                        ],
+                      })
+                    );
                   }}
                 >
                   <Ionicons name="arrow-forward" size={25} color="#fff" />
