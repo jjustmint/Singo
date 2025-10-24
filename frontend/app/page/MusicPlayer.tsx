@@ -42,32 +42,25 @@ type MusicPlayerNavProp = StackNavigationProp<
   "MusicPlayer"
 >;
 
-const DEFAULT_LYRICS = [
-  "Feel the rhythm meet the night sky glow,",
-  "Let every heartbeat echo what you know.",
-  "Chasing echoes through the silver air,",
-  "Singing stories only we can share.",
-  "Hold the chorus, let the verses fly,",
-  "This melody is yours and mine to try.",
-];
-
 const FALLBACK_LYRIC_GAP_MS = 4000;
 const ESTIMATED_LYRIC_ROW_HEIGHT = 36;
 const HIGHLIGHT_ANIMATION_DURATION = 220;
 const FALLBACK_COVER = "https://via.placeholder.com/150";
 const LYRIC_TIMING_UPPER_BOUND_SECONDS = 600;
+const LYRICS_UNAVAILABLE_MESSAGE = "This song does not support lyrics yet.";
 
 const buildFallbackLyrics = (
   songId: number,
   fallbackRaw?: string | null
 ): LyricLineType[] => {
-  const source =
-    fallbackRaw && fallbackRaw.trim().length > 0
-      ? fallbackRaw
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter((line) => line.length > 0)
-      : DEFAULT_LYRICS;
+  if (!fallbackRaw) {
+    return [];
+  }
+
+  const source = fallbackRaw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
 
   return source.map((line, index) => ({
     lyric_id: -(index + 1),
@@ -132,8 +125,9 @@ const MusicPlayer: React.FC = () => {
 
   const songName = songKey.song_id;
   const [title, setTitle] = useState<string | undefined>(undefined);
-  const [lyrics, setLyrics] = useState<LyricLineType[]>(() =>
-    buildFallbackLyrics(songKey.song_id)
+  const [lyrics, setLyrics] = useState<LyricLineType[]>([]);
+  const [lyricsMessage, setLyricsMessage] = useState<string | null>(
+    "Loading lyrics..."
   );
   const [highlightIndex, setHighlightIndex] = useState(-1);
   const [lyricsContainerHeight, setLyricsContainerHeight] = useState(0);
@@ -504,6 +498,8 @@ const MusicPlayer: React.FC = () => {
     song_id: number,
     fallbackRaw?: string | null
   ) => {
+    setLyrics([]);
+    setLyricsMessage("Loading lyrics...");
     try {
       const response = await getLyrics(song_id);
       if (
@@ -515,6 +511,7 @@ const MusicPlayer: React.FC = () => {
           (a, b) => a.timestart - b.timestart
         );
         setLyrics(sortedLyrics);
+        setLyricsMessage(null);
         return sortedLyrics;
       }
     } catch (error) {
@@ -522,8 +519,15 @@ const MusicPlayer: React.FC = () => {
     }
 
     const fallbackLyrics = buildFallbackLyrics(song_id, fallbackRaw);
-    setLyrics(fallbackLyrics);
-    return fallbackLyrics;
+    if (fallbackLyrics.length > 0) {
+      setLyrics(fallbackLyrics);
+      setLyricsMessage(null);
+      return fallbackLyrics;
+    }
+
+    setLyrics([]);
+    setLyricsMessage(LYRICS_UNAVAILABLE_MESSAGE);
+    return [];
   };
 
   useEffect(() => {
@@ -1070,8 +1074,8 @@ const stopRecording = async (triggeredByAuto = false) => {
         </View>
 
         {/* Lyrics */}
-        {lyrics.length > 0 && (
-          <View style={styles.lyricsWrapper} onLayout={handleLyricsLayout}>
+        <View style={styles.lyricsWrapper} onLayout={handleLyricsLayout}>
+          {lyrics.length > 0 ? (
             <ScrollView
               ref={lyricsScrollRef}
               contentContainerStyle={styles.lyricsContainer}
@@ -1138,8 +1142,14 @@ const stopRecording = async (triggeredByAuto = false) => {
                 );
               })}
             </ScrollView>
-          </View>
-        )}
+          ) : (
+            <View style={styles.lyricsPlaceholder}>
+              <Text style={styles.lyricsPlaceholderText}>
+                {lyricsMessage ?? "Loading lyrics..."}
+              </Text>
+            </View>
+          )}
+        </View>
 
         {/* Slider */}
         <View style={styles.progressContainer}>
@@ -1265,6 +1275,17 @@ const styles = StyleSheet.create({
   lyricsContainer: {
     paddingHorizontal: 12,
     paddingVertical: 12,
+  },
+  lyricsPlaceholder: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  lyricsPlaceholderText: {
+    color: "rgba(255, 255, 255, 0.6)",
+    fontSize: 16,
+    textAlign: "center",
   },
   lyricRow: {
     width: "100%",

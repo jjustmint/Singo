@@ -53,16 +53,8 @@ type UserRecord = {
 
 // ------------------- MAPPER -------------------
 function buildAlbumCoverUri(cover: string | null): string {
-  if (!cover) {
-    return "https://placehold.co/300x300";
-  }
-
-  if (/^https?:\/\//i.test(cover)) {
-    return cover;
-  }
-
-  const sanitized = cover.replace(/^\/+/, "");
-  return `${GlobalConstant.API_URL}/${sanitized}`;
+  const resolved = buildAssetUri(cover);
+  return resolved ?? "https://placehold.co/300x300";
 }
 
 function mapApiSongToAppSong(song: ApiSongType): SongType {
