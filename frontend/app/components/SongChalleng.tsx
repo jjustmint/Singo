@@ -14,9 +14,9 @@ import { StackNavigationProp } from "@react-navigation/stack";
 
 import { getSong } from "@/api/song/getSong";
 import { getAudioVerById } from "@/api/song/getAudioById";
-import { GlobalConstant } from "@/constant";
 import { RootStackParamList } from "../Types/Navigation";
 import { SongType } from "../Types/Song";
+import { resolveProfileImage } from "./ProfileInfo";
 
 interface WeeklySong {
   songId: number;
@@ -28,7 +28,7 @@ interface WeeklySong {
 }
 
 interface Props {
-  audioId: number;
+  audioId?: number | null;
 }
 
 export default function SongChallenge({ audioId }: Props) {
@@ -39,10 +39,11 @@ export default function SongChallenge({ audioId }: Props) {
   const [loading, setLoading] = useState(true);
 
   const buildCoverUri = useCallback((albumCover: string | null | undefined) => {
-    if (!albumCover) {
-      return "https://via.placeholder.com/150";
+    const resolved = resolveProfileImage(albumCover ?? null);
+    if (resolved) {
+      return resolved;
     }
-    return `${GlobalConstant.API_URL}/${albumCover}`;
+    return "https://via.placeholder.com/150";
   }, []);
 
   const handleNavigate = useCallback(() => {
@@ -63,38 +64,68 @@ export default function SongChallenge({ audioId }: Props) {
   }, [navigation, weeklySong]);
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchWeeklySong = async () => {
       try {
-        setLoading(true);
+        if (isMounted) {
+          setLoading(true);
+        }
+
+        if (!audioId || audioId <= 0) {
+          if (isMounted) {
+            setWeeklySong(null);
+          }
+          return;
+        }
+
         const audioData = await getAudioVerById(audioId);
+        if (!isMounted) return;
+
         if (!audioData?.data?.song_id) {
-          setWeeklySong(null);
+          if (isMounted) {
+            setWeeklySong(null);
+          }
           return;
         }
 
         const songData = await getSong(audioData.data.song_id);
+        if (!isMounted) return;
+
         if (!songData?.data) {
-          setWeeklySong(null);
+          if (isMounted) {
+            setWeeklySong(null);
+          }
           return;
         }
 
-        setWeeklySong({
-          songId: audioData.data.song_id,
-          versionId: audioId,
-          title: songData.data.title || "Unknown Title",
-          singer: songData.data.singer || "Unknown Singer",
-          albumCover: songData.data.album_cover || null,
-          keySignature: audioData.data.key_signature || "N/A",
-        });
+        if (isMounted) {
+          setWeeklySong({
+            songId: audioData.data.song_id,
+            versionId: audioId,
+            title: songData.data.title || "Unknown Title",
+            singer: songData.data.singer || "Unknown Singer",
+            albumCover: songData.data.album_cover || null,
+            keySignature: audioData.data.key_signature || "N/A",
+          });
+        }
       } catch (err) {
         console.error("Failed to fetch weekly song:", err);
-        setWeeklySong(null);
+        if (isMounted) {
+          setWeeklySong(null);
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     fetchWeeklySong();
+
+    return () => {
+      isMounted = false;
+    };
   }, [audioId]);
 
   if (loading) {
