@@ -12,11 +12,15 @@ import {
   LayoutChangeEvent,
   Animated,
 } from "react-native";
-import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from "expo-av";
+import {
+  Audio,
+  InterruptionModeAndroid,
+  InterruptionModeIOS,
+  AVPlaybackStatusToSet,
+} from "expo-av";
+import { Directory, File, Paths } from "expo-file-system";
 import Slider from "@react-native-community/slider";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-//import * as FileSystem from "expo-file-system";
-import { File, Paths } from "expo-file-system";
 import {
   RouteProp,
   useFocusEffect,
@@ -347,6 +351,60 @@ const MusicPlayer: React.FC = () => {
     };
   }, [cleanupAudioResources]);
 
+  const ensureLocalAudioFile = useCallback(async (remoteUri: string) => {
+    try {
+      const cacheRoot = Paths.cache;
+      if (!cacheRoot?.uri) {
+        throw new Error("Cache directory unavailable");
+      }
+
+      const audioCacheDir = new Directory(cacheRoot, "audio-cache");
+      try {
+        audioCacheDir.create({ intermediates: true, idempotent: true });
+      } catch (dirError) {
+        // Directory may already exist; ignore idempotent violations
+        console.warn("Audio cache directory setup warning:", dirError);
+      }
+
+      const lastSegment =
+        remoteUri.split("/").pop()?.split("?")[0].split("#")[0] ??
+        `audio-${Date.now()}.mp3`;
+      const safeFileName = lastSegment.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const targetFile = new File(
+        audioCacheDir,
+        `${Date.now()}-${safeFileName}`
+      );
+
+      const downloadedFile = await File.downloadFileAsync(remoteUri, targetFile, {
+        idempotent: true,
+      });
+
+      return downloadedFile.uri;
+    } catch (error) {
+      console.warn("Falling back to streaming audio due to caching failure", error);
+      return remoteUri;
+    }
+  }, []);
+
+  const loadSoundWithFallback = useCallback(
+    async (
+      uri: string,
+      initialStatus: AVPlaybackStatusToSet = { shouldPlay: false }
+    ) => {
+      try {
+        return await Audio.Sound.createAsync({ uri }, initialStatus);
+      } catch (streamError) {
+        console.warn(
+          "Streaming audio failed, attempting cached download",
+          streamError
+        );
+        const localUri = await ensureLocalAudioFile(uri);
+        return await Audio.Sound.createAsync({ uri: localUri }, initialStatus);
+      }
+    },
+    [ensureLocalAudioFile]
+  );
+
   const getAudioById = async () => {
     try {
       await stopAndUnloadCurrentSound();
@@ -364,9 +422,8 @@ const MusicPlayer: React.FC = () => {
       console.log("Instrumental URI:", instrumentUri);
       console.log("Original URI:", vocalUri);
 
-      const { sound: newInstrumentSound } = await Audio.Sound.createAsync(
-        { uri: playbackUri },
-        { shouldPlay: false }
+      const { sound: newInstrumentSound } = await loadSoundWithFallback(
+        playbackUri
       );
       soundRef.current = newInstrumentSound;
       setSound(newInstrumentSound);
@@ -382,8 +439,8 @@ const MusicPlayer: React.FC = () => {
 
       if (hasSeparateVocal && vocalUri) {
         try {
-          const { sound: vocalSound } = await Audio.Sound.createAsync(
-            { uri: vocalUri },
+          const { sound: vocalSound } = await loadSoundWithFallback(
+            vocalUri,
             { shouldPlay: false, volume: 0.6 }
           );
           vocalSoundRef.current = vocalSound;
