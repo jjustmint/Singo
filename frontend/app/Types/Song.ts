@@ -4,4 +4,5 @@ export type SongType = {
   songName: string;
   artist: string;
   previewUrl?: string | null;
+  key_signature?: string
 };

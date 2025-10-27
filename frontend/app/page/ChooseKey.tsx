@@ -31,6 +31,7 @@ const ChooseKey: React.FC = () => {
   const song_id = song.id;
   const image = song.image;
   const numericSongId = Number.parseInt(song_id, 10);
+  const originalKey = song.key_signature;
 
   const [songList, setSongList] = useState<SongKeyType[]>([]);
   const [keys, setKeys] = useState<string[]>([]);
@@ -188,9 +189,46 @@ const ChooseKey: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      <Text style={styles.suggested}>
-        {isLockedWeekly ? "Weekly challenge key" : "Suggested"}
-      </Text>
+{/* === Key status text (Original, Recommended, Weekly, or both) === */}
+{isLockedWeekly ? (
+  <Text style={styles.suggested}>Weekly challenge key</Text>
+) : (
+  (() => {
+    const normalizedCurrent = keys[currentIndex]?.toUpperCase().trim();
+    const normalizedOriginal = song.key_signature?.toUpperCase().trim();
+    const userTonic = userKey?.split(" ")[0].toUpperCase();
+
+    // === Check if this is the original key ===
+    const isOriginal =
+      normalizedCurrent && normalizedOriginal
+        ? normalizedCurrent === normalizedOriginal
+        : false;
+
+    // === Check if this is recommended (closest to user's key) ===
+    let Suggested = false;
+    if (normalizedCurrent && userTonic) {
+      const pitchOrder = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+      const currentIdx = pitchOrder.indexOf(normalizedCurrent.split(" ")[0]);
+      const userIdx = pitchOrder.indexOf(userTonic);
+      if (currentIdx !== -1 && userIdx !== -1) {
+        const distance = Math.min(Math.abs(userIdx - currentIdx), 12 - Math.abs(userIdx - currentIdx));
+        Suggested = distance <= 2; // within 2 semitones counts as close
+      }
+    }
+
+    // === Decide what to display ===
+    if (isOriginal && Suggested) {
+      return <Text style={styles.suggested}>Original (Suggested)</Text>;
+    } else if (isOriginal) {
+      return <Text style={styles.suggested}>Original</Text>;
+    } else if (Suggested) {
+      return <Text style={styles.suggested}>Suggested</Text>;
+    } else {
+      return null;
+    }
+  })()
+)}
+
 
       <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
         <Feather name="check" size={32} color="#3A6DFF" />
