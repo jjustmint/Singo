@@ -86,6 +86,7 @@ export default function Home() {
       songName: song.title,
       artist: song.singer,
       previewUrl: buildAssetUri(song.previewsong),
+      key_signature: song.key_signature,
     }));
     setSongs(mappedSongs);
     console.log("Fetched songs:", fetchedSongs.data);
