@@ -386,20 +386,37 @@ const MusicPlayer: React.FC = () => {
     }
   }, []);
 
+  const REMOTE_AUDIO_PATTERN = /^https?:\/\//i;
+
   const loadSoundWithFallback = useCallback(
     async (
       uri: string,
       initialStatus: AVPlaybackStatusToSet = { shouldPlay: false }
     ) => {
-      try {
-        return await Audio.Sound.createAsync({ uri }, initialStatus);
-      } catch (streamError) {
-        console.warn(
-          "Streaming audio failed, attempting cached download",
-          streamError
-        );
+      let candidateUri = uri;
+      let usedCachedCopy = false;
+
+      if (REMOTE_AUDIO_PATTERN.test(uri)) {
         const localUri = await ensureLocalAudioFile(uri);
-        return await Audio.Sound.createAsync({ uri: localUri }, initialStatus);
+        if (localUri && localUri !== uri) {
+          candidateUri = localUri;
+          usedCachedCopy = true;
+        }
+      }
+
+      try {
+        return await Audio.Sound.createAsync({ uri: candidateUri }, initialStatus);
+      } catch (primaryError) {
+        console.warn("Primary audio load failed, retrying with cached copy", primaryError);
+
+        if (!usedCachedCopy) {
+          const localUri = await ensureLocalAudioFile(uri);
+          if (localUri && localUri !== candidateUri) {
+            return await Audio.Sound.createAsync({ uri: localUri }, initialStatus);
+          }
+        }
+
+        throw primaryError;
       }
     },
     [ensureLocalAudioFile]
