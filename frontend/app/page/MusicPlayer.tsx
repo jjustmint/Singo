@@ -142,6 +142,10 @@ const MusicPlayer: React.FC = () => {
   const vocalSyncingRef = useRef(false);
   const autoSubmitInProgressRef = useRef(false);
   const recordingRef = useRef<Audio.Recording | null>(null);
+  const countdownInitiatedRef = useRef(false);
+  const startRecordingInProgressRef = useRef(false);
+  const [metadataReady, setMetadataReady] = useState(false);
+  const [audioReady, setAudioReady] = useState(false);
   const [image, setImage] = useState<string | undefined>(undefined);
   const [singer, setSinger] = useState<string | undefined>(undefined);
 
@@ -295,6 +299,8 @@ const MusicPlayer: React.FC = () => {
     setHasVocalTrack(false);
     setVocalEnabled(false);
     vocalResumePositionRef.current = 0;
+    setCountdown(null);
+    countdownInitiatedRef.current = false;
   }, []);
 
   const stopActiveRecording = useCallback(async () => {
@@ -401,6 +407,9 @@ const MusicPlayer: React.FC = () => {
 
   const getAudioById = async () => {
     try {
+      setAudioReady(false);
+      setCountdown(null);
+      countdownInitiatedRef.current = false;
       await stopAndUnloadCurrentSound();
       const response = await getAudioVerById(songKey.version_id);
       console.log("GETAUDIOVERBYID", response.data);
@@ -489,8 +498,10 @@ const MusicPlayer: React.FC = () => {
           }
         }
       });
+      setAudioReady(true);
     } catch (e) {
       console.error("Error fetching audio by ID:", e);
+      setAudioReady(false);
     }
   };
 
@@ -532,7 +543,7 @@ const MusicPlayer: React.FC = () => {
 
   useEffect(() => {
     getAudioById();
-  }, []);
+  }, [songKey.version_id]);
 
   useEffect(() => {
     if (!hasVocalTrack || !vocalSoundRef.current || !vocalEnabled) {
@@ -620,24 +631,30 @@ const MusicPlayer: React.FC = () => {
   }, [hasVocalTrack, stopVocalPlayback, vocalEnabled]);
 
   useEffect(() => {
+    let isActive = true;
+    setLoading(true);
+    setMetadataReady(false);
+
     (async () => {
       await handleGetSongById(songKey.song_id);
-      // setSong(data);
-      // setDuration(data.duration);
-      setLoading(false);
+      if (isActive) {
+        setMetadataReady(true);
+      }
     })();
 
     return () => {
+      isActive = false;
       cleanupAudioResources();
     };
-  }, [cleanupAudioResources]);
+  }, [cleanupAudioResources, songKey.song_id]);
 
   // Ensure countdown triggers recording automatically and finish icon stops recording.
   useEffect(() => {
-    if (!loading && countdown === null) {
-      setCountdown(3); // Start countdown after loading
+    if (!loading && sound && countdown === null && !countdownInitiatedRef.current) {
+      countdownInitiatedRef.current = true;
+      setCountdown(3); // Start countdown once instrumental audio is ready
     }
-  }, [loading]);
+  }, [loading, sound, countdown]);
 
   useEffect(() => {
     if (countdown !== null) {
@@ -855,7 +872,24 @@ const MusicPlayer: React.FC = () => {
     }
   }, [recording]);
 
+  useEffect(() => {
+    const nextLoading = !(metadataReady && audioReady);
+    setLoading((prev) => (prev === nextLoading ? prev : nextLoading));
+  }, [metadataReady, audioReady]);
+
   const startRecording = async () => {
+    if (startRecordingInProgressRef.current) {
+      console.log("Start recording already in progress, skipping");
+      return;
+    }
+
+    if (recordingRef.current || recording) {
+      console.log("Recording already in progress, skipping start request");
+      return;
+    }
+
+    startRecordingInProgressRef.current = true;
+
     try {
       autoSubmitInProgressRef.current = false;
       console.log("Requesting microphone permissions...");
@@ -888,6 +922,8 @@ const MusicPlayer: React.FC = () => {
       setRecording(recording);
     } catch (err) {
       console.error("Failed to start recording", err);
+    } finally {
+      startRecordingInProgressRef.current = false;
     }
   };
 
