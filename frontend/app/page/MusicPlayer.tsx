@@ -48,6 +48,7 @@ const HIGHLIGHT_ANIMATION_DURATION = 220;
 const FALLBACK_COVER = "https://via.placeholder.com/150";
 const LYRIC_TIMING_UPPER_BOUND_SECONDS = 600;
 const LYRICS_UNAVAILABLE_MESSAGE = "This song does not support lyrics yet.";
+const VOCAL_VOLUME = 0.6;
 
 const buildFallbackLyrics = (
   songId: number,
@@ -219,7 +220,7 @@ const MusicPlayer: React.FC = () => {
 
         if (!allowPlayback) {
           vocalResumePositionRef.current = instrumentStatus.positionMillis ?? vocalResumePositionRef.current;
-          if (vocalStatus.isPlaying) {
+          if ('isPlaying' in vocalStatus && vocalStatus.isPlaying) {
             await vocalSound.pauseAsync();
           }
           return;
@@ -243,7 +244,7 @@ const MusicPlayer: React.FC = () => {
         vocalResumePositionRef.current = targetPosition;
 
         if (shouldPlay) {
-          if (!vocalStatus.isPlaying) {
+          if ('isPlaying' in vocalStatus && !vocalStatus.isPlaying) {
             await vocalSound.playAsync();
           }
         } else if (vocalStatus.isPlaying) {
@@ -254,6 +255,59 @@ const MusicPlayer: React.FC = () => {
       }
     },
     [vocalEnabled]
+  );
+
+  const syncVocalToInstrument = useCallback(
+    async (forcePlay?: boolean, targetVolume?: number) => {
+      const instrumentSound = soundRef.current;
+      const vocalSound = vocalSoundRef.current;
+      if (!instrumentSound || !vocalSound) {
+        return;
+      }
+
+      try {
+        const [instrumentStatus, vocalStatus] = await Promise.all([
+          instrumentSound.getStatusAsync(),
+          vocalSound.getStatusAsync(),
+        ]);
+
+        if (!instrumentStatus.isLoaded || !vocalStatus.isLoaded) {
+          return;
+        }
+
+        const targetPosition = instrumentStatus.positionMillis ?? 0;
+        const desiredPlay =
+          typeof forcePlay === "boolean"
+            ? forcePlay
+            : instrumentStatus.isPlaying === true;
+        const desiredVolume =
+          typeof targetVolume === "number"
+            ? targetVolume
+            : desiredPlay
+            ? VOCAL_VOLUME
+            : 0;
+
+        vocalSyncingRef.current = true;
+        try {
+          await vocalSound.setStatusAsync({
+            positionMillis: targetPosition,
+            shouldPlay: desiredPlay,
+            volume: desiredVolume,
+          });
+        } finally {
+          vocalSyncingRef.current = false;
+        }
+
+        vocalResumePositionRef.current = targetPosition;
+
+        if (desiredPlay) {
+          await alignVocalWithInstrument(true, true);
+        }
+      } catch (error) {
+        console.warn("Failed to sync vocal track", error);
+      }
+    },
+    [alignVocalWithInstrument]
   );
 
   const stopAndUnloadCurrentSound = useCallback(async () => {
@@ -280,7 +334,7 @@ const MusicPlayer: React.FC = () => {
       try {
         const vocalStatus = await currentVocal.getStatusAsync();
         if (vocalStatus.isLoaded) {
-          if (vocalStatus.isPlaying) {
+          if ('isPlaying' in vocalStatus && vocalStatus.isPlaying) {
             await currentVocal.stopAsync();
           }
           await currentVocal.unloadAsync();
@@ -590,55 +644,20 @@ const MusicPlayer: React.FC = () => {
           ? status.positionMillis
           : 0;
 
-      const playInstrument = async () => {
-        try {
-          await currentSound.playFromPositionAsync(startPosition);
-        } catch (err) {
-          console.warn("Fallback to playAsync for instrumental", err);
-          if (startPosition !== 0) {
-            try {
-              await currentSound.setPositionAsync(startPosition);
-            } catch (setErr) {
-              console.warn("Failed to set instrumental position before fallback", setErr);
-            }
-          }
-          await currentSound.playAsync();
-        }
-      };
-
-      const playVocal = async () => {
-        if (!vocalSound) {
-          return;
-        }
-        try {
-          await vocalSound.setPositionAsync(startPosition);
-        } catch (err) {
-          console.warn("Failed to set vocal position", err);
-        }
-
-        try {
-          await vocalSound.playFromPositionAsync(startPosition);
-        } catch (err) {
-          console.warn("Fallback to playAsync for vocal", err);
-          if (startPosition !== 0) {
-            try {
-              await vocalSound.setPositionAsync(startPosition);
-            } catch (setErr) {
-              console.warn("Unable to set vocal position before fallback", setErr);
-            }
-          }
-          await vocalSound.playAsync();
-        }
-      };
-
       if (!status.isPlaying) {
+        if (startPosition !== 0) {
+          try {
+            await currentSound.setPositionAsync(startPosition);
+          } catch (err) {
+            console.warn("Failed to set instrumental position", err);
+          }
+        }
+        await currentSound.playAsync();
         if (shouldPlayVocal) {
-          await Promise.all([playInstrument(), playVocal()]);
-        } else {
-          await playInstrument();
+          await syncVocalToInstrument(true, VOCAL_VOLUME);
         }
       } else if (shouldPlayVocal) {
-        await alignVocalWithInstrument(true);
+        await syncVocalToInstrument(true, VOCAL_VOLUME);
       }
     } catch (error) {
       console.error("Error playing instrumental:", error);
@@ -661,38 +680,27 @@ const MusicPlayer: React.FC = () => {
     }
 
     try {
+      const instrumentStatus = instrumentSound
+        ? await instrumentSound.getStatusAsync()
+        : null;
+
       if (!nextEnabled) {
-        if (instrumentSound) {
-          const status = await instrumentSound.getStatusAsync();
-          if (status.isLoaded) {
-            vocalResumePositionRef.current = status.positionMillis ?? vocalResumePositionRef.current;
-          }
+        if (instrumentStatus?.isLoaded) {
+          vocalResumePositionRef.current =
+            instrumentStatus.positionMillis ?? vocalResumePositionRef.current;
         }
-        await stopVocalPlayback(false);
-      } else {
-        const instrumentStatus = instrumentSound ? await instrumentSound.getStatusAsync() : null;
-        const targetPosition =
-          instrumentStatus && instrumentStatus.isLoaded
-            ? instrumentStatus.positionMillis ?? vocalResumePositionRef.current
-            : vocalResumePositionRef.current;
-
-        vocalSyncingRef.current = true;
-        try {
-          await vocalSound.setPositionAsync(targetPosition);
-        } finally {
-          vocalSyncingRef.current = false;
-        }
-
-        vocalResumePositionRef.current = targetPosition;
-
-        if (instrumentStatus?.isLoaded && instrumentStatus.isPlaying) {
-          await vocalSound.playAsync();
-        }
+        await syncVocalToInstrument(false, 0);
+        return;
       }
+
+      await syncVocalToInstrument(
+        instrumentStatus?.isLoaded ? instrumentStatus.isPlaying : undefined,
+        VOCAL_VOLUME
+      );
     } catch (error) {
       console.warn("Failed to toggle vocal layer", error);
     }
-  }, [hasVocalTrack, stopVocalPlayback, vocalEnabled]);
+  }, [hasVocalTrack, syncVocalToInstrument, vocalEnabled]);
 
   useEffect(() => {
     let isActive = true;
