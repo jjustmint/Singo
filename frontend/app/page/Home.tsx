@@ -1,11 +1,5 @@
 import React, { useCallback, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  Image,
-  Dimensions,
-  FlatList,
-} from "react-native";
+import { View, Text, Image, Dimensions, FlatList } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
 import CategoryTabs from "../components/CategoryTabs";
@@ -47,6 +41,15 @@ export default function Home() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
   const [userKey, setUserKey] = useState<string | null>(null);
+  const newReleaseRef = useRef<View>(null);
+  const trendingRef = useRef<View>(null);
+  const topRateRef = useRef<View>(null);
+
+  const sectionPositions = useRef<{ [key: string]: number }>({});
+
+  const onLayoutSection = (name: string, event: any) => {
+    sectionPositions.current[name] = event.nativeEvent.layout.y;
+  };
 
   const buildPhotoUrl = useCallback((photo?: string | null) => {
     if (typeof photo !== "string" || photo.length === 0) {
@@ -70,11 +73,11 @@ export default function Home() {
     const fetchedUsername = await getUser();
     const user = fetchedUsername.data.username;
     const photo = fetchedUsername.data.photo ?? null;
-    const preferredKey = fetchedUsername.data.user_key ?? null; 
+    const preferredKey = fetchedUsername.data.user_key ?? null;
     setUsername(user);
     setPhotoUrl(buildPhotoUrl(photo));
     setUserKey(preferredKey);
-    console.log("🎵 userKey:", preferredKey); 
+    console.log("🎵 userKey:", preferredKey);
     console.log("Fetched username:", fetchedUsername);
   }, [buildPhotoUrl]);
 
@@ -82,7 +85,9 @@ export default function Home() {
     const fetchedSongs = await getAllsongs();
     const mappedSongs: Song[] = fetchedSongs.data.map((song: any) => ({
       id: song.song_id.toString(),
-      image: buildAssetUri(song.album_cover) ?? "https://i.pinimg.com/564x/11/8e/7f/118e7f4d22f1e5ff4f6e2f1f2d1f3c4b5.jpg",
+      image:
+        buildAssetUri(song.album_cover) ??
+        "https://i.pinimg.com/564x/11/8e/7f/118e7f4d22f1e5ff4f6e2f1f2d1f3c4b5.jpg",
       songName: song.title,
       artist: song.singer,
       previewUrl: buildAssetUri(song.previewsong),
@@ -102,11 +107,11 @@ export default function Home() {
     }, [loadHomeData])
   );
 
-  const scrollToSection = (section: "New Release" | "Trending" | "Top Rated") => {
-    const offset =
-      section === "New Release" ? 0 : section === "Trending" ? 300 : section === "Top Rated" ? 900 : 0;
-
-    listRef.current?.scrollToOffset({ offset, animated: true });
+  const scrollToSection = (
+    section: "New Release" | "Trending" | "Top Rated"
+  ) => {
+    const y = sectionPositions.current[section] || 0;
+    listRef.current?.scrollToOffset({ offset: y, animated: true });
   };
 
   return (
@@ -179,94 +184,125 @@ export default function Home() {
           contentContainerStyle={{ paddingBottom: 150 }}
           renderItem={() => (
             <View style={{ zIndex: 2 }}>
-            {/* Profile */}
-            <View style={{ padding: 20, marginTop: 50 }}>
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                {photoUrl ? (
-                  <Image
-                    source={{ uri: photoUrl }}
+              {/* Profile */}
+              <View style={{ padding: 20, marginTop: 50 }}>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  {photoUrl ? (
+                    <Image
+                      source={{ uri: photoUrl }}
+                      style={{
+                        width: 70,
+                        height: 70,
+                        borderRadius: 40,
+                        marginRight: 10,
+                      }}
+                    />
+                  ) : (
+                    <View
+                      style={{
+                        width: 70,
+                        height: 70,
+                        borderRadius: 40,
+                        marginRight: 10,
+                        backgroundColor: "rgba(255,255,255,0.1)",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: "#fff",
+                          fontSize: 26,
+                          fontWeight: "bold",
+                        }}
+                      >
+                        {(username || "G").charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  <Text
                     style={{
-                      width: 70,
-                      height: 70,
-                      borderRadius: 40,
-                      marginRight: 10,
-                    }}
-                  />
-                ) : (
-                  <View
-                    style={{
-                      width: 70,
-                      height: 70,
-                      borderRadius: 40,
-                      marginRight: 10,
-                      backgroundColor: "rgba(255,255,255,0.1)",
-                      alignItems: "center",
-                      justifyContent: "center",
+                      fontSize: 24,
+                      fontWeight: "bold",
+                      color: "white",
+                      left: 30,
                     }}
                   >
-                    <Text style={{ color: "#fff", fontSize: 26, fontWeight: "bold" }}>
-                      {(username || "G").charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                )}
-                <Text
-                  style={{
-                    fontSize: 24,
-                    fontWeight: "bold",
-                    color: "white",
-                    left: 30,
-                  }}
-                >
-                  Hi! {username || "Guest"}
-                </Text>
+                    Hi! {username || "Guest"}
+                  </Text>
+                </View>
               </View>
-            </View>
 
-            <CategoryTabs scrollToSection={(category: string) => scrollToSection(category as "New Release" | "Trending" | "Top Rated")} />
+              <CategoryTabs
+                scrollToSection={(category: string) =>
+                  scrollToSection(
+                    category as "New Release" | "Trending" | "Top Rated"
+                  )
+                }
+              />
 
-            <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
-              <Text
-                style={{
-                  color: "white",
-                  fontSize: 22,
-                  fontWeight: "bold",
-                }}
+              {/* New Release Section */}
+              <View
+                onLayout={(event) => onLayoutSection("New Release", event)}
+                ref={newReleaseRef}
               >
-                New Release
-              </Text>
-            </View>
-            <NewReleaseTabs />
+                <View style={{ paddingHorizontal: 20, marginTop: 20 }}>
+                  <Text
+                    style={{
+                      color: "white",
+                      fontSize: 22,
+                      fontWeight: "bold",
+                    }}
+                  >
+                    New Release
+                  </Text>
+                </View>
+                <NewReleaseTabs />
+              </View>
 
-            <View style={{ paddingHorizontal: 20 }}>
-              <Text
-                style={{
-                  color: "white",
-                  fontSize: 22,
-                  fontWeight: "bold",
-                }}
+              {/* Trending Section */}
+              <View
+                onLayout={(event) => onLayoutSection("Trending", event)}
+                ref={trendingRef}
               >
-                Trending
-              </Text>
-            </View>
-            <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
-              {userKey !== null && <TrendingList song={songs} userKey={userKey} />}
-            </View>
+                <View style={{ paddingHorizontal: 20 }}>
+                  <Text
+                    style={{
+                      color: "white",
+                      fontSize: 22,
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Trending
+                  </Text>
+                </View>
+                <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
+                  {userKey !== null && (
+                    <TrendingList song={songs} userKey={userKey} />
+                  )}
+                </View>
+              </View>
 
-            {/* Top Rate */}
-            <View style={{ paddingHorizontal: 20 }}>
-              <Text
-                style={{
-                  color: "white",
-                  fontSize: 22,
-                  fontWeight: "bold",
-                }}
+              {/* Top Rate Section */}
+              <View
+                onLayout={(event) => onLayoutSection("Top Rated", event)}
+                ref={topRateRef}
               >
-                Top Rate
-              </Text>
-            </View>
-            <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
-              <TopRateTabs />
-            </View>
+                <View style={{ paddingHorizontal: 20 }}>
+                  <Text
+                    style={{
+                      color: "white",
+                      fontSize: 22,
+                      fontWeight: "bold",
+                    }}
+                  >
+                    Top Rate
+                  </Text>
+                </View>
+                <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
+                  <TopRateTabs />
+                </View>
+              </View>
             </View>
           )}
         />
