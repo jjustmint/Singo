@@ -111,7 +111,9 @@ export default function Home() {
     section: "New Release" | "Trending" | "Top Rated"
   ) => {
     const y = sectionPositions.current[section] || 0;
-    listRef.current?.scrollToOffset({ offset: y, animated: true });
+    const offsetBefore = 60; // space above section in pixels
+    const targetY = Math.max(0, y - offsetBefore); // prevent negative offset
+    listRef.current?.scrollToOffset({ offset: targetY, animated: true });
   };
 
   return (

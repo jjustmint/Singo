@@ -884,10 +884,10 @@ export default function SummaryScreen() {
                 })
               )
             }
-            style={styles.backBtn}
+            style={styles.nextBtn}
             activeOpacity={0.7}
           >
-            <Ionicons name="chevron-back" size={24} color="#fff" />
+            <Ionicons name="chevron-forward" size={24} color="#fff" />
           </TouchableOpacity>
         </View>
 
@@ -1037,8 +1037,9 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "flex-end",
   },
-  backBtn: {
+  nextBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
