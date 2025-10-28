@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,43 +6,25 @@ import {
   TouchableOpacity,
   StyleSheet,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
+import { getHistory } from '@/api/getHistory';
+import { getAudioVerById } from '@/api/song/getAudioById';
+import { getAllsongs } from '@/api/song/getAll';
+import { getUser } from '@/api/getUser';
+import { SongType } from '@/api/types/song';
+import { buildAssetUri } from '@/app/utils/assetUri';
 
 interface Song {
-  id: string;
+  id: number;
   image: string;
   songName: string;
   artist: string;
+  playCount: number;
 }
 
-// --- Mock Data ---
-const mockSongs: Song[] = [
-  {
-    id: '1',
-    image: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg',
-    songName: 'Shape of You',
-    artist: 'Ed Sheeran',
-  },
-  {
-    id: '2',
-    image: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg',
-    songName: 'Blinding Lights',
-    artist: 'The Weeknd',
-  },
-  {
-    id: '3',
-    image: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg',
-    songName: 'Levitating',
-    artist: 'Dua Lipa',
-  },
-  {
-    id: '4',
-    image: 'https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/8e/b9/8c/8eb98c5f-fa72-9a64-bc95-94a4bfd72eb3/cover.jpg/1200x630bb.jpg',
-    songName: 'Bad Guy',
-    artist: 'Billie Eilish',
-  },
-];
+const FALLBACK_COVER = 'https://via.placeholder.com/150';
 
 // --- Card Component ---
 export const TopRateTabs: React.FC<{ song: Song; index: number }> = ({
@@ -91,15 +73,146 @@ export const TopRateTabs: React.FC<{ song: Song; index: number }> = ({
 
 // --- Screen Component ---
 const TopRateScreen: React.FC = () => {
+  const [topSongs, setTopSongs] = useState<Song[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadTopSongs = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const [userRes, allSongsRes] = await Promise.all([getUser(), getAllsongs()]);
+
+        if (!userRes.success || !userRes.data || userRes.data.user_id < 0) {
+          throw new Error(userRes.message ?? 'Unable to load user data');
+        }
+
+        const historyRes = await getHistory(userRes.data.user_id);
+        if (!historyRes.success || !historyRes.data) {
+          throw new Error(historyRes.message ?? historyRes.msg ?? 'Failed to load history');
+        }
+
+        if (!historyRes.data.length) {
+          if (isMounted) {
+            setTopSongs([]);
+          }
+          return;
+        }
+
+        const versionPlayCount = historyRes.data.reduce<Map<number, number>>((map, record) => {
+          if (typeof record.version_id === 'number') {
+            map.set(record.version_id, (map.get(record.version_id) ?? 0) + 1);
+          }
+          return map;
+        }, new Map());
+
+        if (!versionPlayCount.size) {
+          if (isMounted) setTopSongs([]);
+          return;
+        }
+
+        const uniqueVersionIds = Array.from(versionPlayCount.keys());
+
+        const audioResponses = await Promise.all(
+          uniqueVersionIds.map(async (versionId) => {
+            const res = await getAudioVerById(versionId);
+            return { versionId, data: res };
+          })
+        );
+
+        const songPlayCount = audioResponses.reduce<Map<number, number>>((map, entry) => {
+          const { versionId, data } = entry;
+          if (data.success && data.data && typeof data.data.song_id === 'number') {
+            const count = versionPlayCount.get(versionId) ?? 0;
+            map.set(data.data.song_id, (map.get(data.data.song_id) ?? 0) + count);
+          }
+          return map;
+        }, new Map());
+
+        if (!songPlayCount.size) {
+          if (isMounted) setTopSongs([]);
+          return;
+        }
+
+        const allSongs: SongType[] =
+          (allSongsRes.success && Array.isArray(allSongsRes.data) ? allSongsRes.data : []) ?? [];
+
+        const mappedSongs: Song[] = Array.from(songPlayCount.entries())
+          .map(([songId, playCount]) => {
+            const song = allSongs.find((s) => s.song_id === songId);
+            if (!song) {
+              return null;
+            }
+            const image = buildAssetUri(song.album_cover) ?? FALLBACK_COVER;
+            return {
+              id: song.song_id,
+              image,
+              songName: song.title,
+              artist: song.singer,
+              playCount,
+            };
+          })
+          .filter(Boolean) as Song[];
+
+        mappedSongs.sort((a, b) => b.playCount - a.playCount);
+
+        if (isMounted) {
+          setTopSongs(mappedSongs.slice(0, 10));
+        }
+      } catch (err) {
+        console.error(err);
+        if (isMounted) {
+          const message =
+            err instanceof Error ? err.message : 'Failed to load top songs. Please try again later.';
+          setError(message);
+          setTopSongs([]);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadTopSongs();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const listEmptyComponent = useMemo(() => {
+    if (loading) {
+      return (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="small" color="#fff" />
+        </View>
+      );
+    }
+    return (
+      <View style={styles.emptyState}>
+        <Text style={styles.emptyText}>
+          {error ?? 'No songs recorded yet. Start singing to see your top tracks!'}
+        </Text>
+      </View>
+    );
+  }, [loading, error]);
+
   return (
     <FlatList
-      data={mockSongs}
-      keyExtractor={(item) => item.id}
+      data={topSongs}
+      keyExtractor={(item) => item.id.toString()}
       renderItem={({ item, index }) => (
         <TopRateTabs song={item} index={index} />
       )}
       contentContainerStyle={{ paddingBottom: 20 }}
       nestedScrollEnabled={true} // Enable nested scrolling
+      ListEmptyComponent={listEmptyComponent}
+      showsVerticalScrollIndicator={false}
     />
   );
 };
@@ -156,6 +269,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 2,
+  },
+  emptyState: {
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyText: {
+    color: '#bbb',
+    textAlign: 'center',
   },
 });
 

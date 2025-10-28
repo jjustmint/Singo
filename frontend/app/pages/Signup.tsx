@@ -34,6 +34,7 @@ const SignupScreen: React.FC = () => {
     password?: string;
     confirmPassword?: string;
   }>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const router = useRouter();
   const navigation = useNavigation();
 
@@ -59,6 +60,7 @@ const SignupScreen: React.FC = () => {
 
   // Function to handle signup
   const handleSignup = async () => {
+    setSubmitError(null);
     const nextErrors: typeof fieldErrors = {};
 
     if (!username) {
@@ -94,19 +96,33 @@ const SignupScreen: React.FC = () => {
       const signupResponse = await SignUpApi(username, password);
 
       if (signupResponse.success) {
+        setSubmitError(null);
         navigation.reset({
           index: 0,
           routes: [{ name: "SignIn" as never }],
         });
       } else {
-        alert(
+        if (signupResponse.msg === "Username already existed") {
+          setFieldErrors({
+            username: signupResponse.msg,
+          });
+          setSubmitError(null);
+          return;
+        }
+
+        setSubmitError(
           signupResponse.message ||
-            `Signup failed (status ${signupResponse.message})`
+            signupResponse.msg ||
+            "Signup failed. Please check your details and try again."
         );
       }
     } catch (error) {
       console.error(error);
-      alert("Network error");
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to connect to the server. Please try again.";
+      setSubmitError(message);
     }
   };
 
@@ -286,6 +302,9 @@ const SignupScreen: React.FC = () => {
               >
                 <Text style={styles.signupButtonText}>Sign Up</Text>
               </TouchableOpacity>
+              {submitError ? (
+                <Text style={styles.submitErrorText}>{submitError}</Text>
+              ) : null}
 
               {/* Login link */}
               <View style={styles.Login}>
@@ -398,6 +417,14 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "700",
     fontFamily: "Kanit_700Bold",
+  },
+  submitErrorText: {
+    color: "#FF6B6B",
+    fontSize: 14,
+    fontFamily: "Kanit_500Medium",
+    textAlign: "center",
+    marginTop: -4,
+    marginBottom: 16,
   },
   Login: {
     fontSize: 12,

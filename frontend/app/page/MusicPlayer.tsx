@@ -582,15 +582,62 @@ const MusicPlayer: React.FC = () => {
         return;
       }
 
-      if (!status.isPlaying) {
-        if (typeof status.positionMillis === "number" && status.positionMillis > 0) {
-          await currentSound.playFromPositionAsync(status.positionMillis);
-        } else {
+      const vocalSound = vocalSoundRef.current;
+      const shouldPlayVocal = Boolean(vocalSound && vocalEnabledRef.current);
+
+      const startPosition =
+        typeof status.positionMillis === "number" && status.positionMillis > 0
+          ? status.positionMillis
+          : 0;
+
+      const playInstrument = async () => {
+        try {
+          await currentSound.playFromPositionAsync(startPosition);
+        } catch (err) {
+          console.warn("Fallback to playAsync for instrumental", err);
+          if (startPosition !== 0) {
+            try {
+              await currentSound.setPositionAsync(startPosition);
+            } catch (setErr) {
+              console.warn("Failed to set instrumental position before fallback", setErr);
+            }
+          }
           await currentSound.playAsync();
         }
-      }
+      };
 
-      if (vocalSoundRef.current && vocalEnabledRef.current) {
+      const playVocal = async () => {
+        if (!vocalSound) {
+          return;
+        }
+        try {
+          await vocalSound.setPositionAsync(startPosition);
+        } catch (err) {
+          console.warn("Failed to set vocal position", err);
+        }
+
+        try {
+          await vocalSound.playFromPositionAsync(startPosition);
+        } catch (err) {
+          console.warn("Fallback to playAsync for vocal", err);
+          if (startPosition !== 0) {
+            try {
+              await vocalSound.setPositionAsync(startPosition);
+            } catch (setErr) {
+              console.warn("Unable to set vocal position before fallback", setErr);
+            }
+          }
+          await vocalSound.playAsync();
+        }
+      };
+
+      if (!status.isPlaying) {
+        if (shouldPlayVocal) {
+          await Promise.all([playInstrument(), playVocal()]);
+        } else {
+          await playInstrument();
+        }
+      } else if (shouldPlayVocal) {
         await alignVocalWithInstrument(true);
       }
     } catch (error) {
@@ -1229,8 +1276,8 @@ const stopRecording = async (triggeredByAuto = false) => {
             style={[styles.vocalToggle, !hasVocalTrack && styles.vocalToggleDisabled]}
             disabled={!hasVocalTrack}
           >
-            <Ionicons
-              name={vocalEnabled ? "volume-high" : "volume-mute"}
+            <MaterialIcons
+              name={vocalEnabled ? "record-voice-over" : "voice-over-off"}
               size={28}
               color="white"
             />
@@ -1243,7 +1290,10 @@ const stopRecording = async (triggeredByAuto = false) => {
           <TouchableOpacity
             onPress={() => stopRecording()}
             disabled={!recording}
-            style={!recording ? styles.confirmDisabled : undefined}
+            style={[
+              styles.confirmButton,
+              !recording && styles.confirmDisabled,
+            ]}
           >
             <MaterialIcons name="done" size={28} color="white" />
           </TouchableOpacity>
@@ -1388,6 +1438,13 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(107, 107, 107, 0.5)",
     padding: 20,
     borderRadius: 50,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  confirmButton: {
+    backgroundColor: "rgba(107, 107, 107, 0.5)",
+    padding: 12,
+    borderRadius: 30,
     justifyContent: "center",
     alignItems: "center",
   },
