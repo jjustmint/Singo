@@ -171,7 +171,9 @@ const ChooseKey: React.FC = () => {
         style={styles.gradientOverlay}
       />
 
-      <TouchableOpacity style={styles.backButton}>
+      <TouchableOpacity style={styles.backButton}
+      onPress={() => navigation.goBack()}
+      >
         <Feather name="arrow-left" size={28} color="white" />
       </TouchableOpacity>
 
