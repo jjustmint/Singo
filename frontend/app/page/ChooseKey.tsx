@@ -77,43 +77,23 @@ const ChooseKey: React.FC = () => {
         console.log("🎵 Available keys:", keySignatures);
 
         if (userKey) {
-          const userTonic = userKey.split(" ")[0].toUpperCase(); // e.g., "G"
-          const pitchOrder = [
-            "C",
-            "C#",
-            "D",
-            "D#",
-            "E",
-            "F",
-            "F#",
-            "G",
-            "G#",
-            "A",
-            "A#",
-            "B",
-          ];
-          let closestIdx = 0;
-          let minDistance = 12;
+          const normalizedUserKey = userKey.toLowerCase().trim();
 
-          keySignatures.forEach((key, idx) => {
-            const keyTonic = key.split(" ")[0].toUpperCase();
-            const userIdx = pitchOrder.indexOf(userTonic);
-            const keyIdx = pitchOrder.indexOf(keyTonic);
+          // Find best match
+          let index = keySignatures.findIndex(
+            (k) => k.toLowerCase().trim() === normalizedUserKey
+          );
 
-            if (userIdx !== -1 && keyIdx !== -1) {
-              const distance = Math.min(
-                Math.abs(userIdx - keyIdx),
-                12 - Math.abs(userIdx - keyIdx) // wrap around
-              );
-              if (distance < minDistance) {
-                minDistance = distance;
-                closestIdx = idx;
-              }
-            }
-          });
+          // Try tonic match if no exact match
+          if (index === -1) {
+            const userTonic = normalizedUserKey.split(" ")[0]; // e.g. "g" from "g minor"
+            index = keySignatures.findIndex((k) =>
+              k.toLowerCase().includes(userTonic)
+            );
+          }
 
-          console.log("🎯 Closest index for userKey:", closestIdx);
-          setCurrentIndex(closestIdx);
+          console.log("🎯 Found index for userKey:", index);
+          setCurrentIndex(index !== -1 ? index : 0);
         } else {
           setCurrentIndex(0);
         }
@@ -171,8 +151,9 @@ const ChooseKey: React.FC = () => {
         style={styles.gradientOverlay}
       />
 
-      <TouchableOpacity style={styles.backButton}
-      onPress={() => navigation.goBack()}
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => navigation.goBack()}
       >
         <Feather name="arrow-left" size={28} color="white" />
       </TouchableOpacity>
@@ -218,12 +199,53 @@ const ChooseKey: React.FC = () => {
         (() => {
           const normalizedCurrent = keys[currentIndex]?.toUpperCase().trim();
           const normalizedOriginal = song.key_signature?.toUpperCase().trim();
+          const userTonic = userKey?.split(" ")[0].toUpperCase();
 
-          const isOriginal = normalizedCurrent === normalizedOriginal;
+          // Check if this is the original key
+          const isOriginal =
+            normalizedCurrent && normalizedOriginal
+              ? normalizedCurrent === normalizedOriginal
+              : false;
 
-          // currentIndex already points to closest key
-          const isSuggested = !isOriginal;
+          // Determine the closest key to user's tonic
+          let closestIndex = -1;
+          if (userTonic && keys.length > 0) {
+            const pitchOrder = [
+              "C",
+              "C#",
+              "D",
+              "D#",
+              "E",
+              "F",
+              "F#",
+              "G",
+              "G#",
+              "A",
+              "A#",
+              "B",
+            ];
+            let minDistance = 12;
 
+            keys.forEach((key, idx) => {
+              const keyTonic = key.split(" ")[0].toUpperCase();
+              const userIdx = pitchOrder.indexOf(userTonic);
+              const keyIdx = pitchOrder.indexOf(keyTonic);
+              if (userIdx !== -1 && keyIdx !== -1) {
+                const distance = Math.min(
+                  Math.abs(userIdx - keyIdx),
+                  12 - Math.abs(userIdx - keyIdx)
+                );
+                if (distance < minDistance) {
+                  minDistance = distance;
+                  closestIndex = idx;
+                }
+              }
+            });
+          }
+
+          const isSuggested = closestIndex === currentIndex;
+
+          // Decide what to display
           if (isOriginal && isSuggested)
             return <Text style={styles.suggested}>Original (Suggested)</Text>;
           if (isOriginal) return <Text style={styles.suggested}>Original</Text>;
