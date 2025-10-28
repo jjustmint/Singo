@@ -1,5 +1,5 @@
 // app/screens/Summary.tsx
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,19 +7,27 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
+  ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
-
+import { getRecordById } from "@/api/getRecordById";
 import { RootStackParamList } from "../Types/Navigation";
 import { getMistakes } from "@/api/getMistakes";
 import { getSong } from "@/api/song/getSong";
 import { SongType as ApiSongType } from "@/api/types/song"; // API version
+import { MistakeType } from "@/api/types/mistakes";
+import { Audio, AVPlaybackStatus, AVPlaybackStatusToSet } from "expo-av";
+import { Directory, File, Paths } from "expo-file-system";
+import { Axios } from "@/util/AxiosInstance";
+import { GlobalConstant } from "@/constant";
+import { getAudioVerById } from "@/api/song/getAudioById";
+import { buildAssetUri } from "../utils/assetUri";
 
 // ------------------- APP TYPES -------------------
 export type SongType = {
@@ -34,15 +42,54 @@ type Issue = {
   label: string;
 };
 
+type UserRecord = {
+  accuracy_score: number;
+  created_at: string;
+  key: string;
+  record_id: number;
+  user_audio_path: string;
+  user_id: number;
+  version_id: number;
+  fullPath?: string; // add this
+};
+
 // ------------------- MAPPER -------------------
+function buildAlbumCoverUri(cover: string | null): string {
+  const resolved = buildAssetUri(cover);
+  return resolved ?? "https://placehold.co/300x300";
+}
+
 function mapApiSongToAppSong(song: ApiSongType): SongType {
   return {
     id: song.song_id.toString(),
     songName: song.title,
     artist: song.singer,
-    image: song.album_cover ?? "https://placehold.co/300x300",
+    image: buildAlbumCoverUri(song.album_cover),
   };
 }
+
+const INSTRUMENT_VOLUME = 0.4;
+
+const resolveMediaUri = (path?: string | null) => {
+  if (!path) {
+    return null;
+  }
+
+  if (path.startsWith("file://")) {
+    return path;
+  }
+
+  const assetUri = buildAssetUri(path);
+  if (assetUri) {
+    return assetUri;
+  }
+
+  const sanitized = path.replace(/^\/?data\//, "").replace(/^\/+/, "");
+  return `${GlobalConstant.API_URL}/${sanitized}`;
+};
+
+const ensureSafeFileName = (filename: string) =>
+  filename.replace(/[^a-zA-Z0-9._-]/g, "_");
 
 // ------------------- SUMMARY SCREEN -------------------
 type SummaryRouteProp = RouteProp<RootStackParamList, "Summary">;
@@ -56,7 +103,18 @@ export default function SummaryScreen() {
   const [track, setTrack] = useState<SongType | null>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [position, setPosition] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isSeeking, setIsSeeking] = useState(false);
+  const [playbackCompleted, setPlaybackCompleted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const instrumentalRef = useRef<Audio.Sound | null>(null);
+  const [instrumentEnabled, setInstrumentEnabled] = useState(false);
+  const [instrumentAvailable, setInstrumentAvailable] = useState(false);
+  const instrumentEnabledRef = useRef(false);
+  const userAdjustedInstrumentRef = useRef(false);
+  const [userRecord, setUserRecord] = useState<UserRecord | null>(null);
 
   const DEFAULT_ISSUES: Issue[] = [
     { at: 5, label: "Duration : Too slow" },
@@ -73,6 +131,101 @@ export default function SummaryScreen() {
   const theScore = typeof score === "number" ? score : 0;
 
   const posLabel = useMemo(() => formatTime(position), [position]);
+  const sliderMax = useMemo(
+    () => (duration > 0 ? duration : Math.max(position, 1)),
+    [duration, position]
+  );
+  const durationLabel = useMemo(
+    () => formatTime(duration > 0 ? duration : 0),
+    [duration]
+  );
+
+  useEffect(() => {
+    instrumentEnabledRef.current = instrumentEnabled;
+  }, [instrumentEnabled]);
+
+  const ensureLocalAudioFile = useCallback(async (remoteUri: string) => {
+    try {
+      if (remoteUri.startsWith("file://")) {
+        return remoteUri;
+      }
+
+      const cacheRoot = Paths.cache;
+      if (!cacheRoot?.uri) {
+        throw new Error("Cache directory unavailable");
+      }
+
+      const audioCacheDir = new Directory(cacheRoot, "summary-audio-cache");
+      try {
+        await audioCacheDir.create({ intermediates: true, idempotent: true });
+      } catch (dirError) {
+        console.warn("Summary audio cache directory warning:", dirError);
+      }
+
+      const lastSegment =
+        remoteUri.split("/").pop()?.split("?")[0].split("#")[0] ??
+        `audio-${Date.now()}.mp3`;
+      const safeFileName = ensureSafeFileName(lastSegment);
+      const targetFile = new File(audioCacheDir, `${Date.now()}-${safeFileName}`);
+
+      const downloadedFile = await File.downloadFileAsync(remoteUri, targetFile, {
+        idempotent: true,
+      });
+
+      return downloadedFile.uri;
+    } catch (error) {
+      console.warn("Falling back to direct streaming due to caching failure", error);
+      return remoteUri;
+    }
+  }, []);
+
+  const REMOTE_AUDIO_PATTERN = /^https?:\/\//i;
+
+  const loadSoundWithFallback = useCallback(
+    async (
+      uri: string,
+      initialStatus: AVPlaybackStatusToSet | undefined,
+      onPlaybackStatusUpdate?: (status: AVPlaybackStatus) => void
+    ) => {
+      let candidateUri = uri;
+      let usedCachedCopy = false;
+
+      if (REMOTE_AUDIO_PATTERN.test(uri)) {
+        const localUri = await ensureLocalAudioFile(uri);
+        if (localUri && localUri !== uri) {
+          candidateUri = localUri;
+          usedCachedCopy = true;
+        }
+      }
+
+      try {
+        return await Audio.Sound.createAsync(
+          { uri: candidateUri },
+          initialStatus,
+          onPlaybackStatusUpdate
+        );
+      } catch (streamError) {
+        console.warn(
+          "Primary audio load failed, retrying with cached copy",
+          streamError
+        );
+
+        if (!usedCachedCopy) {
+          const localUri = await ensureLocalAudioFile(uri);
+          if (localUri && localUri !== candidateUri) {
+            return await Audio.Sound.createAsync(
+              { uri: localUri },
+              initialStatus,
+              onPlaybackStatusUpdate
+            );
+          }
+        }
+
+        throw streamError;
+      }
+    },
+    [ensureLocalAudioFile]
+  );
 
   // ------------------- FETCH SONG -------------------
   useEffect(() => {
@@ -92,16 +245,576 @@ export default function SummaryScreen() {
     fetchSong();
   }, [song_id]);
 
+  useEffect(() => {
+    const fetchRecord = async () => {
+      try {
+        const res = await Axios.post("/private/getrecord", {
+          record_id: recordId,
+        });
+
+        if (res.data.success) {
+          setUserRecord(res.data.data); // just set the fetched record
+          console.log("Fetched record:", res.data.data);
+        }
+      } catch (err) {
+        console.error("Error fetching record:", err);
+      }
+    };
+
+    fetchRecord();
+  }, [recordId]);
+
+  const handlePlaybackStatusUpdate = useCallback(
+    (status: AVPlaybackStatus) => {
+      if (!status.isLoaded) {
+        if ("error" in status && status.error) {
+          console.error("Playback status error:", status.error);
+        }
+        return;
+      }
+
+      if (status.durationMillis != null) {
+        setDuration(status.durationMillis / 1000);
+      }
+
+      if (status.didJustFinish) {
+        setIsPlaying(false);
+        setIsSeeking(false);
+        const finishedSeconds =
+          status.durationMillis != null
+            ? status.durationMillis / 1000
+            : duration > 0
+            ? duration
+            : 0;
+        setPosition(finishedSeconds);
+        setPlaybackCompleted(true);
+        if (instrumentalRef.current) {
+          const inst = instrumentalRef.current;
+          inst
+            .stopAsync()
+            .then(async () => {
+              try {
+                const targetVolume = instrumentEnabledRef.current
+                  ? INSTRUMENT_VOLUME
+                  : 0;
+                await inst.setVolumeAsync(targetVolume);
+              } catch (volErr) {
+                console.warn("Failed to reset instrumental volume", volErr);
+              }
+            })
+            .catch((err) => console.warn("Failed to stop instrumental", err));
+        }
+        return;
+      }
+
+      setIsPlaying(status.isPlaying);
+      if (status.isPlaying) {
+        setPlaybackCompleted(false);
+      }
+
+      if (!status.isPlaying && !status.didJustFinish) {
+        const inst = instrumentalRef.current;
+        if (inst) {
+          inst
+            .getStatusAsync()
+            .then((instStatus) => {
+              if (
+                instStatus.isLoaded &&
+                instStatus.isPlaying &&
+                instrumentEnabledRef.current
+              ) {
+                return inst.pauseAsync();
+              }
+              return undefined;
+            })
+            .catch((err) =>
+              console.warn("Failed to sync instrumental state", err)
+            );
+        }
+      }
+
+      if (!isSeeking && status.positionMillis != null) {
+        setPosition(status.positionMillis / 1000);
+      }
+    },
+    [isSeeking, duration]
+  );
+
+  const loadAudioSources = useCallback(
+    async (record: UserRecord) => {
+      try {
+        setIsLoading(true);
+        const recordingUri = resolveMediaUri(record.user_audio_path);
+        if (!recordingUri) {
+          console.warn("Unable to resolve recording URI");
+          setIsLoading(false);
+          return;
+        }
+
+        const versionResponse = await getAudioVerById(record.version_id);
+        const versionData = versionResponse?.data;
+
+        if (soundRef.current) {
+          try {
+            await soundRef.current.unloadAsync();
+          } catch (error) {
+            console.warn("Failed to unload previous recording", error);
+          }
+          soundRef.current = null;
+        }
+
+        if (instrumentalRef.current) {
+          try {
+            await instrumentalRef.current.unloadAsync();
+          } catch (error) {
+            console.warn("Failed to unload previous instrumental", error);
+          }
+          instrumentalRef.current = null;
+        }
+
+        const { sound: recordingSound } = await loadSoundWithFallback(
+          recordingUri,
+          { shouldPlay: false },
+          handlePlaybackStatusUpdate
+        );
+
+        recordingSound.setOnPlaybackStatusUpdate(handlePlaybackStatusUpdate);
+        soundRef.current = recordingSound;
+
+        const recordingStatus = await recordingSound.getStatusAsync();
+        if (recordingStatus.isLoaded && recordingStatus.durationMillis != null) {
+          setDuration(recordingStatus.durationMillis / 1000);
+        }
+        setPosition(0);
+        setIsPlaying(false);
+
+        setInstrumentEnabled(false);
+        setInstrumentAvailable(false);
+        instrumentEnabledRef.current = false;
+        userAdjustedInstrumentRef.current = false;
+
+        const instrumentalUri =
+          versionResponse?.success && versionData
+            ? resolveMediaUri(versionData.instru_path ?? versionData.ori_path)
+            : null;
+
+        if (instrumentalUri) {
+          try {
+            const { sound: instrumentalSound } = await loadSoundWithFallback(
+              instrumentalUri,
+              { shouldPlay: false, volume: INSTRUMENT_VOLUME }
+            );
+            instrumentalRef.current = instrumentalSound;
+            setInstrumentAvailable(true);
+            setInstrumentEnabled(true);
+            instrumentEnabledRef.current = true;
+            userAdjustedInstrumentRef.current = false;
+            try {
+              const instStatus = await instrumentalSound.getStatusAsync();
+              if (instStatus.isLoaded && instStatus.volume !== INSTRUMENT_VOLUME) {
+                await instrumentalSound.setVolumeAsync(INSTRUMENT_VOLUME);
+              }
+            } catch (volumeError) {
+              console.warn("Failed to set initial instrumental volume", volumeError);
+            }
+          } catch (instrumentError) {
+            console.warn(
+              "Failed to load instrumental track, continuing without it",
+              instrumentError
+            );
+            instrumentalRef.current = null;
+            setInstrumentEnabled(false);
+            setInstrumentAvailable(false);
+            instrumentEnabledRef.current = false;
+            userAdjustedInstrumentRef.current = false;
+          }
+        } else {
+          instrumentalRef.current = null;
+          setInstrumentEnabled(false);
+          setInstrumentAvailable(false);
+          instrumentEnabledRef.current = false;
+          userAdjustedInstrumentRef.current = false;
+        }
+      } catch (error) {
+        console.error("Failed to load audio sources", error);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [handlePlaybackStatusUpdate, loadSoundWithFallback]
+  );
+
+  useEffect(() => {
+    if (userRecord) {
+      setIsLoading(true);
+      loadAudioSources(userRecord).catch((error) =>
+        console.error("Failed to prepare audio sources", error)
+      );
+    } else {
+      setIsLoading(false);
+    }
+  }, [userRecord, loadAudioSources]);
+
+  useEffect(() => {
+    setPosition(0);
+    setDuration(0);
+    setIsPlaying(false);
+    setIsSeeking(false);
+    setInstrumentEnabled(false);
+    setInstrumentAvailable(false);
+    instrumentEnabledRef.current = false;
+    userAdjustedInstrumentRef.current = false;
+
+    if (soundRef.current) {
+      soundRef.current
+        .unloadAsync()
+        .catch((err) =>
+          console.error("Error unloading previous recording:", err)
+        );
+      soundRef.current = null;
+    }
+    if (instrumentalRef.current) {
+      instrumentalRef.current
+        .unloadAsync()
+        .catch((err) =>
+          console.error("Error unloading previous instrumental:", err)
+        );
+      instrumentalRef.current = null;
+    }
+  }, [recordId]);
+
+  const clampPosition = useCallback(
+    (value: number) => {
+      if (duration <= 0) {
+        return Math.max(value, 0);
+      }
+      const safeDuration = Math.max(duration - 0.25, 0);
+      return Math.min(Math.max(value, 0), safeDuration);
+    },
+    [duration]
+  );
+
+  const resumePlaybackAt = useCallback(
+    async (positionMillis: number) => {
+      const recordingSound = soundRef.current;
+      if (!recordingSound) {
+        return;
+      }
+
+      const targetMillis = Math.max(0, positionMillis);
+
+      const instrumentSound = instrumentalRef.current;
+      const shouldPlayInstrument =
+        Boolean(instrumentSound) && instrumentEnabledRef.current;
+
+      try {
+        await recordingSound.setPositionAsync(targetMillis);
+      } catch (err) {
+        console.warn("Failed to set recording position", err);
+      }
+
+      if (instrumentSound) {
+        try {
+          await instrumentSound.setPositionAsync(targetMillis);
+        } catch (err) {
+          console.warn("Failed to set instrumental position", err);
+        }
+
+        try {
+          await instrumentSound.setVolumeAsync(
+            shouldPlayInstrument ? INSTRUMENT_VOLUME : 0
+          );
+        } catch (err) {
+          console.warn("Failed to adjust instrumental volume", err);
+        }
+      }
+
+      try {
+        if (shouldPlayInstrument && instrumentSound) {
+          await Promise.all([
+            recordingSound.playAsync(),
+            instrumentSound.playAsync(),
+          ]);
+        } else {
+          await recordingSound.playAsync();
+        }
+        setIsPlaying(true);
+      } catch (resumeError) {
+        console.error("Error resuming playback", resumeError);
+        setIsPlaying(false);
+      }
+    },
+    []
+  );
+
+  const seekToPosition = useCallback(
+    async (value: number, resumePlayback?: boolean) => {
+      const targetSeconds = clampPosition(value);
+      const targetMillis = Math.max(0, Math.round(targetSeconds * 1000));
+
+      const currentSound = soundRef.current;
+      if (!currentSound) {
+        setPosition(targetSeconds);
+        setPlaybackCompleted(false);
+        return;
+      }
+
+      try {
+        const currentStatus = await currentSound.getStatusAsync();
+        if (!currentStatus.isLoaded) {
+          console.warn("Recording sound not loaded during seek.");
+          return;
+        }
+
+        const shouldResume =
+          typeof resumePlayback === "boolean"
+            ? resumePlayback
+            : currentStatus.isPlaying === true;
+
+        await currentSound.setPositionAsync(targetMillis);
+
+        const instrumentSound = instrumentalRef.current;
+        const instrumentReady =
+          Boolean(instrumentSound && instrumentEnabledRef.current);
+        if (instrumentSound) {
+          try {
+            const instrumentStatus = await instrumentSound.getStatusAsync();
+            if (instrumentStatus.isLoaded) {
+              await instrumentSound.setPositionAsync(targetMillis);
+              if (instrumentEnabledRef.current) {
+                if (instrumentStatus.volume !== INSTRUMENT_VOLUME) {
+                  await instrumentSound.setVolumeAsync(INSTRUMENT_VOLUME);
+                }
+              } else if (instrumentStatus.volume !== 0) {
+                await instrumentSound.setVolumeAsync(0);
+              }
+            }
+          } catch (instrumentError) {
+            console.warn("Failed to align instrumental during seek", instrumentError);
+          }
+        }
+
+        setPosition(targetSeconds);
+        setPlaybackCompleted(false);
+
+        if (shouldResume) {
+          await resumePlaybackAt(targetMillis);
+        } else {
+          setIsPlaying(false);
+        }
+      } catch (err) {
+        console.error("Error seeking user recording:", err);
+      }
+    },
+    [clampPosition, resumePlaybackAt]
+  );
+
+  const togglePlayback = useCallback(async () => {
+    try {
+      if (!userRecord) {
+        console.warn("No user record loaded.");
+        return;
+      }
+
+      if (!soundRef.current) {
+        await loadAudioSources(userRecord);
+      }
+
+      const recordingSound = soundRef.current;
+      if (!recordingSound) {
+        console.warn("Recording sound not available.");
+        return;
+      }
+
+      const status = await recordingSound.getStatusAsync();
+      if (!status.isLoaded) {
+        await loadAudioSources(userRecord);
+        return;
+      }
+
+      if (playbackCompleted) {
+        try {
+          await recordingSound.setPositionAsync(0);
+          if (instrumentalRef.current) {
+            try {
+              const instStatus = await instrumentalRef.current.getStatusAsync();
+              if (instStatus.isLoaded) {
+                await instrumentalRef.current.setPositionAsync(0);
+                if (instrumentEnabledRef.current) {
+                  if (instStatus.volume !== INSTRUMENT_VOLUME) {
+                    await instrumentalRef.current.setVolumeAsync(INSTRUMENT_VOLUME);
+                  }
+                }
+              }
+            } catch (error) {
+              console.warn("Failed to reset instrumental position", error);
+            }
+          }
+          setPosition(0);
+          setPlaybackCompleted(false);
+        } catch (resetError) {
+          console.warn("Failed to reset playback to start", resetError);
+        }
+      }
+
+      if (status.isPlaying) {
+        await recordingSound.pauseAsync();
+        if (instrumentalRef.current) {
+          try {
+            const instStatus = await instrumentalRef.current.getStatusAsync();
+            if (
+              instStatus.isLoaded &&
+              instStatus.isPlaying &&
+              instrumentEnabledRef.current
+            ) {
+              await instrumentalRef.current.pauseAsync();
+            }
+          } catch (error) {
+            console.warn("Failed to pause instrumental", error);
+          }
+        }
+        setIsPlaying(false);
+        return;
+      }
+
+      const instrumentSound = instrumentalRef.current;
+
+      if (instrumentSound && !userAdjustedInstrumentRef.current) {
+        if (!instrumentEnabledRef.current) {
+          setInstrumentEnabled(true);
+          instrumentEnabledRef.current = true;
+        }
+        try {
+          const instStatus = await instrumentSound.getStatusAsync();
+          if (instStatus.isLoaded && instStatus.volume !== INSTRUMENT_VOLUME) {
+            await instrumentSound.setVolumeAsync(INSTRUMENT_VOLUME);
+          }
+          userAdjustedInstrumentRef.current = true;
+        } catch (error) {
+          console.warn("Failed to prepare instrumental", error);
+        }
+      }
+
+      if (instrumentSound && instrumentEnabledRef.current) {
+        try {
+          const [recStatus, instStatus] = await Promise.all([
+            recordingSound.getStatusAsync(),
+            instrumentSound.getStatusAsync(),
+          ]);
+
+          if (recStatus.isLoaded && instStatus.isLoaded) {
+            const targetPosition = recStatus.positionMillis ?? 0;
+            await instrumentSound.setPositionAsync(targetPosition);
+            if (instStatus.volume !== INSTRUMENT_VOLUME) {
+              await instrumentSound.setVolumeAsync(INSTRUMENT_VOLUME);
+            }
+          }
+        } catch (error) {
+          console.warn("Failed to align instrumental before playback", error);
+        }
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: false,
+      });
+
+      let startPosition = status.positionMillis ?? 0;
+      const totalDuration =
+        status.durationMillis ?? (duration > 0 ? duration * 1000 : undefined);
+      if (typeof totalDuration === "number" && startPosition >= totalDuration - 250) {
+        await recordingSound.setPositionAsync(0);
+        startPosition = 0;
+      }
+      await resumePlaybackAt(startPosition);
+    } catch (err) {
+      console.error("Error playing user recording:", err);
+    }
+  }, [userRecord, loadAudioSources, duration, resumePlaybackAt]);
+
+  const sliderWasPlayingRef = useRef(false);
+
+  const handleSliderComplete = useCallback(
+    async (value: number) => {
+      setIsSeeking(true);
+      try {
+        await seekToPosition(value, sliderWasPlayingRef.current);
+      } finally {
+        setIsSeeking(false);
+      }
+    },
+    [seekToPosition]
+  );
+
+  const handleToggleInstrument = useCallback(async () => {
+    const instrumentSound = instrumentalRef.current;
+    if (!instrumentSound) {
+      return;
+    }
+
+    userAdjustedInstrumentRef.current = true;
+
+    const nextEnabled = !instrumentEnabledRef.current;
+    setInstrumentEnabled(nextEnabled);
+    instrumentEnabledRef.current = nextEnabled;
+
+    try {
+      if (!nextEnabled) {
+        const instStatus = await instrumentSound.getStatusAsync();
+        if (instStatus.isLoaded) {
+          if (instStatus.volume !== 0) {
+            await instrumentSound.setVolumeAsync(0);
+          }
+          if (instStatus.isPlaying) {
+            await instrumentSound.pauseAsync();
+          }
+        }
+        return;
+      }
+
+      const recordingSound = soundRef.current;
+      if (!recordingSound) {
+        return;
+      }
+
+      const recStatus = await recordingSound.getStatusAsync();
+      if (!recStatus.isLoaded) {
+        return;
+      }
+
+      const target = recStatus.positionMillis ?? 0;
+      const instStatus = await instrumentSound.getStatusAsync();
+      if (instStatus.isLoaded) {
+        await instrumentSound.setPositionAsync(target);
+        if (instStatus.volume !== INSTRUMENT_VOLUME) {
+          await instrumentSound.setVolumeAsync(INSTRUMENT_VOLUME);
+        }
+        if (recStatus.isPlaying) {
+          await instrumentSound.playAsync();
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to toggle instrumental", error);
+    }
+  }, []);
+
+  // ------------------- CLEANUP -------------------
   // ------------------- FETCH MISTAKES -------------------
   useEffect(() => {
     const fetchMistakes = async () => {
       if (!recordId) return;
       try {
         const res = await getMistakes(recordId);
+        console.log("Fetched mistakes:", res.data);
+
         if (res.success && res.data.length > 0) {
+          // Map API mistakes to your Issue type
           const mappedIssues = res.data.map(mistakeToIssue);
           setIssues(mappedIssues);
         } else {
+          // fallback if no mistakes
           setIssues(DEFAULT_ISSUES);
         }
       } catch (err) {
@@ -112,7 +825,44 @@ export default function SummaryScreen() {
     fetchMistakes();
   }, [recordId]);
 
+  useEffect(() => {
+    return () => {
+      if (soundRef.current) {
+        soundRef.current
+          .unloadAsync()
+          .catch((err) =>
+            console.error("Error unloading user recording:", err)
+          );
+        soundRef.current = null;
+      }
+      if (instrumentalRef.current) {
+        instrumentalRef.current
+          .unloadAsync()
+          .catch((err) =>
+            console.error("Error unloading instrumental:", err)
+          );
+        instrumentalRef.current = null;
+      }
+      setInstrumentEnabled(false);
+      setInstrumentAvailable(false);
+      instrumentEnabledRef.current = false;
+    };
+  }, []);
+
   // ------------------- RENDER -------------------
+  if (isLoading) {
+    return (
+      <LinearGradient colors={["#8C5BFF", "#120a1a"]} style={{ flex: 1 }}>
+        <SafeAreaView style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={{ color: "#fff", marginTop: 12 }}>
+            Preparing your recording...
+          </Text>
+        </SafeAreaView>
+      </LinearGradient>
+    );
+  }
+
   return (
     <LinearGradient colors={["#8C5BFF", "#120a1a"]} style={{ flex: 1 }}>
       <SafeAreaView style={{ flex: 1 }}>
@@ -148,18 +898,62 @@ export default function SummaryScreen() {
           <View style={{ marginTop: 18, paddingHorizontal: 22 }}>
             <Slider
               minimumValue={0}
-              maximumValue={120} // placeholder duration
-              value={position}
-              onValueChange={setPosition}
+              maximumValue={sliderMax}
+              value={Math.min(position, sliderMax)}
+              onSlidingStart={() => {
+                sliderWasPlayingRef.current = isPlaying;
+                setIsSeeking(true);
+              }}
+              onValueChange={(value) => {
+                setIsSeeking(true);
+                setPosition(clampPosition(value));
+              }}
+              onSlidingComplete={handleSliderComplete}
               minimumTrackTintColor="#ff82c6"
               maximumTrackTintColor="#ffffff66"
               thumbTintColor="#ff7abf"
             />
             <View style={styles.timeRow}>
               <Text style={styles.timeLabel}>{posLabel}</Text>
-              <Text style={styles.timeLabel}>2:00</Text>
+              <Text style={styles.timeLabel}>{durationLabel}</Text>
             </View>
           </View>
+
+          {/* Play User Recording */}
+          {userRecord?.user_audio_path && (
+            <View style={styles.playbackControlsRow}>
+              <TouchableOpacity
+                onPress={togglePlayback}
+                style={styles.playRecordingButton}
+                activeOpacity={0.88}
+              >
+                <Text style={styles.playRecordingLabel}>
+                  {isPlaying
+                    ? "Pause Recording"
+                    : playbackCompleted
+                    ? "Replay Recording"
+                    : "Play Recording"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                onPress={handleToggleInstrument}
+                style={[
+                  styles.instrumentToggle,
+                  instrumentEnabled && styles.instrumentToggleActive,
+                  !instrumentAvailable && styles.instrumentToggleDisabled,
+              { marginLeft: 18 },
+            ]}
+            activeOpacity={0.9}
+          >
+            <Ionicons
+              name={instrumentEnabled ? "musical-notes" : "musical-notes-outline"}
+              size={22}
+              color="#fff"
+            />
+          </TouchableOpacity>
+        </View>
+          )}
 
           {/* Missing Part */}
           <Text style={styles.sectionTitle}>Mistakes</Text>
@@ -169,7 +963,9 @@ export default function SummaryScreen() {
                 key={`${it.at}-${idx}`}
                 activeOpacity={0.8}
                 style={styles.issueItem}
-                onPress={() => setPosition(it.at)}
+                onPress={() => {
+                  void seekToPosition(it.at, isPlaying);
+                }}
               >
                 <Text style={styles.issueTime}>{formatTime(it.at)}</Text>
                 <Text style={styles.issueText}>{it.label}</Text>
@@ -183,16 +979,23 @@ export default function SummaryScreen() {
 }
 
 // ------------------- HELPERS -------------------
-function mistakeToIssue(m: any): Issue {
-  const at = Math.max(0, m.start_time ?? 0);
+function mistakeToIssue(m: MistakeType): Issue {
+  const rawStart = m.timestamp_start ?? 0;
+  const atSeconds =
+    rawStart > 1000 ? rawStart / 1000 : rawStart;
+  const at = Math.max(0, atSeconds);
   let label = "";
 
   switch (m.reason) {
-    case "missing":
-      label = `Missing part (${formatSeconds(m.duration)})`;
+    case "missing": {
+      const rawDuration = (m.timestamp_end ?? 0) - (m.timestamp_start ?? 0);
+      const duration =
+        rawDuration > 1000 ? rawDuration / 1000 : rawDuration;
+      label = `Missing part (${formatSeconds(duration)})`;
       break;
+    }
     case "off-key":
-      label = `Off-key issue`;
+      label = `Off-key by ${m.pitch_diff} semitones`;
       break;
     default:
       label = m.reason ?? "Unknown issue";
@@ -279,4 +1082,38 @@ const styles = StyleSheet.create({
   },
   issueTime: { width: 60, color: "#111", fontWeight: "800", fontSize: 14 },
   issueText: { color: "#111", fontSize: 14, fontWeight: "600" },
+  playbackControlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 30,
+  },
+  playRecordingButton: {
+    backgroundColor: "#ff7abf",
+    borderRadius: 32,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+  },
+  playRecordingLabel: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  instrumentToggle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+  },
+  instrumentToggleActive: {
+    backgroundColor: "#6C63FF",
+    borderColor: "rgba(255,255,255,0.45)",
+  },
+  instrumentToggleDisabled: {
+    opacity: 0.35,
+  },
 });

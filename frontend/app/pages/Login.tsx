@@ -12,6 +12,7 @@ import {
   StatusBar,
   Platform,
   Dimensions,
+  Image,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons, Feather } from "@expo/vector-icons";
@@ -28,6 +29,7 @@ import { useNavigation } from "@react-navigation/native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { getUser } from "@/api/getUser";
+import Svg, { Ellipse, SvgUri } from "react-native-svg";
 
 const CARD_RADIUS = 26;
 const ROOT_BG = "#ECECEC"; // original root color (behind everything)
@@ -39,11 +41,24 @@ const { height: SCREEN_H } = Dimensions.get("window");
 // Ensure the sheet covers the rest of the screen visually
 const SHEET_MIN_HEIGHT = SCREEN_H - (HEADER_HEIGHT - OVERLAP);
 
+const MICROPHONE_ASSET = require("@/assets/images/microphone.svg");
+const MICROPHONE_URI = Image.resolveAssetSource(MICROPHONE_ASSET)?.uri ?? "";
+
+const EllipseShape = () => (
+  <Svg height="200" width="300" style={{ right: -45 }}>
+    <Ellipse cx="100" cy="30" rx="85" ry="18" fill="grey" />
+  </Svg>
+);
+
 const LoginScreen: React.FC = () => {
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{
+    username?: string;
+    password?: string;
+  }>({});
 
   const router = useRouter();
   const navigation = useNavigation();
@@ -56,11 +71,20 @@ const LoginScreen: React.FC = () => {
   });
 
   const handleLogin = async () => {
-    if (!username || !password) {
-      return Alert.alert("Please enter username and password");
+    const nextErrors: typeof fieldErrors = {};
+    if (!username) {
+      nextErrors.username = "Username is required";
+    }
+    if (!password) {
+      nextErrors.password = "Password is required";
+    }
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors);
+      return;
     }
     setLoading(true);
     try {
+      setFieldErrors({});
       const loginResponse = await LoginApi(username, password);
       if (loginResponse.success) {
         setAuthToken(loginResponse.data);
@@ -133,9 +157,11 @@ const LoginScreen: React.FC = () => {
             style={{ flex: 1, backgroundColor: "transparent" }}
             contentContainerStyle={{ flexGrow: 1 }}
             enableOnAndroid
-            extraScrollHeight={30}
+            enableAutomaticScroll
+            extraScrollHeight={80}
             keyboardOpeningTime={0}
             keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
             
           >
             {/* Transparent header content (gradient shows through) */}
@@ -146,14 +172,25 @@ const LoginScreen: React.FC = () => {
                 paddingHorizontal: 28,
                 justifyContent: "center",
                 backgroundColor: "transparent",
+                overflow: "visible",
               }}
             >
               <Text style={styles.hello}>Hello!</Text>
               <Text style={styles.subtitle}>Welcome to Singo</Text>
 
-              {/* Decorative ellipse shadow */}
-              <View style={styles.ellipse} />
-            </View>
+              {/* Microphone illustration */}
+              <View style={styles.microphoneContainer} pointerEvents="none">
+                {MICROPHONE_URI ? (
+                  <SvgUri
+                    uri={MICROPHONE_URI}
+                    width={150}
+                    height={340}
+                    style={styles.microphoneSvg}
+                  />
+                ) : null}
+                  <EllipseShape />
+                </View>
+              </View>
 
             {/* The sheet/card that overlaps gradient and fills to bottom */}
             <View
@@ -176,11 +213,17 @@ const LoginScreen: React.FC = () => {
                   placeholder="Username"
                   placeholderTextColor="#B7BAC5"
                   value={username}
-                  onChangeText={setUsername}
+                  onChangeText={(value) => {
+                    setUsername(value);
+                    setFieldErrors((prev) => ({ ...prev, username: undefined }));
+                  }}
                   autoCapitalize="none"
                   returnKeyType="next"
                 />
               </View>
+              {fieldErrors.username ? (
+                <Text style={styles.errorText}>{fieldErrors.username}</Text>
+              ) : null}
 
               {/* Password */}
               <View style={styles.inputRow}>
@@ -191,7 +234,10 @@ const LoginScreen: React.FC = () => {
                   placeholderTextColor="#B7BAC5"
                   secureTextEntry={!passwordVisible}
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={(value) => {
+                    setPassword(value);
+                    setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                  }}
                   autoCapitalize="none"
                 />
                 <TouchableOpacity
@@ -205,12 +251,9 @@ const LoginScreen: React.FC = () => {
                   />
                 </TouchableOpacity>
               </View>
-
-              {/* Forgot password */}
-              <TouchableOpacity style={styles.forgotBtn}>
-                <Text style={styles.link}>Forgot password</Text>
-              </TouchableOpacity>
-
+              {fieldErrors.password ? (
+                <Text style={styles.errorText}>{fieldErrors.password}</Text>
+              ) : null}
               {/* Login */}
               <TouchableOpacity style={styles.cta} onPress={handleLogin} activeOpacity={0.9}>
                 {loading ? (
@@ -252,18 +295,18 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontFamily: "Kanit_500Medium",
   },
-  ellipse: {
+  microphoneContainer: {
     position: "absolute",
-    right: 24,
-    bottom: -12,
-    width: 170,
-    height: 24,
-    backgroundColor: "rgba(0,0,0,0.18)",
-    borderRadius: 100,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
+    right: -5,
+    bottom: -40,
+    width: 210,
+    height: 360,
+    alignItems: "center",
+    zIndex: 5,
+    elevation: 6,
+  }, 
+  microphoneSvg: {
+    alignSelf: "center",
   },
 
   // The full-width sheet that matches the card background and fills to bottom
@@ -271,17 +314,19 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: CARD_RADIUS,
     borderTopRightRadius: CARD_RADIUS,
     paddingHorizontal: 24,
-    paddingTop: 24,
+    paddingTop: 36,
     paddingBottom: 16,
+    position: "relative",
+    zIndex: 1,
   },
 
   cardTitle: {
+    marginTop: 8,
     fontSize: 40,
     color: "#5A5DFF",
     fontFamily: "Kanit_700Bold",
-    marginBottom: 14,
+    marginBottom: 20,
   },
-
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -289,7 +334,7 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     paddingHorizontal: 14,
     height: 52,
-    marginBottom: 12,
+    marginBottom: 20,
     shadowColor: "#000",
     shadowOpacity: 0.05,
     shadowRadius: 3,
@@ -323,6 +368,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginHorizontal: 6,
+    marginTop: 30,
     shadowColor: "#5A5DFF",
     shadowOpacity: 0.35,
     shadowRadius: 10,
@@ -346,5 +392,13 @@ const styles = StyleSheet.create({
     color: "#6C6F7A",
     fontSize: 14,
     fontFamily: "Kanit_500Medium",
+  },
+  errorText: {
+    color: "#FF6B6B",
+    fontSize: 12,
+    fontFamily: "Kanit_500Medium",
+    marginTop: -8,
+    marginBottom: 12,
+    marginLeft: 6,
   },
 });

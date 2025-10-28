@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -22,7 +22,6 @@ import { SignUpApi } from "@/api/auth/signin";
 import { useNavigation } from "@react-navigation/native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import { StatusBar } from "expo-status-bar";
-import { navigate } from "expo-router/build/global-state/routing";
 
 const SignupScreen: React.FC = () => {
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -30,6 +29,11 @@ const SignupScreen: React.FC = () => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{
+    username?: string;
+    password?: string;
+    confirmPassword?: string;
+  }>({});
   const router = useRouter();
   const navigation = useNavigation();
 
@@ -39,16 +43,54 @@ const SignupScreen: React.FC = () => {
     Kanit_700Bold,
   });
 
+  const passwordValidation = useMemo(
+    () => ({
+      hasUppercase: /[A-Z]/.test(password),
+      hasNumber: /\d/.test(password),
+      hasMinLength: password.length >= 6,
+    }),
+    [password]
+  );
+
+  const isPasswordValid =
+    passwordValidation.hasUppercase &&
+    passwordValidation.hasNumber &&
+    passwordValidation.hasMinLength;
+
   // Function to handle signup
   const handleSignup = async () => {
-    if (!username || !password || !confirmPassword) {
-      return alert("Please fill in all fields");
+    const nextErrors: typeof fieldErrors = {};
+
+    if (!username) {
+      nextErrors.username = "Username is required";
+    }
+    if (!password) {
+      nextErrors.password = "Password is required";
+    }
+    if (!confirmPassword) {
+      nextErrors.confirmPassword = "Please confirm your password";
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors);
+      return;
+    }
+    if (!isPasswordValid) {
+      setFieldErrors({
+        password:
+          "Password must be at least 6 characters, include one uppercase letter, and contain a number.",
+      });
+      return;
     }
     if (password !== confirmPassword) {
-      return alert("Passwords do not match");
+      setFieldErrors({
+        confirmPassword: "Passwords do not match",
+      });
+      return;
     }
 
     try {
+      setFieldErrors({});
       const signupResponse = await SignUpApi(username, password);
 
       if (signupResponse.success) {
@@ -120,9 +162,15 @@ const SignupScreen: React.FC = () => {
                   placeholder="Username"
                   placeholderTextColor="#ccc"
                   value={username}
-                  onChangeText={setUsername}
+                  onChangeText={(value) => {
+                    setUsername(value);
+                    setFieldErrors((prev) => ({ ...prev, username: undefined }));
+                  }}
                 />
               </View>
+              {fieldErrors.username ? (
+                <Text style={styles.errorText}>{fieldErrors.username}</Text>
+              ) : null}
 
               {/* Password input */}
               <View style={styles.inputWrapper}>
@@ -133,7 +181,10 @@ const SignupScreen: React.FC = () => {
                   placeholderTextColor="#ccc"
                   secureTextEntry={!passwordVisible}
                   value={password}
-                  onChangeText={setPassword}
+                  onChangeText={(value) => {
+                    setPassword(value);
+                    setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                  }}
                 />
                 <TouchableOpacity
                   onPress={() => setPasswordVisible(!passwordVisible)}
@@ -145,6 +196,9 @@ const SignupScreen: React.FC = () => {
                   />
                 </TouchableOpacity>
               </View>
+              {fieldErrors.password ? (
+                <Text style={styles.errorText}>{fieldErrors.password}</Text>
+              ) : null}
 
               {/* Confirm Password input */}
               <View style={styles.inputWrapper}>
@@ -155,7 +209,10 @@ const SignupScreen: React.FC = () => {
                   placeholderTextColor="#ccc"
                   secureTextEntry={!confirmPasswordVisible}
                   value={confirmPassword}
-                  onChangeText={setConfirmPassword}
+                  onChangeText={(value) => {
+                    setConfirmPassword(value);
+                    setFieldErrors((prev) => ({ ...prev, confirmPassword: undefined }));
+                  }}
                 />
                 <TouchableOpacity
                   onPress={() =>
@@ -168,6 +225,58 @@ const SignupScreen: React.FC = () => {
                     color="#aaa"
                   />
                 </TouchableOpacity>
+              </View>
+              {fieldErrors.confirmPassword ? (
+                <Text style={styles.errorText}>{fieldErrors.confirmPassword}</Text>
+              ) : null}
+
+              <View style={styles.requirementsCard}>
+                <Text style={styles.requirementsTitle}>Password must contain</Text>
+                <View style={styles.requirementRow}>
+                  <Ionicons
+                    name={passwordValidation.hasUppercase ? "checkmark-circle" : "ellipse-outline"}
+                    size={20}
+                    color={passwordValidation.hasUppercase ? "#5A5DFF" : "#BBC1CF"}
+                  />
+                  <Text
+                    style={[
+                      styles.requirementText,
+                      passwordValidation.hasUppercase && styles.requirementTextMet,
+                    ]}
+                  >
+                    At least one uppercase letter
+                  </Text>
+                </View>
+                <View style={styles.requirementRow}>
+                  <Ionicons
+                    name={passwordValidation.hasNumber ? "checkmark-circle" : "ellipse-outline"}
+                    size={20}
+                    color={passwordValidation.hasNumber ? "#5A5DFF" : "#BBC1CF"}
+                  />
+                  <Text
+                    style={[
+                      styles.requirementText,
+                      passwordValidation.hasNumber && styles.requirementTextMet,
+                    ]}
+                  >
+                    At least one number (0-9)
+                  </Text>
+                </View>
+                <View style={styles.requirementRow}>
+                  <Ionicons
+                    name={passwordValidation.hasMinLength ? "checkmark-circle" : "ellipse-outline"}
+                    size={20}
+                    color={passwordValidation.hasMinLength ? "#5A5DFF" : "#BBC1CF"}
+                  />
+                  <Text
+                    style={[
+                      styles.requirementText,
+                      passwordValidation.hasMinLength && styles.requirementTextMet,
+                    ]}
+                  >
+                    Minimum 6 characters
+                  </Text>
+                </View>
               </View>
 
               {/* Signup Button */}
@@ -183,7 +292,15 @@ const SignupScreen: React.FC = () => {
                 <Text style={{ color: "#666", fontFamily: "Kanit_500Medium" }}>
                   Already have an account?{" "}
                 </Text>
-                <TouchableOpacity onPress={() => router.push("/pages/Login")}>
+                <TouchableOpacity
+                  onPress={() => {
+                    if (navigation.canGoBack && navigation.canGoBack()) {
+                      navigation.goBack();
+                    } else {
+                      navigation.navigate("SignIn" as never);
+                    }
+                  }}
+                >
                   <Text
                     style={[
                       styles.linkText,
@@ -259,7 +376,7 @@ const styles = StyleSheet.create({
     fontFamily: "Kanit_400Regular",
   },
   linkText: {
-    fontSize: 12,
+    fontSize: 14,
     color: "#5A5DFF",
     fontWeight: "500",
     fontFamily: "Kanit_500Medium",
@@ -269,7 +386,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 28,
     alignItems: "center",
-    marginTop: 45,
+    marginTop: 10,
     marginBottom: 20,
     shadowColor: "#000",
     shadowOpacity: 0.1,
@@ -288,5 +405,50 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     fontWeight: "500",
     fontFamily: "Kanit_500Medium",
+  },
+  requirementsCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 24,
+    paddingVertical: 18,
+    paddingHorizontal: 20,
+    marginTop: 6,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "rgba(90, 93, 255, 0.12)",
+    shadowColor: "#5A5DFF",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  requirementsTitle: {
+    fontSize: 14,
+    fontFamily: "Kanit_500Medium",
+    color: "#5A5DFF",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    marginBottom: 12,
+  },
+  requirementRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  requirementText: {
+    marginLeft: 12,
+    color: "#788097",
+    fontSize: 14,
+    fontFamily: "Kanit_400Regular",
+  },
+  requirementTextMet: {
+    color: "#1E1F3A",
+    fontFamily: "Kanit_500Medium",
+  },
+  errorText: {
+    color: "#FF6B6B",
+    fontSize: 12,
+    fontFamily: "Kanit_500Medium",
+    marginTop: -6,
+    marginBottom: 10,
+    marginLeft: 6,
   },
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, version } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,27 +9,99 @@ import {
   ActivityIndicator,
   ImageBackground,
   ScrollView,
+  LayoutChangeEvent,
   Animated,
-  Easing,
 } from "react-native";
-import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from "expo-av";
+import {
+  Audio,
+  InterruptionModeAndroid,
+  InterruptionModeIOS,
+  AVPlaybackStatusToSet,
+} from "expo-av";
+import { Directory, File, Paths } from "expo-file-system";
 import Slider from "@react-native-community/slider";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-//import * as FileSystem from "expo-file-system";
-import { File, Paths } from "expo-file-system";
-import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
+import {
+  RouteProp,
+  useFocusEffect,
+  useNavigation,
+  useRoute,
+} from "@react-navigation/native";
 import { RootStackParamList } from "../Types/Navigation";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { getSong } from "@/api/song/getSong";
 import { createRecord } from "@/api/createRecord";
 import { getAudioVerById } from "@/api/song/getAudioById";
-import { GlobalConstant } from "@/constant";
+import { getLyrics } from "@/api/song/getLyrics";
+import { LyricLineType } from "@/api/types/lyrics";
+import { buildAssetUri } from "../utils/assetUri";
 
 type MusicPlayerRouteProp = RouteProp<RootStackParamList, "MusicPlayer">;
 type MusicPlayerNavProp = StackNavigationProp<
   RootStackParamList,
   "MusicPlayer"
 >;
+
+const FALLBACK_LYRIC_GAP_MS = 4000;
+const ESTIMATED_LYRIC_ROW_HEIGHT = 36;
+const HIGHLIGHT_ANIMATION_DURATION = 220;
+const FALLBACK_COVER = "https://via.placeholder.com/150";
+const LYRIC_TIMING_UPPER_BOUND_SECONDS = 600;
+const LYRICS_UNAVAILABLE_MESSAGE = "This song does not support lyrics yet.";
+
+const buildFallbackLyrics = (
+  songId: number,
+  fallbackRaw?: string | null
+): LyricLineType[] => {
+  if (!fallbackRaw) {
+    return [];
+  }
+
+  const source = fallbackRaw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  return source.map((line, index) => ({
+    lyric_id: -(index + 1),
+    song_id: songId,
+    lyric: line,
+    timestart: index * FALLBACK_LYRIC_GAP_MS,
+  }));
+};
+
+const normaliseLyricTimings = (entries: LyricLineType[]): LyricLineType[] => {
+  if (!entries.length) {
+    return entries;
+  }
+
+  const validTimes = entries
+    .map((item) => item.timestart)
+    .filter(
+      (time): time is number =>
+        typeof time === "number" && !Number.isNaN(time) && time >= 0
+    );
+
+  if (!validTimes.length) {
+    return entries;
+  }
+
+  const maxTime = Math.max(...validTimes);
+  const shouldScaleToMillis =
+    maxTime > 0 && maxTime <= LYRIC_TIMING_UPPER_BOUND_SECONDS;
+
+  if (!shouldScaleToMillis) {
+    return entries;
+  }
+
+  return entries.map((item) => ({
+    ...item,
+    timestart:
+      typeof item.timestart === "number" && !Number.isNaN(item.timestart)
+        ? item.timestart * 1000
+        : item.timestart,
+  }));
+};
 
 const MusicPlayer: React.FC = () => {
   const route = useRoute<MusicPlayerRouteProp>();
@@ -50,35 +122,366 @@ const MusicPlayer: React.FC = () => {
   const [countdown, setCountdown] = useState<number | null>(null); // Countdown state
 
   const [animationValue] = useState(new Animated.Value(0)); // State for animation
-  const [volume, setVolume] = useState(0); // State for volume
 
   const songName = songKey.song_id;
   const [title, setTitle] = useState<string | undefined>(undefined);
-  const [lyrics, setLyrics] = useState<string[] | undefined>(undefined);
+  const [lyrics, setLyrics] = useState<LyricLineType[]>([]);
+  const [lyricsMessage, setLyricsMessage] = useState<string | null>(
+    "Loading lyrics..."
+  );
+  const [highlightIndex, setHighlightIndex] = useState(-1);
+  const [lyricsContainerHeight, setLyricsContainerHeight] = useState(0);
+  const [lyricsContentHeight, setLyricsContentHeight] = useState(0);
+  const lyricsScrollRef = useRef<ScrollView | null>(null);
+  const lyricHeightsRef = useRef<Record<number, number>>({});
+  const lyricAnimationsRef = useRef<Record<number, Animated.Value>>({});
+  const previousHighlightRef = useRef(-1);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const vocalSoundRef = useRef<Audio.Sound | null>(null);
+  const vocalResumePositionRef = useRef(0);
+  const vocalSyncingRef = useRef(false);
+  const autoSubmitInProgressRef = useRef(false);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const countdownInitiatedRef = useRef(false);
+  const startRecordingInProgressRef = useRef(false);
+  const [metadataReady, setMetadataReady] = useState(false);
+  const [audioReady, setAudioReady] = useState(false);
   const [image, setImage] = useState<string | undefined>(undefined);
   const [singer, setSinger] = useState<string | undefined>(undefined);
 
   const [loadingResult, setLoadingResult] = useState(false);
+  const [vocalEnabled, setVocalEnabled] = useState(true);
+  const vocalEnabledRef = useRef(vocalEnabled);
+  const [hasVocalTrack, setHasVocalTrack] = useState(false);
+
+  useEffect(() => {
+    soundRef.current = sound;
+  }, [sound]);
+
+  useEffect(() => {
+    recordingRef.current = recording;
+  }, [recording]);
+
+  useEffect(() => {
+    vocalEnabledRef.current = vocalEnabled;
+  }, [vocalEnabled]);
+
+  const stopVocalPlayback = useCallback(async (resetPosition = false) => {
+    const vocalSound = vocalSoundRef.current;
+    if (!vocalSound) {
+      return;
+    }
+
+    try {
+      const status = await vocalSound.getStatusAsync();
+      if (!status.isLoaded) {
+        return;
+      }
+
+      if (status.isPlaying) {
+        if (resetPosition) {
+          await vocalSound.stopAsync();
+        } else {
+          await vocalSound.pauseAsync();
+        }
+      } else if (resetPosition) {
+        await vocalSound.stopAsync();
+      }
+
+      if (resetPosition) {
+        await vocalSound.setPositionAsync(0);
+        vocalResumePositionRef.current = 0;
+      }
+    } catch (error) {
+      console.warn("Failed to stop vocal playback", error);
+    }
+  }, []);
+
+  const alignVocalWithInstrument = useCallback(
+    async (shouldPlay: boolean, forceEnable?: boolean) => {
+      const vocalSound = vocalSoundRef.current;
+      const instrumentSound = soundRef.current;
+      if (!vocalSound || !instrumentSound) {
+        return;
+      }
+
+      try {
+        const [instrumentStatus, vocalStatus] = await Promise.all([
+          instrumentSound.getStatusAsync(),
+          vocalSound.getStatusAsync(),
+        ]);
+
+        if (!instrumentStatus.isLoaded || !vocalStatus.isLoaded) {
+          return;
+        }
+
+        const allowPlayback = forceEnable ?? vocalEnabled;
+
+        if (!allowPlayback) {
+          vocalResumePositionRef.current = instrumentStatus.positionMillis ?? vocalResumePositionRef.current;
+          if (vocalStatus.isPlaying) {
+            await vocalSound.pauseAsync();
+          }
+          return;
+        }
+
+        const targetPosition = instrumentStatus.positionMillis ?? 0;
+
+        const difference = Math.abs((vocalStatus.positionMillis ?? 0) - targetPosition);
+        if (difference > 220) {
+          if (vocalSyncingRef.current) {
+            return;
+          }
+          vocalSyncingRef.current = true;
+          try {
+            await vocalSound.setPositionAsync(targetPosition);
+          } finally {
+            vocalSyncingRef.current = false;
+          }
+        }
+
+        vocalResumePositionRef.current = targetPosition;
+
+        if (shouldPlay) {
+          if (!vocalStatus.isPlaying) {
+            await vocalSound.playAsync();
+          }
+        } else if (vocalStatus.isPlaying) {
+          await vocalSound.pauseAsync();
+        }
+      } catch (error) {
+        console.warn("Failed to align vocal track", error);
+      }
+    },
+    [vocalEnabled]
+  );
+
+  const stopAndUnloadCurrentSound = useCallback(async () => {
+    const currentInstrument = soundRef.current;
+    const currentVocal = vocalSoundRef.current;
+
+    if (currentInstrument) {
+      try {
+        const status = await currentInstrument.getStatusAsync();
+        if (status.isLoaded) {
+          if (status.isPlaying) {
+            await currentInstrument.stopAsync();
+          }
+          await currentInstrument.unloadAsync();
+        }
+      } catch (err) {
+        console.error("Error managing sound instance:", err);
+      } finally {
+        soundRef.current = null;
+      }
+    }
+
+    if (currentVocal) {
+      try {
+        const vocalStatus = await currentVocal.getStatusAsync();
+        if (vocalStatus.isLoaded) {
+          if (vocalStatus.isPlaying) {
+            await currentVocal.stopAsync();
+          }
+          await currentVocal.unloadAsync();
+        }
+      } catch (err) {
+        console.error("Error unloading vocal sound:", err);
+      } finally {
+        vocalSoundRef.current = null;
+        vocalSyncingRef.current = false;
+      }
+    }
+
+    setSound(null);
+    setIsPlaying(false);
+    setPosition(0);
+    setHasVocalTrack(false);
+    setVocalEnabled(false);
+    vocalResumePositionRef.current = 0;
+    setCountdown(null);
+    countdownInitiatedRef.current = false;
+  }, []);
+
+  const stopActiveRecording = useCallback(async () => {
+    const currentRecording = recordingRef.current;
+    if (!currentRecording) {
+      return;
+    }
+
+    try {
+      const status = await currentRecording.getStatusAsync();
+      if (status.canRecord || status.isRecording) {
+        await currentRecording.stopAndUnloadAsync();
+      } else if (!status.isDoneRecording) {
+        await currentRecording.stopAndUnloadAsync();
+      }
+    } catch (err) {
+      console.warn(
+        "Skipping recording cleanup because recorder is not available:",
+        err
+      );
+    } finally {
+      recordingRef.current = null;
+      setRecording(null);
+      setRecordingUri(null);
+    }
+  }, []);
+
+  const cleanupAudioResources = useCallback(async () => {
+    await stopAndUnloadCurrentSound();
+    await stopActiveRecording();
+  }, [stopAndUnloadCurrentSound, stopActiveRecording]);
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        cleanupAudioResources().catch(() => {
+          /* noop */
+        });
+      };
+    }, [cleanupAudioResources])
+  );
+
+  useEffect(() => {
+    return () => {
+      cleanupAudioResources().catch(() => {
+        /* noop */
+      });
+    };
+  }, [cleanupAudioResources]);
+
+  const ensureLocalAudioFile = useCallback(async (remoteUri: string) => {
+    try {
+      const cacheRoot = Paths.cache;
+      if (!cacheRoot?.uri) {
+        throw new Error("Cache directory unavailable");
+      }
+
+      const audioCacheDir = new Directory(cacheRoot, "audio-cache");
+      try {
+        audioCacheDir.create({ intermediates: true, idempotent: true });
+      } catch (dirError) {
+        // Directory may already exist; ignore idempotent violations
+        console.warn("Audio cache directory setup warning:", dirError);
+      }
+
+      const lastSegment =
+        remoteUri.split("/").pop()?.split("?")[0].split("#")[0] ??
+        `audio-${Date.now()}.mp3`;
+      const safeFileName = lastSegment.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const targetFile = new File(
+        audioCacheDir,
+        `${Date.now()}-${safeFileName}`
+      );
+
+      const downloadedFile = await File.downloadFileAsync(remoteUri, targetFile, {
+        idempotent: true,
+      });
+
+      return downloadedFile.uri;
+    } catch (error) {
+      console.warn("Falling back to streaming audio due to caching failure", error);
+      return remoteUri;
+    }
+  }, []);
+
+  const REMOTE_AUDIO_PATTERN = /^https?:\/\//i;
+
+  const loadSoundWithFallback = useCallback(
+    async (
+      uri: string,
+      initialStatus: AVPlaybackStatusToSet = { shouldPlay: false }
+    ) => {
+      let candidateUri = uri;
+      let usedCachedCopy = false;
+
+      if (REMOTE_AUDIO_PATTERN.test(uri)) {
+        const localUri = await ensureLocalAudioFile(uri);
+        if (localUri && localUri !== uri) {
+          candidateUri = localUri;
+          usedCachedCopy = true;
+        }
+      }
+
+      try {
+        return await Audio.Sound.createAsync({ uri: candidateUri }, initialStatus);
+      } catch (primaryError) {
+        console.warn("Primary audio load failed, retrying with cached copy", primaryError);
+
+        if (!usedCachedCopy) {
+          const localUri = await ensureLocalAudioFile(uri);
+          if (localUri && localUri !== candidateUri) {
+            return await Audio.Sound.createAsync({ uri: localUri }, initialStatus);
+          }
+        }
+
+        throw primaryError;
+      }
+    },
+    [ensureLocalAudioFile]
+  );
 
   const getAudioById = async () => {
     try {
+      setAudioReady(false);
+      setCountdown(null);
+      countdownInitiatedRef.current = false;
+      await stopAndUnloadCurrentSound();
       const response = await getAudioVerById(songKey.version_id);
       console.log("GETAUDIOVERBYID", response.data);
-      const audioUri = `${GlobalConstant.API_URL}/${response.data.instru_path}`;
-      console.log("Audio URI:", audioUri);
+      const instrumentUri = buildAssetUri(response.data?.instru_path);
+      const vocalUri = buildAssetUri(response.data?.ori_path);
+      const playbackUri = instrumentUri ?? vocalUri;
 
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: audioUri },
-        { shouldPlay: false }
+      if (!playbackUri) {
+        console.error("Unable to resolve audio URI from response:", response.data);
+        return;
+      }
+
+      console.log("Instrumental URI:", instrumentUri);
+      console.log("Original URI:", vocalUri);
+
+      const { sound: newInstrumentSound } = await loadSoundWithFallback(
+        playbackUri
       );
-      setSound(newSound);
+      soundRef.current = newInstrumentSound;
+      setSound(newInstrumentSound);
 
-      const st = await newSound.getStatusAsync();
+      const st = await newInstrumentSound.getStatusAsync();
       if (st.isLoaded && typeof st.durationMillis === "number") {
         setDuration(st.durationMillis / 1000); // keep seconds in state
       }
 
-      newSound.setOnPlaybackStatusUpdate((status) => {
+      const hasSeparateVocal = Boolean(instrumentUri && vocalUri && instrumentUri !== vocalUri);
+      setHasVocalTrack(hasSeparateVocal);
+      setVocalEnabled(hasSeparateVocal);
+
+      if (hasSeparateVocal && vocalUri) {
+        try {
+          const { sound: vocalSound } = await loadSoundWithFallback(
+            vocalUri,
+            { shouldPlay: false, volume: 0.6 }
+          );
+          vocalSoundRef.current = vocalSound;
+        } catch (error) {
+          console.error("Failed to load vocal track:", error);
+          vocalSoundRef.current = null;
+          setHasVocalTrack(false);
+          setVocalEnabled(false);
+        }
+      } else {
+        if (vocalSoundRef.current) {
+          try {
+            await vocalSoundRef.current.unloadAsync();
+          } catch (error) {
+            console.warn("Failed to unload existing vocal sound:", error);
+          }
+        }
+        vocalSoundRef.current = null;
+      }
+
+      newInstrumentSound.setOnPlaybackStatusUpdate((status) => {
         if (!status.isLoaded) return;
 
         if (typeof status.positionMillis === "number") {
@@ -89,63 +492,186 @@ const MusicPlayer: React.FC = () => {
         }
         setIsPlaying(status.isPlaying === true);
 
+        const vocalSound = vocalSoundRef.current;
+        if (vocalSound) {
+          const isVocalEnabled = vocalEnabledRef.current;
+          if (status.didJustFinish) {
+            void stopVocalPlayback(true);
+          } else if (isVocalEnabled) {
+            void alignVocalWithInstrument(status.isPlaying === true);
+          } else {
+            vocalResumePositionRef.current = status.positionMillis ?? vocalResumePositionRef.current;
+          }
+        }
+
         if (status.didJustFinish) {
           setIsPlaying(false);
           setPosition(0);
+          if (!autoSubmitInProgressRef.current) {
+            const activeRecording = recordingRef.current ?? recording;
+            if (activeRecording) {
+              void stopRecording(true);
+            }
+          }
         }
       });
+      setAudioReady(true);
     } catch (e) {
       console.error("Error fetching audio by ID:", e);
+      setAudioReady(false);
     }
+  };
+
+  const handleFetchLyrics = async (
+    song_id: number,
+    fallbackRaw?: string | null
+  ) => {
+    setLyrics([]);
+    setLyricsMessage("Loading lyrics...");
+    try {
+      const response = await getLyrics(song_id);
+      if (
+        response.success &&
+        Array.isArray(response.data) &&
+        response.data.length > 0
+      ) {
+        const sortedLyrics = normaliseLyricTimings([...response.data]).sort(
+          (a, b) => a.timestart - b.timestart
+        );
+        setLyrics(sortedLyrics);
+        setLyricsMessage(null);
+        return sortedLyrics;
+      }
+    } catch (error) {
+      console.error("Error fetching lyrics:", error);
+    }
+
+    const fallbackLyrics = buildFallbackLyrics(song_id, fallbackRaw);
+    if (fallbackLyrics.length > 0) {
+      setLyrics(fallbackLyrics);
+      setLyricsMessage(null);
+      return fallbackLyrics;
+    }
+
+    setLyrics([]);
+    setLyricsMessage(LYRICS_UNAVAILABLE_MESSAGE);
+    return [];
   };
 
   useEffect(() => {
     getAudioById();
-  }, []);
+  }, [songKey.version_id]);
+
+  useEffect(() => {
+    if (!hasVocalTrack || !vocalSoundRef.current || !vocalEnabled) {
+      return;
+    }
+    void alignVocalWithInstrument(isPlaying, true);
+  }, [alignVocalWithInstrument, hasVocalTrack, isPlaying, vocalEnabled]);
 
   const playInstrumental = async () => {
     try {
-      if (!sound) {
+      const currentSound = soundRef.current;
+      if (!currentSound) {
         console.error("Sound is not loaded");
-        console.log(sound);
         return;
       }
-      // await Audio.setAudioModeAsync({
-      //   allowsRecordingIOS: false,
-      //   playsInSilentModeIOS: true,
-      //   staysActiveInBackground: true,
-      //   interruptionModeIOS: InterruptionModeIOS.DoNotMix,
-      //   interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-      //   shouldDuckAndroid: false,
-      //   playThroughEarpieceAndroid: false,
-      // });
-      await sound.playAsync();
+      const status = await currentSound.getStatusAsync();
+      if (!status.isLoaded) {
+        console.error("Instrumental sound is not fully loaded");
+        return;
+      }
+
+      if (!status.isPlaying) {
+        if (typeof status.positionMillis === "number" && status.positionMillis > 0) {
+          await currentSound.playFromPositionAsync(status.positionMillis);
+        } else {
+          await currentSound.playAsync();
+        }
+      }
+
+      if (vocalSoundRef.current && vocalEnabledRef.current) {
+        await alignVocalWithInstrument(true);
+      }
     } catch (error) {
       console.error("Error playing instrumental:", error);
     }
   };
 
+  const toggleVocalLayer = useCallback(async () => {
+    if (!hasVocalTrack) {
+      return;
+    }
+
+    const nextEnabled = !vocalEnabled;
+    setVocalEnabled(nextEnabled);
+
+    const instrumentSound = soundRef.current;
+    const vocalSound = vocalSoundRef.current;
+
+    if (!vocalSound) {
+      return;
+    }
+
+    try {
+      if (!nextEnabled) {
+        if (instrumentSound) {
+          const status = await instrumentSound.getStatusAsync();
+          if (status.isLoaded) {
+            vocalResumePositionRef.current = status.positionMillis ?? vocalResumePositionRef.current;
+          }
+        }
+        await stopVocalPlayback(false);
+      } else {
+        const instrumentStatus = instrumentSound ? await instrumentSound.getStatusAsync() : null;
+        const targetPosition =
+          instrumentStatus && instrumentStatus.isLoaded
+            ? instrumentStatus.positionMillis ?? vocalResumePositionRef.current
+            : vocalResumePositionRef.current;
+
+        vocalSyncingRef.current = true;
+        try {
+          await vocalSound.setPositionAsync(targetPosition);
+        } finally {
+          vocalSyncingRef.current = false;
+        }
+
+        vocalResumePositionRef.current = targetPosition;
+
+        if (instrumentStatus?.isLoaded && instrumentStatus.isPlaying) {
+          await vocalSound.playAsync();
+        }
+      }
+    } catch (error) {
+      console.warn("Failed to toggle vocal layer", error);
+    }
+  }, [hasVocalTrack, stopVocalPlayback, vocalEnabled]);
+
   useEffect(() => {
+    let isActive = true;
+    setLoading(true);
+    setMetadataReady(false);
+
     (async () => {
       await handleGetSongById(songKey.song_id);
-      // setSong(data);
-      // setDuration(data.duration);
-      setLoading(false);
+      if (isActive) {
+        setMetadataReady(true);
+      }
     })();
 
     return () => {
-      if (sound) {
-        sound.unloadAsync();
-      }
+      isActive = false;
+      cleanupAudioResources();
     };
-  }, []);
+  }, [cleanupAudioResources, songKey.song_id]);
 
   // Ensure countdown triggers recording automatically and finish icon stops recording.
   useEffect(() => {
-    if (!loading && countdown === null) {
-      setCountdown(3); // Start countdown after loading
+    if (!loading && sound && countdown === null && !countdownInitiatedRef.current) {
+      countdownInitiatedRef.current = true;
+      setCountdown(3); // Start countdown once instrumental audio is ready
     }
-  }, [loading]);
+  }, [loading, sound, countdown]);
 
   useEffect(() => {
     if (countdown !== null) {
@@ -166,13 +692,153 @@ const MusicPlayer: React.FC = () => {
     }
   }, [countdown]);
 
+  useEffect(() => {
+    lyricHeightsRef.current = {};
+    lyricAnimationsRef.current = {};
+    previousHighlightRef.current = -1;
+    setHighlightIndex(-1);
+    setLyricsContentHeight(0);
+    setTimeout(() => {
+      lyricsScrollRef.current?.scrollTo({
+        y: 0,
+        animated: false,
+      });
+    }, 0);
+  }, [lyrics]);
+
+  useEffect(() => {
+    if (!lyrics.length) return;
+    const currentMillis = position * 1000;
+    let currentIndex = -1;
+    for (let i = 0; i < lyrics.length; i++) {
+      if (currentMillis >= lyrics[i].timestart) {
+        currentIndex = i;
+      } else {
+        break;
+      }
+    }
+
+    if (currentIndex !== highlightIndex) {
+      setHighlightIndex(currentIndex);
+    }
+  }, [position, lyrics, highlightIndex]);
+
+  const handleLyricsLayout = useCallback((event: LayoutChangeEvent) => {
+    setLyricsContainerHeight(event.nativeEvent.layout.height);
+  }, []);
+
+  const handleContentSizeChange = useCallback((_: number, height: number) => {
+    setLyricsContentHeight(height);
+  }, []);
+
+  const getLineMetrics = useCallback(
+    (index: number) => {
+      let top = 0;
+      for (let i = 0; i < index; i++) {
+        top += lyricHeightsRef.current[i] ?? ESTIMATED_LYRIC_ROW_HEIGHT;
+      }
+      const height =
+        lyricHeightsRef.current[index] ?? ESTIMATED_LYRIC_ROW_HEIGHT;
+      return { top, height };
+    },
+    []
+  );
+
+  const computeCenteredOffset = useCallback(
+    (index: number) => {
+      if (lyricsContainerHeight <= 0) {
+        return 0;
+      }
+
+      const { top, height } = getLineMetrics(index);
+      const lineMidpoint = top + height / 2;
+      const desiredOffset = lineMidpoint - lyricsContainerHeight / 2;
+      const maxOffset = Math.max(
+        lyricsContentHeight - lyricsContainerHeight,
+        0
+      );
+
+      return Math.min(Math.max(desiredOffset, 0), maxOffset);
+    },
+    [getLineMetrics, lyricsContainerHeight, lyricsContentHeight]
+  );
+
+  const scrollToHighlight = useCallback(
+    (index: number, animated = true) => {
+      if (
+        index < 0 ||
+        !lyricsScrollRef.current ||
+        lyricsContainerHeight <= 0
+      ) {
+        return;
+      }
+
+      const targetOffset = computeCenteredOffset(index);
+
+      requestAnimationFrame(() => {
+        lyricsScrollRef.current?.scrollTo({
+          y: targetOffset,
+          animated,
+        });
+      });
+    },
+    [computeCenteredOffset, lyricsContainerHeight]
+  );
+
+  const ensureLineAnimation = useCallback(
+    (index: number) => {
+      if (!lyricAnimationsRef.current[index]) {
+        lyricAnimationsRef.current[index] = new Animated.Value(
+          index === highlightIndex ? 1 : 0
+        );
+      }
+      return lyricAnimationsRef.current[index];
+    },
+    [highlightIndex]
+  );
+
+  const animateLyric = useCallback((index: number, toValue: number) => {
+    const animation = lyricAnimationsRef.current[index];
+    if (!animation) return;
+    Animated.timing(animation, {
+      toValue,
+      duration: HIGHLIGHT_ANIMATION_DURATION,
+      useNativeDriver: false,
+    }).start();
+  }, []);
+
+  useEffect(() => {
+    scrollToHighlight(highlightIndex);
+  }, [highlightIndex, scrollToHighlight]);
+
+  useEffect(() => {
+    if (highlightIndex >= 0) {
+      scrollToHighlight(highlightIndex, false);
+    }
+  }, [lyricsContainerHeight, lyricsContentHeight, highlightIndex, scrollToHighlight]);
+
+  useEffect(() => {
+    const previousIndex = previousHighlightRef.current;
+    if (previousIndex !== highlightIndex) {
+      if (previousIndex >= 0) {
+        animateLyric(previousIndex, 0);
+      }
+      if (highlightIndex >= 0) {
+        ensureLineAnimation(highlightIndex);
+        animateLyric(highlightIndex, 1);
+      }
+      previousHighlightRef.current = highlightIndex;
+    }
+  }, [highlightIndex, animateLyric, ensureLineAnimation]);
+
   const handleGetSongById = async (song_id: number) => {
     try {
       const response = await getSong(song_id);
       setTitle(response.data.title);
-      setLyrics(response.data.lyrics?.split("\n") || ["No lyrics available"]);
+      // setLyrics(response.data.lyrics?.split("\n") || ["No lyrics available"]);
       setImage(response.data.album_cover || "");
       setSinger(response.data.singer);
+      await handleFetchLyrics(song_id, response.data.lyrics);
 
       if (response.success) {
         console.log("Fetched song data:", response);
@@ -223,14 +889,26 @@ const MusicPlayer: React.FC = () => {
     }
   }, [recording]);
 
-  const onSeek = async (value: number) => {
-    if (sound) {
-      await sound.setPositionAsync(value * 1000);
-    }
-  };
+  useEffect(() => {
+    const nextLoading = !(metadataReady && audioReady);
+    setLoading((prev) => (prev === nextLoading ? prev : nextLoading));
+  }, [metadataReady, audioReady]);
 
   const startRecording = async () => {
+    if (startRecordingInProgressRef.current) {
+      console.log("Start recording already in progress, skipping");
+      return;
+    }
+
+    if (recordingRef.current || recording) {
+      console.log("Recording already in progress, skipping start request");
+      return;
+    }
+
+    startRecordingInProgressRef.current = true;
+
     try {
+      autoSubmitInProgressRef.current = false;
       console.log("Requesting microphone permissions...");
       const { granted } = await Audio.requestPermissionsAsync();
       if (!granted) {
@@ -257,109 +935,134 @@ const MusicPlayer: React.FC = () => {
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
       console.log("Recording created successfully");
+      recordingRef.current = recording;
       setRecording(recording);
     } catch (err) {
       console.error("Failed to start recording", err);
+    } finally {
+      startRecordingInProgressRef.current = false;
     }
   };
 
-  // const stopRecording = async () => {
-  //   if (!recording) return;
-  //   await recording.stopAndUnloadAsync();
-  //   const uri = recording.getURI();
-  //   setRecordingUri(uri);
-  //   setRecording(null);
+type CreateRecordResponseData = {
+  filePath: string;
+  mistakes: any[];
+  recordId: number;
+  score: number;
+};
 
-  //   if (sound) {
-  //     await sound.stopAsync();
-  //     await sound.unloadAsync();
-  //     setSound(null);
-  //   }
+type CreateRecordResponse = {
+  success: boolean;
+  msg?: string;
+  data: CreateRecordResponseData;
+};
 
-  //   console.log("Recording stopped and instrumental audio unloaded");
+const stopRecording = async (triggeredByAuto = false) => {
+  const activeRecording = recordingRef.current ?? recording;
+  if (!activeRecording) {
+    return;
+  }
 
-  //   const wavFilePath = `${(FileSystem as any).documentDirectory}recording.wav`;
-  //   if (uri) {
-  //     await FileSystem.copyAsync({ from: uri, to: wavFilePath });
-  //   } else {
-  //     console.error("Recording URI is null, cannot copy file.");
-  //     return;
-  //   }
-  //   console.log(`Recording saved as .wav file at: ${wavFilePath}`);
+  if (autoSubmitInProgressRef.current && triggeredByAuto) {
+    return;
+  }
 
-  //   try {
-  //     if (!songKey.ori_path) throw new Error("Original path is missing");
+  if (!autoSubmitInProgressRef.current) {
+    autoSubmitInProgressRef.current = true;
+  }
 
-  //     setLoadingResult(true);
-  //     const response = await createRecord(
-  //       wavFilePath,
-  //       `${songKey.version_id}`,
-  //       songKey.key_signature,
-  //       songKey.ori_path
-  //     );
-
-  //     console.log("Record created successfully:", response);
-
-  const stopRecording = async () => {
-    if (!recording) return;
-
-    await recording.stopAndUnloadAsync();
-    const uri = recording.getURI();
+  try {
+    // Stop and unload the recording
+    await activeRecording.stopAndUnloadAsync();
+    const uri = activeRecording.getURI();
     setRecordingUri(uri);
+    recordingRef.current = null;
     setRecording(null);
 
+    // Stop and unload instrumental
     if (sound) {
       await sound.stopAsync();
       await sound.unloadAsync();
       setSound(null);
     }
 
+    if (vocalSoundRef.current) {
+      try {
+        await stopVocalPlayback(true);
+        await vocalSoundRef.current.unloadAsync();
+      } catch (error) {
+        console.warn("Failed to reset vocal track after recording", error);
+      } finally {
+        vocalSoundRef.current = null;
+        vocalSyncingRef.current = false;
+        setHasVocalTrack(false);
+        setVocalEnabled(false);
+      }
+    }
+
     console.log("Recording stopped and instrumental audio unloaded");
 
-    try {
-      if (!uri) {
-        console.error("Recording URI is null, cannot save file.");
-        return;
-      }
-
-      // ✅ SDK 54 File API
-      const source = new File(uri);
-      const target = new File(Paths.document, "recording.m4a");
-
-      // optional: if you want to force-overwrite, delete old file first
-      if (target.exists) {
-        try {
-          target.delete();
-        } catch {}
-      }
-
-      source.copy(target); // <-- synchronous, no await
-      console.log(`Recording saved as .m4a file at: ${target.uri}`);
-
-      if (!songKey.ori_path) throw new Error("Original path is missing");
-
-      setLoadingResult(true);
-      const response = await createRecord(
-        target.uri, // use the new file’s URI
-        `${songKey.version_id}`,
-        songKey.key_signature,
-        songKey.ori_path
-      );
-
-      console.log("Record created successfully:", response);
-
-      const responseData = typeof response.data === "number" ? response.data : JSON.parse(response.data);
-      if (response.success && responseData?.score !== undefined) {
-        navigation.navigate("Result", { score: responseData.score, song_id: responseData.song_id, recordId: responseData.record_id });
-      } else {
-        console.error("No score returned from backend:", response);
-      }
-    } catch (e) {
-      console.error("Error creating record:", e);
-    } finally {
-      console.log("Stop recording process completed.");
+    if (!uri) {
+      console.error("Recording URI is null, cannot save file.");
+      return;
     }
-  };
+
+    // Save recording with Expo SDK 54 File API
+    const source = new File(uri);
+    const target = new File(Paths.document, "recording.m4a");
+
+    if (target.exists) target.delete();
+    source.copy(target);
+    console.log(`Recording saved as .m4a file at: ${target.uri}`);
+
+    if (!songKey.ori_path) throw new Error("Original path is missing");
+
+    setLoadingResult(true);
+
+    // ✅ Safe cast: BaseResponse<string> -> unknown -> CreateRecordResponse
+    const response = (await createRecord(
+      target.uri,
+      `${songKey.version_id}`,
+      songKey.key_signature,
+      songKey.ori_path
+    )) as unknown as CreateRecordResponse;
+
+    const responseData = response.data;
+
+    if (response.success && responseData?.score !== undefined) {
+      navigation.navigate("Result", {
+        score: responseData.score,
+        song_id: songKey.song_id,
+        recordId: responseData.recordId,
+        version_id: songKey.version_id,
+        localUri: target.uri,
+      });
+      console.log("Navigated to Result screen successfully");
+    } else {
+      console.error("No valid score returned from backend:", response);
+    }
+  } catch (err) {
+    console.error("Error in stopRecording:", err);
+  } finally {
+    setLoadingResult(false);
+    console.log("stopRecording process completed.");
+  }
+};
+
+
+
+  // ✅ Navigate to Result if score is returned
+  //     if (response.success && response.data?.score !== undefined) {
+  //       navigation.navigate("Result", { score: response.data.score, });
+  //     } else {
+  //       console.error("No score returned from backend:", response);
+  //     }
+  //   } catch (e) {
+  //     console.error("Error creating record:", e);
+  //   } finally {
+  //     console.log("Stop recording process completed.");
+  //   }
+  // };
 
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
@@ -380,11 +1083,10 @@ const MusicPlayer: React.FC = () => {
     ],
   };
 
-  // Render the MusicPlayer layout immediately with a loading indicator
   if (loading) {
     return (
       <ImageBackground
-        source={{ uri: "https://via.placeholder.com/150" }} // Placeholder image
+        source={{ uri: FALLBACK_COVER }}
         style={styles.bgImage}
         resizeMode="cover"
         blurRadius={15}
@@ -397,12 +1099,12 @@ const MusicPlayer: React.FC = () => {
     );
   }
 
+  const resolvedCover = buildAssetUri(image) ?? FALLBACK_COVER;
+
   return (
     <ImageBackground
       source={{
-        uri: image
-          ? `${GlobalConstant.API_URL}/${image}`
-          : "https://via.placeholder.com/150",
+        uri: resolvedCover,
       }}
       style={styles.bgImage}
       resizeMode="cover"
@@ -415,7 +1117,7 @@ const MusicPlayer: React.FC = () => {
         {/* Header */}
         <View style={styles.header}>
           <Image
-            source={{ uri: `${GlobalConstant.API_URL}/${image}` }}
+            source={{ uri: resolvedCover }}
             style={styles.albumArt}
           />
           <View style={{ marginLeft: 12 }}>
@@ -425,17 +1127,81 @@ const MusicPlayer: React.FC = () => {
         </View>
 
         {/* Lyrics */}
-        <View style={styles.lyricsWrapper}>
-          <ScrollView
-            contentContainerStyle={styles.lyricsContainer}
-            showsVerticalScrollIndicator={false}
-          >
-            {lyrics?.map((line: string, index: number) => (
-              <Text key={index} style={styles.lyrics}>
-                {line}
+        <View style={styles.lyricsWrapper} onLayout={handleLyricsLayout}>
+          {lyrics.length > 0 ? (
+            <ScrollView
+              ref={lyricsScrollRef}
+              contentContainerStyle={styles.lyricsContainer}
+              showsVerticalScrollIndicator={false}
+              onContentSizeChange={handleContentSizeChange}
+            >
+              {lyrics.map((line, index) => {
+                const isActive = index === highlightIndex;
+                const animation = ensureLineAnimation(index);
+                const rowAnimatedStyle = {
+                  backgroundColor: animation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ["rgba(255,255,255,0)", "rgba(255,255,255,0.08)"],
+                  }),
+                  transform: [
+                    {
+                      scale: animation.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [1, 1.02],
+                      }),
+                    },
+                  ],
+                };
+
+                const textAnimatedStyle = {
+                  color: animation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ["rgba(255,255,255,0.55)", "#ffffff"],
+                  }),
+                  fontSize: animation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [18, 20],
+                  }),
+                  opacity: animation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.75, 1],
+                  }),
+                };
+
+                return (
+                  <Animated.View
+                    key={`${line.lyric_id}-${index}`}
+                    style={[styles.lyricRow, rowAnimatedStyle]}
+                    onLayout={(event) => {
+                      const { height } = event.nativeEvent.layout;
+                      if (height > 0) {
+                        const storedHeight = lyricHeightsRef.current[index];
+                        if (!storedHeight || Math.abs(storedHeight - height) > 1) {
+                          lyricHeightsRef.current[index] = height;
+                          if (isActive) {
+                            scrollToHighlight(index, false);
+                          }
+                        }
+                      }
+                    }}
+                  >
+                    <Animated.Text
+                      style={[styles.lyrics, textAnimatedStyle]}
+                      numberOfLines={2}
+                    >
+                      {line.lyric}
+                    </Animated.Text>
+                  </Animated.View>
+                );
+              })}
+            </ScrollView>
+          ) : (
+            <View style={styles.lyricsPlaceholder}>
+              <Text style={styles.lyricsPlaceholderText}>
+                {lyricsMessage ?? "Loading lyrics..."}
               </Text>
-            ))}
-          </ScrollView>
+            </View>
+          )}
         </View>
 
         {/* Slider */}
@@ -445,10 +1211,10 @@ const MusicPlayer: React.FC = () => {
             minimumValue={0}
             maximumValue={duration}
             value={position}
-            onSlidingComplete={onSeek}
             minimumTrackTintColor="#fff"
             maximumTrackTintColor="#ccc"
             thumbTintColor="#fff"
+            disabled
           />
           <View style={styles.timeContainer}>
             <Text style={styles.time}>{formatTime(position)}</Text>
@@ -458,10 +1224,14 @@ const MusicPlayer: React.FC = () => {
 
         {/* Controls */}
         <View style={styles.controls}>
-          <TouchableOpacity onPress={() => {}}>
+          <TouchableOpacity
+            onPress={toggleVocalLayer}
+            style={[styles.vocalToggle, !hasVocalTrack && styles.vocalToggleDisabled]}
+            disabled={!hasVocalTrack}
+          >
             <Ionicons
-              name={isPlaying ? "pause" : "play"}
-              size={36}
+              name={vocalEnabled ? "volume-high" : "volume-mute"}
+              size={28}
               color="white"
             />
           </TouchableOpacity>
@@ -470,7 +1240,11 @@ const MusicPlayer: React.FC = () => {
             <Ionicons name="mic" size={50} color="white" />
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={stopRecording}>
+          <TouchableOpacity
+            onPress={() => stopRecording()}
+            disabled={!recording}
+            style={!recording ? styles.confirmDisabled : undefined}
+          >
             <MaterialIcons name="done" size={28} color="white" />
           </TouchableOpacity>
         </View>
@@ -547,20 +1321,37 @@ const styles = StyleSheet.create({
   },
   lyricsWrapper: {
     flex: 1,
-    justifyContent: "center", // vertical center
+    justifyContent: "flex-start",
     width: "90%",
     marginTop: 40,
   },
   lyricsContainer: {
-    alignItems: "flex-start", // align text to right
-    paddingHorizontal: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  lyricsPlaceholder: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+  },
+  lyricsPlaceholderText: {
+    color: "rgba(255, 255, 255, 0.6)",
+    fontSize: 16,
+    textAlign: "center",
+  },
+  lyricRow: {
+    width: "100%",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginVertical: 4,
   },
   lyrics: {
-    color: "white",
-    fontSize: 20,
+    color: "rgba(255, 255, 255, 0.55)",
+    fontSize: 18,
     textAlign: "left",
     lineHeight: 28,
-    marginVertical: 4,
   },
   progressContainer: {
     width: "80%",
@@ -583,12 +1374,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 80,
   },
+  vocalToggle: {
+    backgroundColor: "rgba(107, 107, 107, 0.5)",
+    padding: 12,
+    borderRadius: 30,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  vocalToggleDisabled: {
+    opacity: 0.4,
+  },
   micButton: {
     backgroundColor: "rgba(107, 107, 107, 0.5)",
     padding: 20,
     borderRadius: 50,
     justifyContent: "center",
     alignItems: "center",
+  },
+  confirmDisabled: {
+    opacity: 0.4,
   },
   animationContainer: {
     flexDirection: "row",

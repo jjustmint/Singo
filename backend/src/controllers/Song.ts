@@ -1,5 +1,5 @@
 import { FindLyricsBySongId } from "../models/Lyrics";
-import { FindAllSong, FindAudioVerById, FindSongKeyBySongId, getRecordById } from "../models/Song";
+import { FindAllSong, FindAudioVerById, FindLatestSongs, FindSongKeyBySongId, getRecordById } from "../models/Song";
 import { ConstructResponse } from "../utils/responseConstructor";
 import { Context } from "hono";
 
@@ -55,6 +55,17 @@ export const getAudioVerByIdController = async (c: Context) => {
             return c.json(ConstructResponse(false, "Song not found", 404));
         }
         return c.json(ConstructResponse(true, "Song found", song), 200);
+    }catch (e) {
+        return c.json(ConstructResponse(false, `Error: ${e}`), 500)
+    }
+}
+
+export const getLatestSongsController = async (c: Context) => {
+    try{
+        const body = await c.req.json<{ limit?: number }>().catch(() => ({}) as { limit?: number });
+        const limit = body.limit && body.limit > 0 ? Math.min(body.limit, 20) : 5;
+        const songs = await FindLatestSongs(limit);
+        return c.json(ConstructResponse(true, "Latest songs fetched", songs), 200);
     }catch (e) {
         return c.json(ConstructResponse(false, `Error: ${e}`), 500)
     }

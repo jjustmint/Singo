@@ -1,17 +1,31 @@
 import { Axios } from "@/util/AxiosInstance";
 import { BaseResponse } from "./types/baseResponse";
-import { leaderboardType } from "./types/leaderboard";
+import { LeaderboardPayload } from "./types/leaderboard";
 
-type LeaderboardResponse = BaseResponse<leaderboardType[]>;
+type LeaderboardResponse = BaseResponse<LeaderboardPayload>;
 
-export const getLeaderboard = async (versionId: number): Promise<LeaderboardResponse> => {
+export const getLeaderboard = async (date: string): Promise<LeaderboardResponse> => {
     try {
         const response = await Axios.post<LeaderboardResponse>(
             "/private/getleaderboard", {
-                versionId: versionId
+                date: date
             }
         );
-        return response.data;
+        const responseData = response.data;
+        const normalizedMessage = responseData.message ?? responseData.msg;
+        const challengeSong = responseData?.data?.challengeSong ?? null;
+        const leaderBoard = Array.isArray(responseData?.data?.leaderBoard)
+            ? responseData.data.leaderBoard
+            : [];
+
+        return {
+            ...responseData,
+            message: normalizedMessage,
+            data: {
+                challengeSong,
+                leaderBoard,
+            },
+        };
 
     } catch (e) {
         Object.entries(e as {[key: string]: any}).forEach(([key, value]) => {
@@ -20,7 +34,10 @@ export const getLeaderboard = async (versionId: number): Promise<LeaderboardResp
         return {
             success: false,
             message: "Network error",
-            data: [],
-        }
+            data: {
+                challengeSong: null,
+                leaderBoard: [],
+            },
+        };
     }
 }

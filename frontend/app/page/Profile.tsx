@@ -23,9 +23,11 @@ export default function Profile() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasFetchedOnce, setHasFetchedOnce] = useState(false);
   const [isStale, setIsStale] = useState(false);
-  const [userProfile, setUserProfile] = useState<{ name: string; photo: string | null }>(
-    { name: "", photo: null }
-  );
+  const [userProfile, setUserProfile] = useState<{
+    name: string;
+    photo: string | null;
+    userKey: string | null;
+  }>({ name: "", photo: null, userKey: null });
   
   // Animation values
   const dropdownHeight = useRef(new Animated.Value(0)).current;
@@ -43,6 +45,7 @@ export default function Profile() {
         setUserProfile({
           name: userResponse.data.username ?? "",
           photo: stampedPhoto,
+          userKey: userResponse.data.user_key ?? null,
         });
       }
 
@@ -59,6 +62,7 @@ export default function Profile() {
     } catch (error) {
       console.error("Failed to load profile data:", error);
       setHistory([]);
+      setUserProfile({ name: "", photo: null, userKey: null });
     } finally {
       setIsLoading(false);
       setHasFetchedOnce(true);
@@ -126,12 +130,20 @@ export default function Profile() {
     navigation.navigate("EditProfile");
   };
 
+  const handleVoiceTest = () => {
+    if (isDropdownOpen) {
+      toggleDropdown();
+    }
+    navigation.navigate("voicetest");
+  };
+
   const handleSignOut = async () => {
     try {
       await removeAuthToken();
       await AsyncStorage.removeItem("user_id");
 
       setHistory([]);
+      setUserProfile({ name: "", photo: null, userKey: null });
 
       if (isDropdownOpen) {
         toggleDropdown();
@@ -319,6 +331,8 @@ export default function Profile() {
                   isLoading={isLoading}
                   name={userProfile.name}
                   photo={userProfile.photo}
+                  userKey={userProfile.userKey}
+                  onTestKeyPress={handleVoiceTest}
                 />
               </View>
               <View style={{ padding: 20 }}>

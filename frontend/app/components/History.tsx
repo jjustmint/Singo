@@ -28,6 +28,10 @@ type HistoryDetail = {
   albumCover: string;
   dateLabel: string;
   accuracyLabel: string;
+  recordId: number;
+  score: number;
+  songId?: number | null;
+  versionId?: number | null;
 };
 
 const formatDate = (value?: string | Date | null) => {
@@ -75,11 +79,13 @@ const buildDetail = async (record: HistoryType): Promise<HistoryDetail> => {
   let title = `Recording #${record.record_id}`;
   let albumCover: string | null = null;
   let keyLabel = record.key ?? "Unknown key";
+  let songId: number | null = null;
 
   try {
     if (record.version_id) {
       const audioRes = await getAudioVerById(record.version_id);
       if (audioRes.success && audioRes.data?.song_id) {
+        songId = audioRes.data.song_id;
         const songRes = await getSong(audioRes.data.song_id);
         if (songRes.success && songRes.data) {
           const { title: songTitle, album_cover, key_signature } = songRes.data;
@@ -100,6 +106,10 @@ const buildDetail = async (record: HistoryType): Promise<HistoryDetail> => {
     albumCover: albumCover ?? "",
     dateLabel: formatDate(record.created_at),
     accuracyLabel: formatAccuracy(record.accuracy_score),
+    recordId: record.record_id,
+    score: typeof record.accuracy_score === "number" ? record.accuracy_score : 0,
+    songId,
+    versionId: record.version_id ?? null,
   };
 };
 
@@ -167,8 +177,20 @@ const History: React.FC<HistoryProps> = ({ data = [], isLoading }) => {
     };
   }, [recordings, detailsMap]);
 
-  const handleCardPress = () => {
-    navigation.navigate("Summary");
+  const handleCardPress = (
+    detail: HistoryDetail,
+    record: HistoryType
+  ) => {
+    navigation.navigate("Summary", {
+      score:
+        typeof record.accuracy_score === "number"
+          ? record.accuracy_score
+          : detail.score,
+      recordId: detail.recordId ?? record.record_id,
+      song_id: detail.songId ?? 0,
+      version_id: detail.versionId ?? record.version_id ?? null,
+      localUri: null,
+    });
   };
 
   const handleLoadMore = () => {
@@ -200,7 +222,10 @@ const History: React.FC<HistoryProps> = ({ data = [], isLoading }) => {
     }
 
     return (
-      <TouchableOpacity onPress={handleCardPress} style={styles.card}>
+      <TouchableOpacity
+        onPress={() => handleCardPress(detail, item)}
+        style={styles.card}
+      >
         {detail.albumCover ? (
           <Image source={{ uri: detail.albumCover }} style={styles.image} />
         ) : (

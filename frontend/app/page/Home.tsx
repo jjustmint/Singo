@@ -16,21 +16,37 @@ import { getUser } from "@/api/getUser";
 import { GlobalConstant } from "@/constant";
 import { getAllsongs } from "@/api/song/getAll";
 import { useFocusEffect } from "@react-navigation/native";
+import { SongType as BaseSongType } from "../Types/Song";
 
 const { width } = Dimensions.get("window");
 
-interface Song {
-  id: string;
-  image: string;
-  songName: string;
-  artist: string;
-}
+type Song = BaseSongType & { previewUrl: string | null };
+
+const buildAssetUri = (path?: string | null) => {
+  if (!path) {
+    return null;
+  }
+
+  const normalised = path.replace(/\\/g, "/");
+
+  if (normalised.startsWith("http://") || normalised.startsWith("https://")) {
+    return normalised;
+  }
+
+  const trimmed = normalised.replace(/^\/+/, "");
+  const withoutDataPrefix = trimmed.startsWith("data/")
+    ? trimmed.replace(/^data\//, "")
+    : trimmed;
+
+  return encodeURI(`${GlobalConstant.API_URL}/${withoutDataPrefix}`);
+};
 
 export default function Home() {
   const listRef = useRef<FlatList<any>>(null);
   const [username, setUsername] = useState<string>("");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
+  const [userKey, setUserKey] = useState<string | null>(null);
 
   const buildPhotoUrl = useCallback((photo?: string | null) => {
     if (typeof photo !== "string" || photo.length === 0) {
@@ -54,8 +70,11 @@ export default function Home() {
     const fetchedUsername = await getUser();
     const user = fetchedUsername.data.username;
     const photo = fetchedUsername.data.photo ?? null;
+    const preferredKey = fetchedUsername.data.user_key ?? null; 
     setUsername(user);
     setPhotoUrl(buildPhotoUrl(photo));
+    setUserKey(preferredKey);
+    console.log("🎵 userKey:", preferredKey); 
     console.log("Fetched username:", fetchedUsername);
   }, [buildPhotoUrl]);
 
@@ -63,11 +82,11 @@ export default function Home() {
     const fetchedSongs = await getAllsongs();
     const mappedSongs: Song[] = fetchedSongs.data.map((song: any) => ({
       id: song.song_id.toString(),
-      image:
-        song.album_cover ||
-        "https://i.pinimg.com/564x/11/8e/7f/118e7f4d22f1e5ff4f6e2f1f2d1f3c4b5.jpg",
+      image: buildAssetUri(song.album_cover) ?? "https://i.pinimg.com/564x/11/8e/7f/118e7f4d22f1e5ff4f6e2f1f2d1f3c4b5.jpg",
       songName: song.title,
       artist: song.singer,
+      previewUrl: buildAssetUri(song.previewsong),
+      key_signature: song.key_signature,
     }));
     setSongs(mappedSongs);
     console.log("Fetched songs:", fetchedSongs.data);
@@ -230,7 +249,7 @@ export default function Home() {
               </Text>
             </View>
             <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
-              <TrendingList song={songs}/>
+              {userKey !== null && <TrendingList song={songs} userKey={userKey} />}
             </View>
 
             {/* Top Rate */}

@@ -1,22 +1,22 @@
 import React, { useEffect, useState } from "react";
-import { GlobalConstant } from "@/constant";
 import {
   View,
   Text,
   StyleSheet,
   ImageBackground,
   TouchableOpacity,
-  FlatList,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
-import { LinearGradient } from 'expo-linear-gradient';
-import { get } from "react-native/Libraries/TurboModule/TurboModuleRegistry";
+import { LinearGradient } from "expo-linear-gradient";
+import { getSong } from "@/api/song/getSong";
 import { getSongkey } from "@/api/getSongKey";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 import { RootStackParamList } from "../Types/Navigation";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { SongKeyType } from "../Types/SongKey";
-import { SongType } from "../Types/Song";
+import { buildAssetUri } from "../utils/assetUri";
+
+const FALLBACK_COVER = "https://via.placeholder.com/600x600?text=No+Cover";
 
 type ChooseKeyRouteProp = RouteProp<RootStackParamList, "ChooseKey">;
 type ChooseKeyNavProp = StackNavigationProp<RootStackParamList, "ChooseKey">;
@@ -25,60 +25,113 @@ const ChooseKey: React.FC = () => {
   const route = useRoute<ChooseKeyRouteProp>();
   const navigation = useNavigation<ChooseKeyNavProp>();
 
-  const { song } = route.params;
-  
-  const [songList, setSongList] = useState<SongKeyType[]>([]);
-  const [keys, setKeys] = useState<String[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const { song, selectedKey, versionId, userKey } = route.params;
   const songName = song.songName;
   const artist = song.artist;
   const song_id = song.id;
   const image = song.image;
-   // Use songKey.id for the song ID
- // Adjust type to match your navigation structure
+  const numericSongId = Number.parseInt(song_id, 10);
+  const originalKey = song.key_signature;
 
-  // Fetch keys from backend
+  const [songList, setSongList] = useState<SongKeyType[]>([]);
+  const [keys, setKeys] = useState<string[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isLockedWeekly, setIsLockedWeekly] = useState(false);
+  const [coverUri, setCoverUri] = useState<string>(
+    buildAssetUri(image) ?? FALLBACK_COVER
+  );
+
+  // === Fetch keys and set initial index ===
   useEffect(() => {
+    if (Number.isNaN(numericSongId)) {
+      console.warn("Invalid song id:", song_id);
+      return;
+    }
+
+    // Weekly challenge case
+    if (selectedKey && versionId) {
+      setKeys([selectedKey]);
+      setSongList([
+        {
+          version_id: versionId,
+          song_id: numericSongId,
+          instru_path: "",
+          ori_path: null,
+          key_signature: selectedKey,
+        },
+      ]);
+      setCurrentIndex(0);
+      setIsLockedWeekly(true);
+      return;
+    }
+
+    // Normal case: fetch all keys
     const fetchKeys = async () => {
       try {
-        const result = await getKey(parseInt(song_id, 10));
-        console.log("Song ID:", song_id);
-        console.log("songName:", songName);
-        console.log("artist:", artist);
-        
-        if (result) {
-          console.log("Fetched keys successfully:", result);
+        const data = await getSongkey(numericSongId);
+        const keySignatures = data.data.map((item) => item.key_signature);
+        setKeys(keySignatures);
+        setSongList(data.data);
+
+        console.log("🎵 userKey:", userKey);
+        console.log("🎵 Available keys:", keySignatures);
+
+        if (userKey) {
+          const normalizedUserKey = userKey.toLowerCase().trim();
+
+          // Find best match
+          let index = keySignatures.findIndex(
+            (k) => k.toLowerCase().trim() === normalizedUserKey
+          );
+
+          // Try tonic match if no exact match
+          if (index === -1) {
+            const userTonic = normalizedUserKey.split(" ")[0]; // e.g. "g" from "g minor"
+            index = keySignatures.findIndex((k) =>
+              k.toLowerCase().includes(userTonic)
+            );
+          }
+
+          console.log("🎯 Found index for userKey:", index);
+          setCurrentIndex(index !== -1 ? index : 0);
+        } else {
+          setCurrentIndex(0);
         }
       } catch (error) {
-        console.log("Error fetching keys:", error);
+        console.error("Error fetching keys:", error);
       }
     };
+
     fetchKeys();
-  }, []);
+  }, [numericSongId, selectedKey, versionId, userKey, song_id]);
 
-  const getKey = async (song_id: number) =>{
-    try {
-      const data = await getSongkey(song_id);
-      setKeys(data.data.map(item => item.key_signature));
-      setSongList(data.data);
-      console.log("Fetched keys:", keys);
-      if (data.success) {
-        return data;
-      } else {
-        console.error("Failed to fetch key:", data.message);
-        return null;
+  // === Fetch cover ===
+  useEffect(() => {
+    const resolvedCover = buildAssetUri(image) ?? FALLBACK_COVER;
+    setCoverUri(resolvedCover);
+
+    const fetchCover = async () => {
+      try {
+        const response = await getSong(numericSongId);
+        if (response.success && response.data?.album_cover) {
+          const apiCover = buildAssetUri(response.data.album_cover);
+          if (apiCover) setCoverUri(apiCover);
+        }
+      } catch (error) {
+        console.error("Error fetching song cover:", error);
       }
-    } catch (error) {
-      console.error("Error fetching key:", error);
-      return null;
-    }
-  }
+    };
+    fetchCover();
+  }, [image, numericSongId]);
 
+  // === Navigation buttons ===
   const handleNext = () => {
+    if (isLockedWeekly) return;
     if (currentIndex < keys.length - 1) setCurrentIndex(currentIndex + 1);
   };
 
   const handlePrev = () => {
+    if (isLockedWeekly) return;
     if (currentIndex > 0) setCurrentIndex(currentIndex - 1);
   };
 
@@ -90,58 +143,93 @@ const ChooseKey: React.FC = () => {
     }
   };
 
-
-  const renderSong = ({ item }: { item: SongType }) => (
-    <View>
-      <Text>{item.songName}</Text>
-    </View>
-  );
-
   return (
-    <ImageBackground source={{ uri: `${GlobalConstant.API_URL}/${song.image}` }} style={styles.bg}>
-      {/* Gradient overlay - black from bottom fading to transparent at top */}
+    <ImageBackground source={{ uri: coverUri }} style={styles.bg}>
       <LinearGradient
-        colors={['transparent', 'transparent', 'rgba(0,0,0,0.8)', '#000000']}
+        colors={["transparent", "transparent", "rgba(0,0,0,0.8)", "#000"]}
         locations={[0, 0.3, 0.7, 1]}
         style={styles.gradientOverlay}
       />
-      
-      {/* Back Arrow */}
+
       <TouchableOpacity style={styles.backButton}>
         <Feather name="arrow-left" size={28} color="white" />
       </TouchableOpacity>
-      
-      {/* Song Info */}
+
       <View style={styles.songInfo}>
-        <Text style={styles.title}>{songName ? songName : 'No Title'}</Text>
+        <Text style={styles.title}>{songName ?? "No Title"}</Text>
         <View style={styles.artistRow}>
           <Feather name="user" size={16} color="white" />
-          <Text style={styles.artist}> {artist ? artist : 'Unknown Artist'}</Text>
+          <Text style={styles.artist}>{artist ?? "Unknown Artist"}</Text>
         </View>
       </View>
-      
-      {/* Key Selector */}
+
       <View style={styles.keyContainer}>
-        <TouchableOpacity onPress={handlePrev} style={styles.chevronButton}>
-          <Feather name="chevron-left" size={40} color="white" right={40} />
+        <TouchableOpacity
+          onPress={handlePrev}
+          disabled={isLockedWeekly}
+          style={[
+            styles.chevronButton,
+            isLockedWeekly && styles.disabledChevron,
+          ]}
+        >
+          <Feather name="chevron-left" size={40} color="white" />
         </TouchableOpacity>
+
         <Text style={styles.keyText}>{keys[currentIndex]}</Text>
-        <TouchableOpacity onPress={handleNext} style={styles.chevronButton}>
-          <Feather name="chevron-right" size={40} color="white" left={40} />
+
+        <TouchableOpacity
+          onPress={handleNext}
+          disabled={isLockedWeekly}
+          style={[
+            styles.chevronButton,
+            isLockedWeekly && styles.disabledChevron,
+          ]}
+        >
+          <Feather name="chevron-right" size={40} color="white" />
         </TouchableOpacity>
-      </View>
-      <Text style={styles.suggested}>Suggested</Text>
-      
-      {/* Song List */}
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        {/* <FlatList
-          data={songList}
-          keyExtractor={(item) => item.id.toString()}
-          renderItem={renderSong}
-        /> */}
       </View>
 
-      {/* Confirm Button */}
+{/* === Key status text (Original, Recommended, Weekly, or both) === */}
+{isLockedWeekly ? (
+  <Text style={styles.suggested}>Weekly challenge key</Text>
+) : (
+  (() => {
+    const normalizedCurrent = keys[currentIndex]?.toUpperCase().trim();
+    const normalizedOriginal = song.key_signature?.toUpperCase().trim();
+    const userTonic = userKey?.split(" ")[0].toUpperCase();
+
+    // === Check if this is the original key ===
+    const isOriginal =
+      normalizedCurrent && normalizedOriginal
+        ? normalizedCurrent === normalizedOriginal
+        : false;
+
+    // === Check if this is recommended (closest to user's key) ===
+    let Suggested = false;
+    if (normalizedCurrent && userTonic) {
+      const pitchOrder = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+      const currentIdx = pitchOrder.indexOf(normalizedCurrent.split(" ")[0]);
+      const userIdx = pitchOrder.indexOf(userTonic);
+      if (currentIdx !== -1 && userIdx !== -1) {
+        const distance = Math.min(Math.abs(userIdx - currentIdx), 12 - Math.abs(userIdx - currentIdx));
+        Suggested = distance <= 2; // within 2 semitones counts as close
+      }
+    }
+
+    // === Decide what to display ===
+    if (isOriginal && Suggested) {
+      return <Text style={styles.suggested}>Original (Suggested)</Text>;
+    } else if (isOriginal) {
+      return <Text style={styles.suggested}>Original</Text>;
+    } else if (Suggested) {
+      return <Text style={styles.suggested}>Suggested</Text>;
+    } else {
+      return null;
+    }
+  })()
+)}
+
+
       <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
         <Feather name="check" size={32} color="#3A6DFF" />
       </TouchableOpacity>
@@ -152,53 +240,27 @@ const ChooseKey: React.FC = () => {
 export default ChooseKey;
 
 const styles = StyleSheet.create({
-  bg: {
-    flex: 1,
-    justifyContent: "flex-start",
-  },
-  gradientOverlay: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  backButton: {
-    position: "absolute",
-    top: 80,
-    left: 20,
-    zIndex: 2,
-  },
-  songInfo: {
-    marginTop: 350,
-    paddingHorizontal: 20,
-  },
+  bg: { flex: 1, justifyContent: "flex-start" },
+  gradientOverlay: { ...StyleSheet.absoluteFillObject },
+  backButton: { position: "absolute", top: 80, left: 20, zIndex: 2 },
+  songInfo: { marginTop: 350, paddingHorizontal: 20 },
   title: {
     fontSize: 24,
     fontWeight: "bold",
     color: "white",
     textTransform: "uppercase",
   },
-  artistRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 5,
-  },
-  artist: {
-    fontSize: 16,
-    color: "white",
-  },
+  artistRow: { flexDirection: "row", alignItems: "center", marginTop: 5 },
+  artist: { fontSize: 16, color: "white" },
   keyContainer: {
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
     marginTop: 100,
   },
-  chevronButton: {
-    padding: 10,
-  },
-  keyText: {
-    fontSize: 50,
-    color: "white",
-    fontWeight: "bold",
-    marginHorizontal: 0,
-  },
+  chevronButton: { padding: 10 },
+  disabledChevron: { opacity: 0.4 },
+  keyText: { fontSize: 50, color: "white", fontWeight: "bold" },
   suggested: {
     textAlign: "center",
     color: "white",

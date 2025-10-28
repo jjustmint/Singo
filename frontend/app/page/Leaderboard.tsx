@@ -1,5 +1,5 @@
 // ---------------- Leaderboard.tsx ----------------
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   View,
   Text,
@@ -12,16 +12,18 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
 import AntDesign from "@expo/vector-icons/AntDesign";
+import { useFocusEffect } from "@react-navigation/native";
 
 import { getLeaderboard } from "@/api/leaderboard";
-import { getSong } from "@/api/song/getSong";
-import { getAudioVerById } from "@/api/song/getAudioById";
+import { ChallengeSongType, LeaderboardEntryType, LeaderboardPayload } from "@/api/types/leaderboard";
 import ScoreChart from "../components/ScoreChart";
 import WeeklyRanking from "../components/WeeklyRanking"; 
 import SongChallenge from "../components/SongChalleng";
+import { resolveProfileImage } from "../components/ProfileInfo";
 
 const { height } = Dimensions.get("window");
-const audio_id = 5;
+const CHALLENGE_DEFAULT_START = "2025-09-26"; //comment: replace with actual default start date
+const CHALLENGE_LOOKBACK_DAYS = 14;
 
 // ---------------- Types ----------------
 interface User {
@@ -34,66 +36,102 @@ interface User {
 // ---------------- Leaderboard Screen ----------------
 export default function Leaderboard() {
   const [weeklyRanking, setWeeklyRanking] = useState<User[] | null>(null);
-  const [weeklySong, setWeeklySong] = useState<any | false | null>(null);
+  const [challengeVersionId, setChallengeVersionId] = useState<number | null>(null);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        await Promise.all([fetchLeaderboard(), fetchWeeklySong()]);
-      } catch (err) {
-        console.error("Error fetching data:", err);
-      }
+  const parseResponse = useCallback((payload?: LeaderboardPayload | null) => {
+    const leaderBoard: LeaderboardEntryType[] = Array.isArray(
+      payload?.leaderBoard
+    )
+      ? (payload?.leaderBoard as LeaderboardEntryType[])
+      : [];
+    const challengeSong: ChallengeSongType | null =
+      payload?.challengeSong ?? null;
+
+    return {
+      leaderBoard,
+      challengeSong,
     };
-    fetchData();
   }, []);
 
-  // ---------------- Fetch Leaderboard ----------------
-  const fetchLeaderboard = async () => {
-    try {
-      const leaderboardData = await getLeaderboard(audio_id);
+  const findLatestChallenge = useCallback(async () => {
+    const today = new Date();
 
-      // map API data to User type and convert recordId to string
-      const data: User[] = (leaderboardData?.data || []).map((user: any) => ({
-        recordId: String(user.recordId), // <-- convert number to string
-        userName: user.userName,
-        accuracyScore: user.accuracyScore,
-        profilePicture: user.profilePicture,
-      }));
+    for (let offset = 0; offset < CHALLENGE_LOOKBACK_DAYS; offset += 1) {
+      const candidate = new Date(today);
+      candidate.setDate(today.getDate() - offset);
+      const isoDate = candidate.toISOString().split("T")[0];
+
+      try {
+        const response = await getLeaderboard(isoDate);
+        const parsed = parseResponse(response?.data);
+        const hasChallenge = Boolean(parsed.challengeSong);
+        const hasLeaderboard = parsed.leaderBoard.length > 0;
+
+        if (hasChallenge || hasLeaderboard) {
+          return parsed;
+        }
+      } catch (err) {
+        console.warn(`Leaderboard fetch failed for ${isoDate}`, err);
+      }
+    }
+
+    try {
+      const fallbackResponse = await getLeaderboard(CHALLENGE_DEFAULT_START);
+      return parseResponse(fallbackResponse?.data);
+    } catch (err) {
+      console.warn("Fallback leaderboard fetch failed", err);
+      return {
+        leaderBoard: [],
+        challengeSong: null,
+      };
+    }
+  }, [parseResponse]);
+
+  const fetchLeaderboard = useCallback(async () => {
+    try {
+      const { leaderBoard: rawEntries, challengeSong } =
+        await findLatestChallenge();
+      const normalisedEntries: LeaderboardEntryType[] = Array.isArray(
+        rawEntries
+      )
+        ? rawEntries
+        : [];
+
+      const data: User[] = normalisedEntries.map((entry: LeaderboardEntryType) => {
+        const profilePicturePath: string | null = entry.profilePicture ?? null;
+        const normalizedProfile =
+          resolveProfileImage(profilePicturePath ?? undefined) ?? undefined;
+
+        return {
+          recordId: String(
+            entry.record_id ??
+              entry.user_id ??
+              Math.floor(Date.now() + Math.random() * 1000)
+          ),
+          userName: entry.userName ?? "Unknown",
+          accuracyScore: entry.accuracyScore ?? 0,
+          profilePicture: normalizedProfile,
+        };
+      });
 
       const sortedData = [...data].sort(
         (a, b) => b.accuracyScore - a.accuracyScore
       );
 
       setWeeklyRanking(sortedData);
+      setChallengeVersionId(challengeSong?.version_id ?? null);
     } catch (err) {
       console.error("Failed to fetch leaderboard:", err);
       setWeeklyRanking([]);
+      setChallengeVersionId(null);
     }
-  };
+  }, [findLatestChallenge]);
 
-  // ---------------- Fetch Weekly Song ----------------
-  const fetchWeeklySong = async () => {
-    try {
-      const audioData = await getAudioVerById(audio_id);
-      if (!audioData?.data?.song_id) {
-        setWeeklySong(false);
-        return;
-      }
-      const songData = await getSong(audioData.data.song_id);
-      if (!songData?.data) {
-        setWeeklySong(false);
-        return;
-      }
-      setWeeklySong({
-        title: songData.data.title || "Unknown Title",
-        singer: songData.data.singer || "Unknown Singer",
-        key: audioData.data.key_signature || "N/A",
-      });
-    } catch (err) {
-      console.error("Failed to fetch weekly song info:", err);
-      setWeeklySong(false);
-    }
-  };
+  useFocusEffect(
+    useCallback(() => {
+      fetchLeaderboard();
+    }, [fetchLeaderboard])
+  );
 
   // ---------------- UI ----------------
   return (
@@ -152,15 +190,14 @@ export default function Leaderboard() {
           />
 
           {/* Weekly Challenge Song */}
-<View style={{ marginTop: 30, paddingHorizontal: 20 }}>
-  <Text style={{ fontSize: 18, fontWeight: "bold", color: "white", marginBottom: 10 }}>
-    Weekly Challenge Song
-  </Text>
+          <View style={{ marginTop: 30, paddingHorizontal: 20 }}>
+            <Text style={{ fontSize: 18, fontWeight: "bold", color: "white", marginBottom: 10 }}>
+              Weekly Challenge Song
+            </Text>
 
-  {/* Use the modular SongChallenge component */}
-  <SongChallenge audioId={audio_id} />
-</View>
-
+            {/* Use the modular SongChallenge component */}
+            <SongChallenge audioId={challengeVersionId} />
+          </View>
 
           {/* Top 10 Weekly Ranking */}
           <View style={{ marginTop: 30, paddingHorizontal: 20, marginBottom: 20 }}>
