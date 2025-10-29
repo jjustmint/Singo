@@ -13,8 +13,9 @@ export const CreateSongAndVersionController = async (c: Context) => {
     const singer = formData.get("singer") as string;
     const album_coverFile = formData.get("album_cover") as File | null;
     const previewsongFile = formData.get("previewsong") as File | null;
+    const song_name = songName.replace(/^["']|["']$/g, "").replace(/\.[^/.]+$/, "").replace(/\s+/g, "_");
 
-    const baseUploadDir = path.join(process.cwd(), "data", "uploads", "song", songName);
+    const baseUploadDir = path.join(process.cwd(), "data", "uploads", "song", song_name);
     fs.mkdirSync(baseUploadDir, { recursive: true });
 
     // === Save album_cover if provided ===
@@ -40,7 +41,7 @@ export const CreateSongAndVersionController = async (c: Context) => {
     }
 
     // === Create extra folders for song versions ===
-    const songBaseDir = path.join(process.cwd(), "song", songName);
+    const songBaseDir = path.join(process.cwd(), "song", song_name);
     const vocalDir = path.join(songBaseDir, "vocal");
     const instruDir = path.join(songBaseDir, "instru");
 
@@ -50,7 +51,7 @@ export const CreateSongAndVersionController = async (c: Context) => {
     // === Send main audio file to FastAPI ===
     const backendForm = new FormData();
     backendForm.append("song", song);
-    backendForm.append("song_name", songName);
+    backendForm.append("song_name", song_name);
 
     let result;
     try {
