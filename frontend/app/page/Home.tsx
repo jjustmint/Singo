@@ -108,7 +108,7 @@ export default function Home() {
   );
 
   const scrollToSection = (
-    section: "New Release" | "Trending" | "Top Rated"
+    section: "New Release" | "Trending" | "All Songs"
   ) => {
     const y = sectionPositions.current[section] || 0;
     const offsetBefore = 60; // space above section in pixels
@@ -238,7 +238,7 @@ export default function Home() {
               <CategoryTabs
                 scrollToSection={(category: string) =>
                   scrollToSection(
-                    category as "New Release" | "Trending" | "Top Rated"
+                    category as "New Release" | "Trending" | "All Songs"
                   )
                 }
               />
@@ -262,10 +262,10 @@ export default function Home() {
                 <NewReleaseTabs />
               </View>
 
-              {/* Trending Section */}
+              {/* Top Rate Section */}
               <View
                 onLayout={(event) => onLayoutSection("Trending", event)}
-                ref={trendingRef}
+                ref={topRateRef}
               >
                 <View style={{ paddingHorizontal: 20 }}>
                   <Text
@@ -279,16 +279,14 @@ export default function Home() {
                   </Text>
                 </View>
                 <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
-                  {userKey !== null && (
-                    <TrendingList song={songs} userKey={userKey} />
-                  )}
+                  <TopRateTabs />
                 </View>
               </View>
 
-              {/* Top Rate Section */}
+              {/* Trending Section */}
               <View
-                onLayout={(event) => onLayoutSection("Top Rated", event)}
-                ref={topRateRef}
+                onLayout={(event) => onLayoutSection("All Songs", event)}
+                ref={trendingRef}
               >
                 <View style={{ paddingHorizontal: 20 }}>
                   <Text
@@ -298,11 +296,13 @@ export default function Home() {
                       fontWeight: "bold",
                     }}
                   >
-                    Top Rate
+                    All Songs
                   </Text>
                 </View>
                 <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
-                  <TopRateTabs />
+                  {userKey !== null && (
+                    <TrendingList song={songs} userKey={userKey} />
+                  )}
                 </View>
               </View>
             </View>

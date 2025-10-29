@@ -8,6 +8,8 @@ import { GlobalConstant } from "@/constant";
 import { Audio, AVPlaybackStatus } from "expo-av";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const isIgnorableAudioError = (err: unknown) =>
+  err instanceof Error && /seeking interrupted/i.test(err.message);
 
 type RootStackParamList = {
   MainTabs: undefined;
@@ -105,13 +107,17 @@ const TrendingList: React.FC<{ song: TrendingSong[]; userKey?: string | null }> 
         await activeSound.stopAsync();
       }
     } catch (err) {
-      console.warn("Unable to stop preview cleanly:", err);
+      if (!isIgnorableAudioError(err)) {
+        console.warn("Unable to stop preview cleanly:", err);
+      }
     }
 
     try {
       await activeSound.unloadAsync();
     } catch (err) {
-      console.warn("Unable to unload preview cleanly:", err);
+      if (!isIgnorableAudioError(err)) {
+        console.warn("Unable to unload preview cleanly:", err);
+      }
     }
 
     soundRef.current = null;

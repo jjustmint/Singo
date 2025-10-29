@@ -51,6 +51,9 @@ type RecordSummary = {
   user_id: number | null;
 };
 
+const isIgnorableAudioError = (err: unknown) =>
+  err instanceof Error && /seeking interrupted/i.test(err.message);
+
 // --- Card Component ---
 export const TopRateTabs: React.FC<{
   song: Song;
@@ -479,13 +482,17 @@ const TopRateScreen: React.FC = () => {
         await currentSound.stopAsync();
       }
     } catch (err) {
-      console.warn('Unable to stop preview cleanly', err);
+      if (!isIgnorableAudioError(err)) {
+        console.warn('Unable to stop preview cleanly', err);
+      }
     }
 
     try {
       await currentSound.unloadAsync();
     } catch (err) {
-      console.warn('Unable to unload preview sound', err);
+      if (!isIgnorableAudioError(err)) {
+        console.warn('Unable to unload preview sound', err);
+      }
     }
 
     soundRef.current = null;
