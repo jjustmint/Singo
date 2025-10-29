@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, Image, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator } from "react-native";
+import { View, Text, Image, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, DeviceEventEmitter } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
@@ -124,6 +124,21 @@ const TrendingList: React.FC<{ song: TrendingSong[]; userKey?: string | null }> 
     };
   }, [unloadCurrent]);
 
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('preview:stop', (payload?: { source?: string }) => {
+      if (payload?.source === 'trending') {
+        return;
+      }
+      unloadCurrent().catch((err) => console.error('Failed to stop preview', err));
+      setPlayingId(null);
+      setLoadingId(null);
+    });
+
+    return () => {
+      sub.remove();
+    };
+  }, [unloadCurrent]);
+
   const togglePreview = useCallback(
     async (item: TrendingSong) => {
       const previewUri = buildAssetUri(item.previewUrl ?? null);
@@ -153,6 +168,7 @@ const TrendingList: React.FC<{ song: TrendingSong[]; userKey?: string | null }> 
             await currentSound.pauseAsync();
             setPlayingId(null);
           } else {
+            DeviceEventEmitter.emit('preview:stop', { source: 'trending' });
             setLoadingId(item.id);
             await currentSound.playAsync();
             setPlayingId(item.id);
@@ -167,6 +183,7 @@ const TrendingList: React.FC<{ song: TrendingSong[]; userKey?: string | null }> 
         return;
       }
 
+      DeviceEventEmitter.emit('preview:stop', { source: 'trending' });
       setLoadingId(item.id);
       await unloadCurrent();
 
