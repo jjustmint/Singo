@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -7,11 +7,17 @@ import {
   Alert,
   ActivityIndicator,
   DeviceEventEmitter,
+  Animated,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { Audio } from "expo-av";
+import {
+  Audio,
+  InterruptionModeAndroid,
+  InterruptionModeIOS,
+  type AudioMode,
+} from "expo-av";
 import {
   useFonts,
   Kanit_400Regular,
@@ -21,6 +27,26 @@ import {
 import { updateKey } from "@/api/updateKey";
 import { CommonActions } from "@react-navigation/native";
 
+const RECORD_AUDIO_MODE: Partial<AudioMode> = {
+  allowsRecordingIOS: true,
+  playsInSilentModeIOS: true,
+  staysActiveInBackground: false,
+  interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+  interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+  shouldDuckAndroid: true,
+  playThroughEarpieceAndroid: false,
+};
+
+const PLAYBACK_AUDIO_MODE: Partial<AudioMode> = {
+  allowsRecordingIOS: false,
+  playsInSilentModeIOS: true,
+  staysActiveInBackground: false,
+  interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+  interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+  shouldDuckAndroid: false,
+  playThroughEarpieceAndroid: false,
+};
+
 const VoiceTestScreen = ({ navigation }: any) => {
   const [step, setStep] = useState(0);
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
@@ -29,6 +55,20 @@ const VoiceTestScreen = ({ navigation }: any) => {
   const [uploading, setUploading] = useState(false);
   const [key, setKey] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [countdownValue, setCountdownValue] = useState<number | null>(null);
+  const [isCountingDown, setIsCountingDown] = useState(false);
+  const [recordingSecondsLeft, setRecordingSecondsLeft] = useState<number | null>(
+    null
+  );
+
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const pulseLoopRef = useRef<Animated.CompositeAnimation | null>(null);
+  const isPreparingRef = useRef(false);
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const soundRef = useRef<Audio.Sound | null>(null);
 
   const [fontsLoaded] = useFonts({
     Kanit_400Regular,
@@ -43,41 +83,130 @@ const VoiceTestScreen = ({ navigation }: any) => {
         Alert.alert("Permission required", "Microphone access is needed to record.");
         return;
       }
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        interruptionModeIOS: 1,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
-      });
+      await Audio.setAudioModeAsync(RECORD_AUDIO_MODE);
     };
     setupAudio();
   }, []);
 
+  const startPulse = () => {
+    if (pulseLoopRef.current) {
+      pulseLoopRef.current.stop();
+    }
+    pulseLoopRef.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.2,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulseLoopRef.current.start();
+  };
+
+  const stopPulse = () => {
+    if (pulseLoopRef.current) {
+      pulseLoopRef.current.stop();
+      pulseLoopRef.current = null;
+    }
+    pulseAnim.setValue(1);
+  };
+
+  const clearCountdown = () => {
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+    setCountdownValue(null);
+    setIsCountingDown(false);
+  };
+
+  const clearRecordingTimer = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    setRecordingSecondsLeft(null);
+  };
+
+  const beginCountdown = () => {
+    clearCountdown();
+    setCountdownValue(3);
+    setIsCountingDown(true);
+    let current = 3;
+    countdownIntervalRef.current = setInterval(() => {
+      current -= 1;
+      if (current > 0) {
+        setCountdownValue(current);
+      } else {
+        clearCountdown();
+        startRecording();
+      }
+    }, 1000);
+  };
+
   // ---------- Handlers ----------
   const startRecording = async () => {
+    if (recordingRef.current || recording || isPreparingRef.current) return;
+    const newRecording = new Audio.Recording();
     try {
-      if (recording) return;
-      const { recording: rec } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-      setRecording(rec);
+      isPreparingRef.current = true;
+      setRecordedUri(null);
+      clearRecordingTimer();
+      await Audio.setAudioModeAsync(RECORD_AUDIO_MODE);
+      await newRecording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await newRecording.startAsync();
+      recordingRef.current = newRecording;
+      setRecording(newRecording);
+      startPulse();
+      setRecordingSecondsLeft(5);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSecondsLeft((prev) => {
+          if (prev === null) return prev;
+          if (prev <= 1) {
+            if (recordingTimerRef.current) {
+              clearInterval(recordingTimerRef.current);
+              recordingTimerRef.current = null;
+            }
+            stopRecording();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
     } catch (err) {
+      recordingRef.current = null;
+      try {
+        await newRecording.stopAndUnloadAsync();
+      } catch {
+        /* noop */
+      }
+      stopPulse();
+      clearRecordingTimer();
       console.error("Failed to start recording", err);
       Alert.alert("Recording error", "Could not start recording.");
+    } finally {
+      isPreparingRef.current = false;
     }
   };
 
   const stopRecording = async () => {
     try {
-      if (!recording) return;
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
+      const activeRecording = recordingRef.current || recording;
+      if (!activeRecording) return;
+      recordingRef.current = null;
+      await activeRecording.stopAndUnloadAsync();
+      const uri = activeRecording.getURI();
       if (!uri) throw new Error("Recording URI is null");
 
       setRecordedUri(uri);
       setRecording(null);
+      stopPulse();
       setUploading(true);
 
       // upload here if needed...
@@ -87,12 +216,33 @@ const VoiceTestScreen = ({ navigation }: any) => {
     } catch (err) {
       console.error("Stop recording error", err);
       Alert.alert("Recording error", "Could not stop recording.");
+    } finally {
+      isPreparingRef.current = false;
+      clearRecordingTimer();
+      clearCountdown();
     }
   };
 
   const handleUpdateKey = async (uri: string) => {
     try {
       setProcessing(true);
+      const activeSound = soundRef.current || sound;
+      if (activeSound) {
+        try {
+          await activeSound.stopAsync();
+        } catch {
+          /* ignore */
+        }
+        try {
+          await activeSound.unloadAsync();
+        } catch {
+          /* ignore */
+        }
+        setSound(null);
+        soundRef.current = null;
+        setIsPlaying(false);
+        await Audio.setAudioModeAsync(RECORD_AUDIO_MODE);
+      }
       const response = await updateKey(uri);
       if (response?.success) {
         setKey(response?.data ?? null);
@@ -113,29 +263,109 @@ const VoiceTestScreen = ({ navigation }: any) => {
   const playRecording = async () => {
     try {
       if (!recordedUri) return;
-      if (sound) {
-        await sound.stopAsync();
-        await sound.unloadAsync();
+      const activeSound = soundRef.current || sound;
+      if (activeSound && isPlaying) {
+        await activeSound.stopAsync().catch(() => undefined);
+        await activeSound.unloadAsync().catch(() => undefined);
+        setSound(null);
+        soundRef.current = null;
+        setIsPlaying(false);
+        await Audio.setAudioModeAsync(RECORD_AUDIO_MODE);
+        return;
       }
+
+      if (activeSound) {
+        await activeSound.unloadAsync().catch(() => undefined);
+        setSound(null);
+        soundRef.current = null;
+      }
+
+      await Audio.setAudioModeAsync(PLAYBACK_AUDIO_MODE);
       const { sound: newSound } = await Audio.Sound.createAsync({ uri: recordedUri });
       setSound(newSound);
-      newSound.setOnPlaybackStatusUpdate((status: any) => {
-        if (status.isLoaded && status.didJustFinish) {
-          newSound.unloadAsync();
+      soundRef.current = newSound;
+      setIsPlaying(true);
+      newSound.setOnPlaybackStatusUpdate(async (status: any) => {
+        if (!status?.isLoaded) return;
+        if (status.didJustFinish) {
+          setIsPlaying(false);
           setSound(null);
+          soundRef.current = null;
+          await Audio.setAudioModeAsync(RECORD_AUDIO_MODE);
+          await newSound.unloadAsync().catch(() => undefined);
         }
       });
       await newSound.playAsync();
     } catch (e) {
       console.error(e);
       Alert.alert("Playback error", "Could not play the recording.");
+      setIsPlaying(false);
+      setSound(null);
+      soundRef.current = null;
+      await Audio.setAudioModeAsync(RECORD_AUDIO_MODE);
     }
   };
 
+  const handleRepeat = async () => {
+    const activeSound = soundRef.current || sound;
+    if (activeSound) {
+      try {
+        await activeSound.stopAsync();
+        await activeSound.unloadAsync();
+      } catch (err) {
+        console.error("Failed to reset playback", err);
+      } finally {
+        setSound(null);
+        soundRef.current = null;
+      }
+    }
+    setIsPlaying(false);
+    await Audio.setAudioModeAsync(RECORD_AUDIO_MODE);
+    setRecordedUri(null);
+    clearRecordingTimer();
+    recordingRef.current = null;
+    setStep(2);
+  };
+
+  useEffect(() => {
+    if (step === 2) {
+      if (
+        !recordedUri &&
+        !recording &&
+        !recordingRef.current &&
+        !isCountingDown &&
+        !countdownIntervalRef.current &&
+        !isPreparingRef.current
+      ) {
+        beginCountdown();
+      }
+    } else {
+      clearCountdown();
+      clearRecordingTimer();
+    }
+  }, [step, recordedUri, recording, isCountingDown]);
+
+  useEffect(() => {
+    return () => {
+      clearCountdown();
+      clearRecordingTimer();
+      stopPulse();
+      if (recordingRef.current) {
+        recordingRef.current.stopAndUnloadAsync().catch(() => undefined);
+        recordingRef.current = null;
+      }
+      const activeSound = soundRef.current;
+      if (activeSound) {
+        activeSound.stopAsync().catch(() => undefined);
+        activeSound.unloadAsync().catch(() => undefined);
+      }
+    };
+  }, []);
+
   // ---------- UI model ----------
   const stepStyles = [
-    { titleSize: 24, buttonSize: 90 },
-    { titleSize: 48, buttonSize: 90 },
+    { titleSize: 24, buttonSize: 60 },
+    { titleSize: 48, buttonSize: 60 },
     { titleSize: 24, buttonSize: 100 },
     { titleSize: 24, buttonSize: 90 },
     { titleSize: 32, buttonSize: 80 },
@@ -145,22 +375,13 @@ const VoiceTestScreen = ({ navigation }: any) => {
   const screens = [
     {
       lines: [
-        {
-          text:
-            "Alright! Take a deep breath,\nshake off the nerves, and let's\nhave some fun singing!",
-          size: 24,
-        },
+        { text: "Alright...", size: 48 },
+        { text: "Take a deep breath and get ready!", size: 22 },
       ],
       icon: "arrow-forward",
     },
-    { lines: [{ text: "Start testing!", size: 48 }], icon: "arrow-forward" },
-    {
-      lines: [
-        { text: "Please sing comfortably", size: 26 },
-        { text: "Ahhhhh", size: 40 },
-      ],
-      icon: "mic",
-    },
+    { lines: [{ text: "Let's start testing", size: 40 }], icon: "arrow-forward" },
+    { lines: [], icon: "mic" },
     { lines: [], icon: null, replayStep: true },
     {
       lines: [
@@ -179,6 +400,10 @@ const VoiceTestScreen = ({ navigation }: any) => {
     );
   }
 
+  const shouldShowHeader =
+    step !== 4 &&
+    !(step === 2 && (isCountingDown || recording || (!recording && !recordedUri)));
+
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["left", "right"]}>
       <View style={{ flex: 1 }}>
@@ -190,7 +415,7 @@ const VoiceTestScreen = ({ navigation }: any) => {
 
         <View style={styles.container}>
           {/* Header lines (skip on step 4 for a custom centered layout) */}
-          {step !== 4 &&
+          {shouldShowHeader &&
             screens[step].lines.map((line, index) => (
               <Text
                 key={index}
@@ -213,32 +438,44 @@ const VoiceTestScreen = ({ navigation }: any) => {
             <TouchableOpacity
               style={{
                 ...styles.mainButton,
+                ...styles.forwardButton,
                 width: currentStyle.buttonSize,
                 height: currentStyle.buttonSize,
                 borderRadius: currentStyle.buttonSize / 2,
               }}
               onPress={() => setStep(step + 1)}
             >
-              <Ionicons name={screens[step].icon as any} size={40} color="#fff" />
+              <Ionicons name={screens[step].icon as any} size={30} color="#fff" />
             </TouchableOpacity>
           )}
 
           {/* Step 2: Recording */}
           {step === 2 && (
-            <View style={{ alignItems: "center" }}>
-              {!recordedUri ? (
-                <TouchableOpacity
-                  style={{
-                    ...styles.mainButton,
-                    width: currentStyle.buttonSize,
-                    height: currentStyle.buttonSize,
-                    borderRadius: currentStyle.buttonSize / 2,
-                  }}
-                  onPress={recording ? stopRecording : startRecording}
-                >
-                  <Ionicons name={recording ? "stop" : "mic"} size={40} color="#fff" />
-                </TouchableOpacity>
-              ) : null}
+            <View style={styles.countdownWrap}>
+              {isCountingDown && countdownValue !== null && (
+                <Text style={styles.countdownText}>{countdownValue}</Text>
+              )}
+
+              {!isCountingDown && recording && (
+                <View style={styles.recordingContent}>
+                  <Text style={[styles.recordingText, styles.recordingPrompt]}>
+                    Say "Ahhhhh" with your relaxed voice
+                  </Text>
+
+                  <Animated.View
+                    style={[
+                      styles.recordingBubble,
+                      { transform: [{ scale: pulseAnim }] },
+                    ]}
+                  >
+                    <Ionicons name="mic" size={48} color="#fff" />
+                  </Animated.View>
+                </View>
+              )}
+
+              {!isCountingDown && recording && recordingSecondsLeft !== null && (
+                <Text style={styles.recordTimerText}>{recordingSecondsLeft}</Text>
+              )}
 
               {uploading && <Text style={styles.statusText}>Uploading...</Text>}
             </View>
@@ -254,7 +491,7 @@ const VoiceTestScreen = ({ navigation }: any) => {
                   style={[styles.mainButton, { width: 100, height: 100, borderRadius: 50 }]}
                   onPress={playRecording}
                 >
-                  <Ionicons name="play" size={40} color="#fff" />
+                  <Ionicons name={isPlaying ? "pause" : "play"} size={40} color="#fff" />
                 </TouchableOpacity>
 
                 {processing && (
@@ -265,10 +502,7 @@ const VoiceTestScreen = ({ navigation }: any) => {
               <View style={styles.actionsRow}>
                 <TouchableOpacity
                   style={[styles.mainButton, styles.roundSm]}
-                  onPress={() => {
-                    setRecordedUri(null);
-                    setStep(2);
-                  }}
+                  onPress={handleRepeat}
                 >
                   <Ionicons name="refresh" size={25} color="#fff" />
                 </TouchableOpacity>
@@ -360,6 +594,46 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 3,
   },
+  countdownWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    marginTop: 40,
+  },
+  countdownText: {
+    fontSize: 80,
+    fontFamily: "Kanit_700Bold",
+    color: "#fff",
+  },
+  recordingContent: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recordingBubble: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: "rgba(255,255,255,0.25)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  recordTimerText: {
+    marginTop: 16,
+    fontSize: 32,
+    fontFamily: "Kanit_700Bold",
+    color: "#fff",
+  },
+  recordingPrompt: {
+    marginBottom: 24,
+    fontSize: 24,
+  },
+  recordingText: {
+    fontFamily: "Kanit_500Medium",
+    color: "#fff",
+    textAlign: "center",
+    marginBottom: 4,
+  },
   statusText: {
     color: "yellow",
     marginTop: 20,
@@ -422,5 +696,10 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 40,
+  },
+  forwardButton: {
+    position: "absolute",
+    bottom: 40,
+    right: 30,
   },
 });

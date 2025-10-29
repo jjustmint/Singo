@@ -9,12 +9,16 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import type { HistoryType } from "../../../backend/src/types/getHistory";
+import type { RootStackParamList } from "../Types/Navigation";
 import { getAudioVerById } from "@/api/song/getAudioById";
 import { getSong } from "@/api/song/getSong";
 import { GlobalConstant } from "@/constant";
+
+type HistoryNavigationProp = NativeStackNavigationProp<RootStackParamList, "Summary">;
 
 type HistoryProps = {
   data?: HistoryType[];
@@ -109,12 +113,12 @@ const buildDetail = async (record: HistoryType): Promise<HistoryDetail> => {
     recordId: record.record_id,
     score: typeof record.accuracy_score === "number" ? record.accuracy_score : 0,
     songId,
-    versionId: record.version_id ?? null,
+    versionId: record.version_id,
   };
 };
 
 const History: React.FC<HistoryProps> = ({ data = [], isLoading }) => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<HistoryNavigationProp>();
   const [visibleCount, setVisibleCount] = useState(10);
   const [detailsMap, setDetailsMap] = useState<Record<string, HistoryDetail>>({});
   const [isFetching, setIsFetching] = useState(false);
@@ -188,7 +192,7 @@ const History: React.FC<HistoryProps> = ({ data = [], isLoading }) => {
           : detail.score,
       recordId: detail.recordId ?? record.record_id,
       song_id: detail.songId ?? 0,
-      version_id: detail.versionId ?? record.version_id ?? null,
+      version_id: detail.versionId,
       localUri: null,
     });
   };
