@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, Image, StyleSheet, TouchableOpacity } from "react-native";
 import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { HistoryType } from "../../../backend/src/types/getHistory";
+import type { RootStackParamList } from "../Types/Navigation";
 import { getAudioVerById } from "@/api/song/getAudioById";
 import { getSong } from "@/api/song/getSong";
 import { GlobalConstant } from "@/constant";
 import { LinearGradient } from "expo-linear-gradient";
+
+type RecentNavigationProp = NativeStackNavigationProp<RootStackParamList, "Summary">;
 
 type RecentProps = {
   data?: HistoryType[];
@@ -69,7 +73,7 @@ const resolveImage = (path?: string | null) => {
 };
 
 const Recent: React.FC<RecentProps> = ({ data = [], isLoading }) => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<RecentNavigationProp>();
   const [recentDetail, setRecentDetail] = useState<RecentDetail | null>(null);
   const [isFetching, setIsFetching] = useState(false);
 
@@ -79,7 +83,7 @@ const Recent: React.FC<RecentProps> = ({ data = [], isLoading }) => {
       score: recentDetail.score,
       recordId: recentDetail.recordId,
       song_id: recentDetail.songId ?? 0,
-      version_id: recentDetail.versionId ?? null,
+      version_id: recentDetail.versionId,
       localUri: null,
     });
   };
@@ -103,7 +107,7 @@ const Recent: React.FC<RecentProps> = ({ data = [], isLoading }) => {
       let albumCover = PLACEHOLDER_IMAGE;
       let keyLabel = latest.key ?? "Unknown key";
       let songId: number | null = null;
-      const versionId = latest.version_id ?? null;
+      const versionId = latest.version_id;
 
       try {
         if (latest.version_id) {
