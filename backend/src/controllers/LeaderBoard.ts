@@ -1,3 +1,4 @@
+import { challenge } from './../generated/prisma/index.d';
 import { Context } from "hono"
 import { ConstructResponse } from "../utils/responseConstructor";
 import { findChartBoard, getChallengeSong, getUserInfo, setChallengeSong } from "../models/LeaderBoard";
@@ -6,7 +7,7 @@ import { LeaderBoardPayload } from "../types/payload/LeaderBoard";
 export const FindLeaderBoardController = async (c: Context) => {
     try{
         const body = await c.req.json<LeaderBoardPayload>();
-        const challengeSong = await getChallengeSong(body.start_date);
+        const challengeSong = await getChallengeSong(body.date);
         if(!challengeSong){
             return c.json(ConstructResponse(false, "No challenge song found", 404));
         }
@@ -37,7 +38,12 @@ export const FindLeaderBoardController = async (c: Context) => {
             })
           );
 
-    return c.json(ConstructResponse(true, "Leaderboard found", leaderBoardData), 200);
+          const responseData = {
+            challengeSong,
+            leaderBoard: leaderBoardData,
+          };
+
+    return c.json(ConstructResponse(true, "Leaderboard found", responseData), 200);
  
     }catch (e) {
         return c.json(ConstructResponse(false, `Error: ${e}`), 500)
