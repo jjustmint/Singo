@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View, Text, Image, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator, DeviceEventEmitter } from "react-native";
+import { View, Text, Image, TouchableOpacity, StyleSheet, FlatList, ActivityIndicator } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { SongType } from "../Types/Song";
 import { GlobalConstant } from "@/constant";
 import { Audio, AVPlaybackStatus } from "expo-av";
+import { previewBus } from "@/util/previewBus";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const isIgnorableAudioError = (err: unknown) =>
@@ -131,7 +132,7 @@ const TrendingList: React.FC<{ song: TrendingSong[]; userKey?: string | null }> 
   }, [unloadCurrent]);
 
   useEffect(() => {
-    const sub = DeviceEventEmitter.addListener('preview:stop', (payload?: { source?: string }) => {
+    const remove = previewBus.addListener((payload) => {
       if (payload?.source === 'trending') {
         return;
       }
@@ -141,7 +142,7 @@ const TrendingList: React.FC<{ song: TrendingSong[]; userKey?: string | null }> 
     });
 
     return () => {
-      sub.remove();
+      remove();
     };
   }, [unloadCurrent]);
 
@@ -174,7 +175,7 @@ const TrendingList: React.FC<{ song: TrendingSong[]; userKey?: string | null }> 
             await currentSound.pauseAsync();
             setPlayingId(null);
           } else {
-            DeviceEventEmitter.emit('preview:stop', { source: 'trending' });
+            previewBus.emit({ source: 'trending' });
             setLoadingId(item.id);
             await currentSound.playAsync();
             setPlayingId(item.id);
@@ -189,7 +190,7 @@ const TrendingList: React.FC<{ song: TrendingSong[]; userKey?: string | null }> 
         return;
       }
 
-      DeviceEventEmitter.emit('preview:stop', { source: 'trending' });
+      previewBus.emit({ source: 'trending' });
       setLoadingId(item.id);
       await unloadCurrent();
 

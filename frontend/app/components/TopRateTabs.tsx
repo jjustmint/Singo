@@ -7,7 +7,6 @@ import {
   StyleSheet,
   FlatList,
   ActivityIndicator,
-  DeviceEventEmitter,
   Alert,
 } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
@@ -23,6 +22,7 @@ import { getAllsongs } from '@/api/song/getAll';
 import { getRecordById, RecordType } from '@/api/getRecordById';
 import { SongType } from '@/api/types/song';
 import { buildAssetUri } from '@/app/utils/assetUri';
+import { previewBus } from '@/util/previewBus';
 
 interface Song {
   id: number;
@@ -513,7 +513,7 @@ const TopRateScreen: React.FC = () => {
       setLoadingPreviewId(song.id);
 
       try {
-        DeviceEventEmitter.emit('preview:stop', { source: 'toprate' });
+        previewBus.emit({ source: 'toprate' });
         await stopPlayback();
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: false,
@@ -622,7 +622,7 @@ const TopRateScreen: React.FC = () => {
   }, [stopPlayback]);
 
   useEffect(() => {
-    const sub = DeviceEventEmitter.addListener('preview:stop', (payload?: { source?: string }) => {
+    const remove = previewBus.addListener((payload) => {
       if (payload?.source === 'toprate') {
         return;
       }
@@ -630,7 +630,7 @@ const TopRateScreen: React.FC = () => {
     });
 
     return () => {
-      sub.remove();
+      remove();
     };
   }, [stopPlayback]);
 

@@ -259,7 +259,7 @@ export default function Home() {
                     New Release
                   </Text>
                 </View>
-                <NewReleaseTabs />
+                <NewReleaseTabs userKey={userKey} />
               </View>
 
               {/* Top Rate Section */}
