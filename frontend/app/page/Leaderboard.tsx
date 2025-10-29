@@ -1,18 +1,17 @@
 // ---------------- Leaderboard.tsx ----------------
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
   ScrollView,
   Dimensions,
-  Image,
   StyleSheet,
-  FlatList,
+  RefreshControl,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
-import AntDesign from "@expo/vector-icons/AntDesign";
 import { useFocusEffect } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { getLeaderboard } from "@/api/leaderboard";
 import { ChallengeSongType, LeaderboardEntryType, LeaderboardPayload } from "@/api/types/leaderboard";
@@ -24,6 +23,8 @@ import { resolveProfileImage } from "../components/ProfileInfo";
 const { height } = Dimensions.get("window");
 const CHALLENGE_DEFAULT_START = "2025-09-26"; //comment: replace with actual default start date
 const CHALLENGE_LOOKBACK_DAYS = 14;
+const LEADERBOARD_CACHE_KEY = "leaderboard:weekly-cache:v1";
+const LEADERBOARD_CACHE_MAX_AGE_MS = 1000 * 60 * 5;
 
 // ---------------- Types ----------------
 interface User {
@@ -31,12 +32,23 @@ interface User {
   userName: string;
   accuracyScore: number;
   profilePicture?: string;
+  userId?: number | null;
 }
+
+type LeaderboardCachePayload = {
+  fetchedAt?: number;
+  weeklyRanking?: User[];
+  challengeVersionId?: number | null;
+};
 
 // ---------------- Leaderboard Screen ----------------
 export default function Leaderboard() {
   const [weeklyRanking, setWeeklyRanking] = useState<User[] | null>(null);
   const [challengeVersionId, setChallengeVersionId] = useState<number | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const lastFetchRef = useRef<number>(0);
+  const isFetchingRef = useRef(false);
 
   const parseResponse = useCallback((payload?: LeaderboardPayload | null) => {
     const leaderBoard: LeaderboardEntryType[] = Array.isArray(
@@ -88,6 +100,17 @@ export default function Leaderboard() {
   }, [parseResponse]);
 
   const fetchLeaderboard = useCallback(async () => {
+    if (isFetchingRef.current) return;
+
+    const now = Date.now();
+    if (
+      lastFetchRef.current &&
+      now - lastFetchRef.current < LEADERBOARD_CACHE_MAX_AGE_MS
+    ) {
+      return;
+    }
+
+    isFetchingRef.current = true;
     try {
       const { leaderBoard: rawEntries, challengeSong } =
         await findLatestChallenge();
@@ -98,9 +121,23 @@ export default function Leaderboard() {
         : [];
 
       const data: User[] = normalisedEntries.map((entry: LeaderboardEntryType) => {
-        const profilePicturePath: string | null = entry.profilePicture ?? null;
-        const normalizedProfile =
-          resolveProfileImage(profilePicturePath ?? undefined) ?? undefined;
+        const cleanedProfile =
+          typeof entry.profilePicture === "string"
+            ? entry.profilePicture.trim()
+            : null;
+        const baseProfilePath: string | null =
+          cleanedProfile && cleanedProfile.length > 0
+            ? cleanedProfile
+            : entry.user_id != null
+            ? `uploads/users/${entry.user_id}/photo/photo.jpg`
+            : null;
+        const stampedProfile =
+          baseProfilePath != null
+            ? `${baseProfilePath}${baseProfilePath.includes("?") ? "&" : "?"}t=${
+                entry.record_id ?? entry.user_id ?? Date.now()
+              }`
+            : undefined;
+        const normalizedProfile = resolveProfileImage(stampedProfile) ?? undefined;
 
         return {
           recordId: String(
@@ -111,6 +148,7 @@ export default function Leaderboard() {
           userName: entry.userName ?? "Unknown",
           accuracyScore: entry.accuracyScore ?? 0,
           profilePicture: normalizedProfile,
+          userId: entry.user_id ?? null,
         };
       });
 
@@ -120,18 +158,74 @@ export default function Leaderboard() {
 
       setWeeklyRanking(sortedData);
       setChallengeVersionId(challengeSong?.version_id ?? null);
+      lastFetchRef.current = Date.now();
+
+      AsyncStorage.setItem(
+        LEADERBOARD_CACHE_KEY,
+        JSON.stringify({
+          fetchedAt: lastFetchRef.current,
+          weeklyRanking: sortedData,
+          challengeVersionId: challengeSong?.version_id ?? null,
+        })
+      ).catch(() => undefined);
     } catch (err) {
       console.error("Failed to fetch leaderboard:", err);
-      setWeeklyRanking([]);
+      setWeeklyRanking((prev) => (prev === null ? [] : prev));
       setChallengeVersionId(null);
+    } finally {
+      isFetchingRef.current = false;
     }
   }, [findLatestChallenge]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const restoreCache = async () => {
+      try {
+        const cachedRaw = await AsyncStorage.getItem(LEADERBOARD_CACHE_KEY);
+        if (!cachedRaw) return;
+        const cached = JSON.parse(cachedRaw) as LeaderboardCachePayload;
+        if (cancelled) return;
+
+        if (Array.isArray(cached?.weeklyRanking)) {
+          setWeeklyRanking((prev) => prev ?? cached.weeklyRanking);
+        }
+
+        if (cached?.challengeVersionId !== undefined) {
+          setChallengeVersionId((prev) => {
+            if (prev !== null) return prev;
+            const value = cached.challengeVersionId;
+            return value === null ? null : Number(value);
+          });
+        }
+
+        if (typeof cached?.fetchedAt === "number") {
+          lastFetchRef.current = cached.fetchedAt;
+        }
+      } catch (err) {
+        console.warn("Failed to load cached leaderboard", err);
+      }
+    };
+
+    restoreCache();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
       fetchLeaderboard();
     }, [fetchLeaderboard])
   );
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    lastFetchRef.current = 0;
+    await fetchLeaderboard();
+    setIsRefreshing(false);
+  }, [fetchLeaderboard]);
 
   // ---------------- UI ----------------
   return (
@@ -176,7 +270,18 @@ export default function Leaderboard() {
         </View>
 
         {/* Content */}
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }} style={{ flex: 1, zIndex: 2 }}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 40 }}
+          style={{ flex: 1, zIndex: 2 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor="#ffffff"
+            />
+          }
+        >
           {/* Title */}
           <View style={{ padding: 20 }}>
             <Text style={{ fontSize: 32, fontWeight: "bold", color: "white", textAlign: "center", marginTop: 40 }}>
