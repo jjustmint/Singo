@@ -44,6 +44,11 @@ type MusicPlayerNavProp = StackNavigationProp<
 
 const FALLBACK_LYRIC_GAP_MS = 4000;
 const ESTIMATED_LYRIC_ROW_HEIGHT = 36;
+const LYRICS_ROW_MARGIN = 12;
+const LYRICS_CONTAINER_TOP_PADDING = 12;
+const LYRICS_INITIAL_TOP_OFFSET =
+  LYRICS_CONTAINER_TOP_PADDING + LYRICS_ROW_MARGIN / 2;
+const HIGHLIGHT_BOTTOM_INSET = 24;
 const HIGHLIGHT_ANIMATION_DURATION = 220;
 const FALLBACK_COVER = "https://via.placeholder.com/150";
 const LYRIC_TIMING_UPPER_BOUND_SECONDS = 600;
@@ -104,10 +109,6 @@ const normaliseLyricTimings = (entries: LyricLineType[]): LyricLineType[] => {
   }));
 };
 
-const START_ANCHOR_RATIO = 0.12;
-const MIDDLE_ANCHOR_RATIO = 0.35;
-const END_ANCHOR_RATIO = 0.78;
-
 const isIgnorableAudioWarning = (err: unknown) =>
   err instanceof Error && /seeking interrupted/i.test(err.message);
 
@@ -127,14 +128,14 @@ const MusicPlayer: React.FC = () => {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [recordingUri, setRecordingUri] = useState<string | null>(null);
 
-  const [countdown, setCountdown] = useState<number | null>(null); // Countdown state
+  const [countdown, setCountdown] = useState<number | null>(null);
   const [isRecordingPaused, setIsRecordingPaused] = useState(false);
 
   const countdownPurposeRef = useRef<"start" | "resume" | null>(null);
   const hasStartedRecordingRef = useRef(false);
   const initialCountdownTriggeredRef = useRef(false);
 
-  const [animationValue] = useState(new Animated.Value(0)); // State for animation
+  const [animationValue] = useState(new Animated.Value(0));
 
   const songName = songKey.song_id;
   const [title, setTitle] = useState<string | undefined>(undefined);
@@ -146,7 +147,9 @@ const MusicPlayer: React.FC = () => {
   const [lyricsContainerHeight, setLyricsContainerHeight] = useState(0);
   const [lyricsContentHeight, setLyricsContentHeight] = useState(0);
   const lyricsScrollRef = useRef<ScrollView | null>(null);
-  const lyricHeightsRef = useRef<Record<number, number>>({});
+  const lyricMeasurementsRef = useRef<
+    Record<number, { height: number; top: number }>
+  >({});
   const lyricAnimationsRef = useRef<Record<number, Animated.Value>>({});
   const previousHighlightRef = useRef(-1);
   const soundRef = useRef<Audio.Sound | null>(null);
@@ -445,7 +448,6 @@ const MusicPlayer: React.FC = () => {
       try {
         audioCacheDir.create({ intermediates: true, idempotent: true });
       } catch (dirError) {
-        // Directory may already exist; ignore idempotent violations
         console.warn("Audio cache directory setup warning:", dirError);
       }
 
@@ -536,7 +538,7 @@ const MusicPlayer: React.FC = () => {
 
       const st = await newInstrumentSound.getStatusAsync();
       if (st.isLoaded && typeof st.durationMillis === "number") {
-        setDuration(st.durationMillis / 1000); // keep seconds in state
+        setDuration(st.durationMillis / 1000);
       }
 
       const hasSeparateVocal = Boolean(instrumentUri && vocalUri && instrumentUri !== vocalUri);
@@ -752,9 +754,8 @@ const MusicPlayer: React.FC = () => {
     };
   }, [cleanupAudioResources, songKey.song_id]);
 
-  // Ensure countdown triggers recording automatically and finish icon stops recording.
   useEffect(() => {
-    lyricHeightsRef.current = {};
+    lyricMeasurementsRef.current = {};
     lyricAnimationsRef.current = {};
     previousHighlightRef.current = -1;
     setHighlightIndex(-1);
@@ -807,28 +808,35 @@ const MusicPlayer: React.FC = () => {
     setLyricsContentHeight(height);
   }, []);
 
-  const getLineMetrics = useCallback(
-    (index: number) => {
-      let top = 0;
-      for (let i = 0; i < index; i++) {
-        top += lyricHeightsRef.current[i] ?? ESTIMATED_LYRIC_ROW_HEIGHT;
-      }
-      const height =
-        lyricHeightsRef.current[index] ?? ESTIMATED_LYRIC_ROW_HEIGHT;
-      return { top, height };
-    },
-    []
-  );
-
-  const lyricPaddings = useMemo(() => {
-    if (lyricsContainerHeight <= 0) {
-      return { bottom: 0 };
+  const getLineMetrics = useCallback((index: number) => {
+    const measurement = lyricMeasurementsRef.current[index];
+    if (measurement) {
+      return measurement;
     }
-    const anchorSlack = lyricsContainerHeight * (1.2 - END_ANCHOR_RATIO);
-    const controlsGuard = 160;
-    const minimumSlack = Math.max(lyricsContainerHeight * 0.8, controlsGuard);
-    const bottom = Math.max(anchorSlack + 40, minimumSlack);
-    return { bottom };
+
+    let runningTop = LYRICS_INITIAL_TOP_OFFSET;
+
+    for (let i = 0; i < index; i++) {
+      const cached = lyricMeasurementsRef.current[i];
+      if (cached) {
+        runningTop = cached.top + cached.height + LYRICS_ROW_MARGIN;
+      } else {
+        runningTop += ESTIMATED_LYRIC_ROW_HEIGHT + LYRICS_ROW_MARGIN;
+      }
+    }
+
+    return {
+      top: runningTop,
+      height: ESTIMATED_LYRIC_ROW_HEIGHT,
+    };
+  }, []);
+
+  const lyricBottomPadding = useMemo(() => {
+    if (lyricsContainerHeight <= 0) {
+      return 0;
+    }
+    // Allow enough trailing space for centre alignment without keeping the highlight stuck when nearing the end
+    return Math.max(lyricsContainerHeight * 0.45, 140);
   }, [lyricsContainerHeight]);
 
   const getScrollOffset = useCallback(
@@ -837,35 +845,42 @@ const MusicPlayer: React.FC = () => {
         return 0;
       }
 
-      const total = lyrics.length;
-      if (!total) {
+      const { top, height } = getLineMetrics(index);
+      const lineMidpoint = top + height / 2;
+      const rawMaxOffset = Math.max(lyricsContentHeight - lyricsContainerHeight, 0);
+      const middleAnchor = lyricsContainerHeight * 0.5;
+      const desiredOffset = lineMidpoint - middleAnchor;
+
+      if (desiredOffset <= 0) {
         return 0;
       }
 
-      const firstBlock = Math.max(Math.floor(total / 3), 1);
-      const secondBlock = Math.max(Math.floor((total * 2) / 3), firstBlock + 1);
+      const maxCenterAlignedOffset = Math.max(
+        rawMaxOffset - lyricBottomPadding,
+        0
+      );
 
-      let anchorRatio = MIDDLE_ANCHOR_RATIO;
-      if (index < firstBlock) {
-        anchorRatio = START_ANCHOR_RATIO;
-      } else if (index >= secondBlock) {
-        anchorRatio = END_ANCHOR_RATIO;
+      if (desiredOffset <= maxCenterAlignedOffset) {
+        return desiredOffset;
       }
 
-      const { top, height } = getLineMetrics(index);
-      const lineMidpoint = top + height / 2;
-      const maxOffset = Math.max(lyricsContentHeight - lyricsContainerHeight, 0);
-      let desiredOffset = lineMidpoint - lyricsContainerHeight * anchorRatio;
+      const bottomAnchor = lyricsContainerHeight - HIGHLIGHT_BOTTOM_INSET;
+      const lineBottom = top + height;
+      const bottomLockedOffset = lineBottom - bottomAnchor;
 
-      if (index < firstBlock) {
-        desiredOffset = Math.max(desiredOffset, 0);
-      } else if (index >= secondBlock) {
-        desiredOffset = Math.min(desiredOffset, maxOffset);
-      }
+      const clampedOffset = Math.max(
+        maxCenterAlignedOffset,
+        Math.min(bottomLockedOffset, rawMaxOffset)
+      );
 
-      return Math.min(Math.max(desiredOffset, 0), maxOffset);
+      return clampedOffset < 0 ? 0 : clampedOffset;
     },
-    [getLineMetrics, lyrics, lyricsContainerHeight, lyricsContentHeight]
+    [
+      getLineMetrics,
+      lyricBottomPadding,
+      lyricsContainerHeight,
+      lyricsContentHeight,
+    ]
   );
 
   const scrollToHighlight = useCallback(
@@ -940,7 +955,6 @@ const MusicPlayer: React.FC = () => {
     try {
       const response = await getSong(song_id);
       setTitle(response.data.title);
-      // setLyrics(response.data.lyrics?.split("\n") || ["No lyrics available"]);
       setImage(response.data.album_cover || "");
       setSinger(response.data.singer);
       await handleFetchLyrics(song_id, response.data.lyrics);
@@ -957,7 +971,7 @@ const MusicPlayer: React.FC = () => {
       return null;
     }
   };
-  // Updated the animation logic to make it loop in real-time while recording and stop when recording stops.
+
   const startAnimation = () => {
     console.log("Starting animation...");
     animationValue.setValue(0);
@@ -1173,129 +1187,110 @@ const MusicPlayer: React.FC = () => {
     return () => clearInterval(interval);
   }, [countdown, resumeRecording, startRecording]);
 
-type CreateRecordResponseData = {
-  filePath: string;
-  mistakes: any[];
-  recordId: number;
-  score: number;
-};
+  type CreateRecordResponseData = {
+    filePath: string;
+    mistakes: any[];
+    recordId: number;
+    score: number;
+  };
 
-type CreateRecordResponse = {
-  success: boolean;
-  msg?: string;
-  data: CreateRecordResponseData;
-};
+  type CreateRecordResponse = {
+    success: boolean;
+    msg?: string;
+    data: CreateRecordResponseData;
+  };
 
-const stopRecording = async (triggeredByAuto = false) => {
-  const activeRecording = recordingRef.current ?? recording;
-  if (!activeRecording) {
-    return;
-  }
-
-  setIsRecordingPaused(false);
-  hasStartedRecordingRef.current = false;
-  countdownPurposeRef.current = null;
-
-  if (autoSubmitInProgressRef.current && triggeredByAuto) {
-    return;
-  }
-
-  if (!autoSubmitInProgressRef.current) {
-    autoSubmitInProgressRef.current = true;
-  }
-
-  try {
-    // Stop and unload the recording
-    await activeRecording.stopAndUnloadAsync();
-    const uri = activeRecording.getURI();
-    setRecordingUri(uri);
-    recordingRef.current = null;
-    setRecording(null);
-
-    // Stop and unload instrumental
-    if (sound) {
-      await sound.stopAsync();
-      await sound.unloadAsync();
-      setSound(null);
-    }
-
-    if (vocalSoundRef.current) {
-      try {
-        await stopVocalPlayback(true);
-        await vocalSoundRef.current.unloadAsync();
-      } catch (error) {
-        console.warn("Failed to reset vocal track after recording", error);
-      } finally {
-        vocalSoundRef.current = null;
-        vocalSyncingRef.current = false;
-        setHasVocalTrack(false);
-        setVocalEnabled(false);
-      }
-    }
-
-    console.log("Recording stopped and instrumental audio unloaded");
-
-    if (!uri) {
-      console.error("Recording URI is null, cannot save file.");
+  const stopRecording = async (triggeredByAuto = false) => {
+    const activeRecording = recordingRef.current ?? recording;
+    if (!activeRecording) {
       return;
     }
 
-    // Save recording with Expo SDK 54 File API
-    const source = new File(uri);
-    const target = new File(Paths.document, "recording.m4a");
+    setIsRecordingPaused(false);
+    hasStartedRecordingRef.current = false;
+    countdownPurposeRef.current = null;
 
-    if (target.exists) target.delete();
-    source.copy(target);
-    console.log(`Recording saved as .m4a file at: ${target.uri}`);
-
-    if (!songKey.ori_path) throw new Error("Original path is missing");
-
-    setLoadingResult(true);
-
-    // ✅ Safe cast: BaseResponse<string> -> unknown -> CreateRecordResponse
-    const response = (await createRecord(
-      target.uri,
-      `${songKey.version_id}`,
-      songKey.key_signature,
-      songKey.ori_path
-    )) as unknown as CreateRecordResponse;
-
-    const responseData = response.data;
-
-    if (response.success && responseData?.score !== undefined) {
-      navigation.navigate("Result", {
-        score: responseData.score,
-        song_id: songKey.song_id,
-        recordId: responseData.recordId,
-        version_id: songKey.version_id,
-        localUri: target.uri,
-      });
-      console.log("Navigated to Result screen successfully");
-    } else {
-      console.error("No valid score returned from backend:", response);
+    if (autoSubmitInProgressRef.current && triggeredByAuto) {
+      return;
     }
-  } catch (err) {
-    console.error("Error in stopRecording:", err);
-  } finally {
-    setLoadingResult(false);
-    console.log("stopRecording process completed.");
-  }
-};
 
+    if (!autoSubmitInProgressRef.current) {
+      autoSubmitInProgressRef.current = true;
+    }
 
+    try {
+      await activeRecording.stopAndUnloadAsync();
+      const uri = activeRecording.getURI();
+      setRecordingUri(uri);
+      recordingRef.current = null;
+      setRecording(null);
 
-  // ✅ Navigate to Result if score is returned
-  //     if (response.success && response.data?.score !== undefined) {
-  //       navigation.navigate("Result", { score: response.data.score, });
-  //     } else {
-  //       console.error("No score returned from backend:", response);
-  //     }
-  //   } catch (e) {
-  //     console.error("Error creating record:", e);
-  //   } finally {
-  //     console.log("Stop recording process completed.");
-  //   }
-  // };
+      if (sound) {
+        await sound.stopAsync();
+        await sound.unloadAsync();
+        setSound(null);
+      }
+
+      if (vocalSoundRef.current) {
+        try {
+          await stopVocalPlayback(true);
+          await vocalSoundRef.current.unloadAsync();
+        } catch (error) {
+          console.warn("Failed to reset vocal track after recording", error);
+        } finally {
+          vocalSoundRef.current = null;
+          vocalSyncingRef.current = false;
+          setHasVocalTrack(false);
+          setVocalEnabled(false);
+        }
+      }
+
+      console.log("Recording stopped and instrumental audio unloaded");
+
+      if (!uri) {
+        console.error("Recording URI is null, cannot save file.");
+        return;
+      }
+
+      const source = new File(uri);
+      const target = new File(Paths.document, "recording.m4a");
+
+      if (target.exists) target.delete();
+      source.copy(target);
+      console.log(`Recording saved as .m4a file at: ${target.uri}`);
+
+      if (!songKey.ori_path) throw new Error("Original path is missing");
+
+      setLoadingResult(true);
+
+      const response = (await createRecord(
+        target.uri,
+        `${songKey.version_id}`,
+        songKey.key_signature,
+        songKey.ori_path
+      )) as unknown as CreateRecordResponse;
+
+      const responseData = response.data;
+
+      if (response.success && responseData?.score !== undefined) {
+        navigation.navigate("Result", {
+          score: responseData.score,
+          song_id: songKey.song_id,
+          recordId: responseData.recordId,
+          version_id: songKey.version_id,
+          localUri: target.uri,
+        });
+        console.log("Navigated to Result screen successfully");
+      } else {
+        console.error("No valid score returned from backend:", response);
+      }
+    } catch (err) {
+      console.error("Error in stopRecording:", err);
+    } finally {
+      setLoadingResult(false);
+      console.log("stopRecording process completed.");
+    }
+  };
 
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
@@ -1304,7 +1299,6 @@ const stopRecording = async (triggeredByAuto = false) => {
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
 
-  // Animated bar styles
   const animatedBarStyle = {
     transform: [
       {
@@ -1343,11 +1337,9 @@ const stopRecording = async (triggeredByAuto = false) => {
       resizeMode="cover"
       blurRadius={15}
     >
-      {/* Overlay */}
       <View style={styles.overlay} />
 
       <SafeAreaView style={styles.container}>
-        {/* Header */}
         <View style={styles.header}>
           <Image
             source={{ uri: resolvedCover }}
@@ -1359,15 +1351,14 @@ const stopRecording = async (triggeredByAuto = false) => {
           </View>
         </View>
 
-        {/* Lyrics */}
         <View style={styles.lyricsWrapper} onLayout={handleLyricsLayout}>
           {lyrics.length > 0 ? (
             <ScrollView
               ref={lyricsScrollRef}
               contentContainerStyle={[
                 styles.lyricsContainer,
-                lyricPaddings.bottom > 0 && {
-                  paddingBottom: lyricPaddings.bottom,
+                lyricBottomPadding > 0 && {
+                  paddingBottom: lyricBottomPadding,
                 },
               ]}
               showsVerticalScrollIndicator={false}
@@ -1412,11 +1403,19 @@ const stopRecording = async (triggeredByAuto = false) => {
                     key={`${line.lyric_id}-${index}`}
                     style={[styles.lyricRow, rowAnimatedStyle]}
                     onLayout={(event) => {
-                      const { height } = event.nativeEvent.layout;
+                      const { height, y } = event.nativeEvent.layout;
                       if (height > 0) {
-                        const storedHeight = lyricHeightsRef.current[index];
-                        if (!storedHeight || Math.abs(storedHeight - height) > 1) {
-                          lyricHeightsRef.current[index] = height;
+                        const previous = lyricMeasurementsRef.current[index];
+                        const hasMeaningfulChange =
+                          !previous ||
+                          Math.abs(previous.height - height) > 1 ||
+                          Math.abs(previous.top - y) > 1;
+
+                        if (hasMeaningfulChange) {
+                          lyricMeasurementsRef.current[index] = {
+                            height,
+                            top: y,
+                          };
                           if (isActive) {
                             scrollToHighlight(index, false);
                           }
@@ -1443,7 +1442,6 @@ const stopRecording = async (triggeredByAuto = false) => {
           )}
         </View>
 
-        {/* Slider */}
         <View style={styles.progressContainer}>
           <Slider
             style={{ flex: 1 }}
@@ -1461,7 +1459,6 @@ const stopRecording = async (triggeredByAuto = false) => {
           </View>
         </View>
 
-        {/* Controls */}
         <View style={styles.controls}>
           <TouchableOpacity
             onPress={toggleVocalLayer}
@@ -1500,7 +1497,6 @@ const stopRecording = async (triggeredByAuto = false) => {
           </TouchableOpacity>
         </View>
 
-        {/* Animated Visualization */}
         <View style={styles.animationContainer}>
           {[...Array(5)].map((_, index) => (
             <Animated.View
@@ -1511,14 +1507,12 @@ const stopRecording = async (triggeredByAuto = false) => {
         </View>
       </SafeAreaView>
 
-      {/* Render the countdown as an overlay on top of the MusicPlayer content */}
       {countdown !== null && (
         <View style={styles.countdownOverlay}>
           <Text style={styles.countdownText}>{countdown}</Text>
         </View>
       )}
 
-      {/* Loading overlay for Result */}
       {loadingResult && (
         <View
           style={{
@@ -1534,6 +1528,7 @@ const stopRecording = async (triggeredByAuto = false) => {
     </ImageBackground>
   );
 };
+
 export default MusicPlayer;
 
 const styles = StyleSheet.create({
@@ -1571,10 +1566,11 @@ const styles = StyleSheet.create({
     color: "#ddd",
   },
   lyricsWrapper: {
-    height: "46%",
+    height: "50%",
     justifyContent: "flex-start",
     width: "90%",
     marginTop: 32,
+    overflow: "hidden",
   },
   lyricsContainer: {
     paddingHorizontal: 12,
