@@ -17,7 +17,12 @@ export const resolveProfileImage = (photo?: string | null) => {
     return null;
   }
 
-  const normalised = photo.replace(/\\/g, "/");
+  const trimmedInput = photo.trim();
+  if (!trimmedInput) {
+    return null;
+  }
+
+  const normalised = trimmedInput.replace(/\\/g, "/");
 
   if (normalised.startsWith("http://") || normalised.startsWith("https://")) {
     return normalised;

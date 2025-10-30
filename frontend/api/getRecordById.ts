@@ -3,20 +3,20 @@ import { BaseResponse } from "./types/baseResponse";
 
 export type RecordType = {
   record_id: number;
-  song_id: number;
-  user_id: number;
-  version_id: number;
-  score: number;
-  record_path: string;
-  created_at: string;
+  user_id: number | null;
+  version_id: number | null;
+  key: string | null;
+  user_audio_path: string;
+  accuracy_score: number | null;
+  created_at: string | null;
 };
 
-type RecordResponse = BaseResponse<RecordType>;
+type RecordResponse = BaseResponse<RecordType | null>;
 
 export const getRecordById = async (recordId: number): Promise<RecordResponse> => {
   try {
-    const response = await Axios.post<RecordResponse>("/private/getrecordbyid", {
-      recordId,
+    const response = await Axios.post<RecordResponse>("/private/getrecord", {
+      record_id: recordId,
     });
     return response.data;
   } catch (e) {
@@ -24,7 +24,7 @@ export const getRecordById = async (recordId: number): Promise<RecordResponse> =
     return {
       success: false,
       message: "Network error",
-      data: {} as RecordType,
+      data: null,
     };
   }
 };

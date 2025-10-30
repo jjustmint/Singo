@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Text, Image, StyleSheet, FlatList } from "react-native";
 import AntDesign from "@expo/vector-icons/AntDesign";
-import { GlobalConstant } from "@/constant";
+import { resolveProfileImage } from "./ProfileInfo";
 
 // ---------------- Types ----------------
 interface User {
@@ -27,14 +27,9 @@ const SongCard: React.FC<SongCardProps> = ({ user, index }) => {
   const rankSize = index < 3 ? 50 - index * 4 : 25;
   const accuracy = Number(user.accuracyScore ?? 0);
   const displayScore = isNaN(accuracy) ? "0.00" : accuracy.toFixed(2);
-  const avatarUri = (() => {
-    if (user.profilePicture && user.profilePicture.trim().length > 0) {
-      return user.profilePicture.startsWith("http")
-        ? user.profilePicture
-        : `${GlobalConstant.API_URL}/${user.profilePicture}`;
-    }
-    return "https://via.placeholder.com/96";
-  })();
+  const avatarUri =
+    resolveProfileImage(user.profilePicture ?? null) ??
+    "https://via.placeholder.com/96";
 
   return (
     <View style={styles.card}>
