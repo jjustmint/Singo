@@ -16,10 +16,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { getLatestSongs } from '@/api/song/getLatest';
 import { getAllsongs } from '@/api/song/getAll';
 import { GlobalConstant } from '@/constant';
-import { SongType } from '@/api/types/song';
+import type { SongType as ApiSongType } from '@/api/types/song';
 import { previewBus } from '@/util/previewBus';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import type { RootStackParamList } from '../Types/Navigation';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.8;
@@ -36,6 +37,8 @@ type ReleaseSong = {
   singer: string;
   image: string;
   preview: string | null;
+  keySignature: string | null;
+  key_signature?: string | null;
 };
 
 const toMediaUri = (path?: string | null) => {
@@ -49,19 +52,20 @@ const toMediaUri = (path?: string | null) => {
   return encodeURI(`${GlobalConstant.API_URL}/${sanitized}`);
 };
 
-const mapSongToRelease = (song: SongType): ReleaseSong => ({
-  id: song.song_id.toString(),
-  name: song.title,
-  singer: song.singer ?? 'Unknown Artist',
-  image: toMediaUri(song.album_cover) ?? FALLBACK_IMAGE,
-  preview: toMediaUri(song.previewsong),
-});
+const mapSongToRelease = (song: ApiSongType): ReleaseSong => {
+  const resolvedKey =
+    typeof song.key_signature === 'string' && song.key_signature.trim().length > 0
+      ? song.key_signature
+      : null;
 
-type RootStackParamList = {
-  MainTabs: undefined;
-  ChooseKey: {
-    song: { id: string; songName: string; artist: string; image: string };
-    userKey?: string | null;
+  return {
+    id: song.song_id.toString(),
+    name: song.title,
+    singer: song.singer ?? 'Unknown Artist',
+    image: toMediaUri(song.album_cover) ?? FALLBACK_IMAGE,
+    preview: toMediaUri(song.previewsong),
+    keySignature: resolvedKey,
+    key_signature: resolvedKey,
   };
 };
 
@@ -146,6 +150,8 @@ const NewReleaseTabs: React.FC<NewReleaseTabsProps> = ({ userKey }) => {
           songName: song.name,
           artist: song.singer,
           image: song.image,
+          key_signature: song.key_signature ?? song.keySignature ?? undefined,
+          keySignature: song.keySignature ?? song.key_signature ?? undefined,
         },
         userKey,
       });
@@ -391,7 +397,7 @@ const NewReleaseTabs: React.FC<NewReleaseTabsProps> = ({ userKey }) => {
       try {
         setLoading(true);
         const response = await getLatestSongs(LATEST_LIMIT);
-        let workingList: SongType[] = Array.isArray(response?.data) ? response.data : [];
+        let workingList: ApiSongType[] = Array.isArray(response?.data) ? response.data : [];
 
         if ((!response?.success || workingList.length === 0)) {
           const fallbackResponse = await getAllsongs();

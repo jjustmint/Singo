@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo, type ComponentProps } from "react";
 import {
   View,
   Text,
@@ -104,6 +104,13 @@ const normaliseLyricTimings = (entries: LyricLineType[]): LyricLineType[] => {
   }));
 };
 
+const START_ANCHOR_RATIO = 0.12;
+const MIDDLE_ANCHOR_RATIO = 0.35;
+const END_ANCHOR_RATIO = 0.78;
+
+const isIgnorableAudioWarning = (err: unknown) =>
+  err instanceof Error && /seeking interrupted/i.test(err.message);
+
 const MusicPlayer: React.FC = () => {
   const route = useRoute<MusicPlayerRouteProp>();
   const navigation = useNavigation<MusicPlayerNavProp>();
@@ -121,6 +128,11 @@ const MusicPlayer: React.FC = () => {
   const [recordingUri, setRecordingUri] = useState<string | null>(null);
 
   const [countdown, setCountdown] = useState<number | null>(null); // Countdown state
+  const [isRecordingPaused, setIsRecordingPaused] = useState(false);
+
+  const countdownPurposeRef = useRef<"start" | "resume" | null>(null);
+  const hasStartedRecordingRef = useRef(false);
+  const initialCountdownTriggeredRef = useRef(false);
 
   const [animationValue] = useState(new Animated.Value(0)); // State for animation
 
@@ -143,7 +155,6 @@ const MusicPlayer: React.FC = () => {
   const vocalSyncingRef = useRef(false);
   const autoSubmitInProgressRef = useRef(false);
   const recordingRef = useRef<Audio.Recording | null>(null);
-  const countdownInitiatedRef = useRef(false);
   const startRecordingInProgressRef = useRef(false);
   const [metadataReady, setMetadataReady] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
@@ -166,6 +177,17 @@ const MusicPlayer: React.FC = () => {
   useEffect(() => {
     vocalEnabledRef.current = vocalEnabled;
   }, [vocalEnabled]);
+
+  const triggerCountdown = useCallback(
+    (purpose: "start" | "resume") => {
+      if (countdown !== null) {
+        return;
+      }
+      countdownPurposeRef.current = purpose;
+      setCountdown(3);
+    },
+    [countdown]
+  );
 
   const stopVocalPlayback = useCallback(async (resetPosition = false) => {
     const vocalSound = vocalSoundRef.current;
@@ -251,7 +273,9 @@ const MusicPlayer: React.FC = () => {
           await vocalSound.pauseAsync();
         }
       } catch (error) {
-        console.warn("Failed to align vocal track", error);
+        if (!isIgnorableAudioWarning(error)) {
+          console.warn("Failed to align vocal track", error);
+        }
       }
     },
     [vocalEnabled]
@@ -304,7 +328,9 @@ const MusicPlayer: React.FC = () => {
           await alignVocalWithInstrument(true, true);
         }
       } catch (error) {
-        console.warn("Failed to sync vocal track", error);
+        if (!isIgnorableAudioWarning(error)) {
+          console.warn("Failed to sync vocal track", error);
+        }
       }
     },
     [alignVocalWithInstrument]
@@ -354,7 +380,10 @@ const MusicPlayer: React.FC = () => {
     setVocalEnabled(false);
     vocalResumePositionRef.current = 0;
     setCountdown(null);
-    countdownInitiatedRef.current = false;
+    countdownPurposeRef.current = null;
+    setIsRecordingPaused(false);
+    hasStartedRecordingRef.current = false;
+    initialCountdownTriggeredRef.current = false;
   }, []);
 
   const stopActiveRecording = useCallback(async () => {
@@ -480,7 +509,10 @@ const MusicPlayer: React.FC = () => {
     try {
       setAudioReady(false);
       setCountdown(null);
-      countdownInitiatedRef.current = false;
+      countdownPurposeRef.current = null;
+      setIsRecordingPaused(false);
+      hasStartedRecordingRef.current = false;
+      initialCountdownTriggeredRef.current = false;
       await stopAndUnloadCurrentSound();
       const response = await getAudioVerById(songKey.version_id);
       console.log("GETAUDIOVERBYID", response.data);
@@ -623,7 +655,7 @@ const MusicPlayer: React.FC = () => {
     void alignVocalWithInstrument(isPlaying, true);
   }, [alignVocalWithInstrument, hasVocalTrack, isPlaying, vocalEnabled]);
 
-  const playInstrumental = async () => {
+  const playInstrumental = useCallback(async () => {
     try {
       const currentSound = soundRef.current;
       if (!currentSound) {
@@ -662,7 +694,7 @@ const MusicPlayer: React.FC = () => {
     } catch (error) {
       console.error("Error playing instrumental:", error);
     }
-  };
+  }, [syncVocalToInstrument]);
 
   const toggleVocalLayer = useCallback(async () => {
     if (!hasVocalTrack) {
@@ -722,32 +754,6 @@ const MusicPlayer: React.FC = () => {
 
   // Ensure countdown triggers recording automatically and finish icon stops recording.
   useEffect(() => {
-    if (!loading && sound && countdown === null && !countdownInitiatedRef.current) {
-      countdownInitiatedRef.current = true;
-      setCountdown(3); // Start countdown once instrumental audio is ready
-    }
-  }, [loading, sound, countdown]);
-
-  useEffect(() => {
-    if (countdown !== null) {
-      const interval = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev !== null && prev <= 1) {
-            clearInterval(interval);
-            if (prev === 1) {
-              startRecording(); // Automatically start recording when countdown ends
-            }
-            return null; // Stop the countdown
-          }
-          return prev! - 1;
-        });
-      }, 1000);
-
-      return () => clearInterval(interval); // Cleanup interval on unmount
-    }
-  }, [countdown]);
-
-  useEffect(() => {
     lyricHeightsRef.current = {};
     lyricAnimationsRef.current = {};
     previousHighlightRef.current = -1;
@@ -760,6 +766,21 @@ const MusicPlayer: React.FC = () => {
       });
     }, 0);
   }, [lyrics]);
+
+  useEffect(() => {
+    if (
+      !loading &&
+      audioReady &&
+      sound &&
+      countdown === null &&
+      !initialCountdownTriggeredRef.current &&
+      !recordingRef.current &&
+      !recording
+    ) {
+      initialCountdownTriggeredRef.current = true;
+      triggerCountdown("start");
+    }
+  }, [audioReady, countdown, loading, recording, sound, triggerCountdown]);
 
   useEffect(() => {
     if (!lyrics.length) return;
@@ -799,23 +820,52 @@ const MusicPlayer: React.FC = () => {
     []
   );
 
-  const computeCenteredOffset = useCallback(
+  const lyricPaddings = useMemo(() => {
+    if (lyricsContainerHeight <= 0) {
+      return { bottom: 0 };
+    }
+    const anchorSlack = lyricsContainerHeight * (1.2 - END_ANCHOR_RATIO);
+    const controlsGuard = 160;
+    const minimumSlack = Math.max(lyricsContainerHeight * 0.8, controlsGuard);
+    const bottom = Math.max(anchorSlack + 40, minimumSlack);
+    return { bottom };
+  }, [lyricsContainerHeight]);
+
+  const getScrollOffset = useCallback(
     (index: number) => {
       if (lyricsContainerHeight <= 0) {
         return 0;
       }
 
+      const total = lyrics.length;
+      if (!total) {
+        return 0;
+      }
+
+      const firstBlock = Math.max(Math.floor(total / 3), 1);
+      const secondBlock = Math.max(Math.floor((total * 2) / 3), firstBlock + 1);
+
+      let anchorRatio = MIDDLE_ANCHOR_RATIO;
+      if (index < firstBlock) {
+        anchorRatio = START_ANCHOR_RATIO;
+      } else if (index >= secondBlock) {
+        anchorRatio = END_ANCHOR_RATIO;
+      }
+
       const { top, height } = getLineMetrics(index);
       const lineMidpoint = top + height / 2;
-      const desiredOffset = lineMidpoint - lyricsContainerHeight / 2;
-      const maxOffset = Math.max(
-        lyricsContentHeight - lyricsContainerHeight,
-        0
-      );
+      const maxOffset = Math.max(lyricsContentHeight - lyricsContainerHeight, 0);
+      let desiredOffset = lineMidpoint - lyricsContainerHeight * anchorRatio;
+
+      if (index < firstBlock) {
+        desiredOffset = Math.max(desiredOffset, 0);
+      } else if (index >= secondBlock) {
+        desiredOffset = Math.min(desiredOffset, maxOffset);
+      }
 
       return Math.min(Math.max(desiredOffset, 0), maxOffset);
     },
-    [getLineMetrics, lyricsContainerHeight, lyricsContentHeight]
+    [getLineMetrics, lyrics, lyricsContainerHeight, lyricsContentHeight]
   );
 
   const scrollToHighlight = useCallback(
@@ -828,7 +878,7 @@ const MusicPlayer: React.FC = () => {
         return;
       }
 
-      const targetOffset = computeCenteredOffset(index);
+      const targetOffset = getScrollOffset(index);
 
       requestAnimationFrame(() => {
         lyricsScrollRef.current?.scrollTo({
@@ -837,7 +887,7 @@ const MusicPlayer: React.FC = () => {
         });
       });
     },
-    [computeCenteredOffset, lyricsContainerHeight]
+    [getScrollOffset, lyricsContainerHeight]
   );
 
   const ensureLineAnimation = useCallback(
@@ -949,7 +999,18 @@ const MusicPlayer: React.FC = () => {
     setLoading((prev) => (prev === nextLoading ? prev : nextLoading));
   }, [metadataReady, audioReady]);
 
-  const startRecording = async () => {
+  const micIconName: ComponentProps<typeof Ionicons>["name"] = !recording
+    ? "mic"
+    : isRecordingPaused
+    ? "play"
+    : "pause";
+  const isMicDisabled =
+    countdown !== null ||
+    startRecordingInProgressRef.current ||
+    loading ||
+    !audioReady;
+
+  const startRecording = useCallback(async () => {
     if (startRecordingInProgressRef.current) {
       console.log("Start recording already in progress, skipping");
       return;
@@ -986,18 +1047,131 @@ const MusicPlayer: React.FC = () => {
       await playInstrumental();
 
       console.log("Creating recording...");
-      const { recording } = await Audio.Recording.createAsync(
+      const { recording: createdRecording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
       console.log("Recording created successfully");
-      recordingRef.current = recording;
-      setRecording(recording);
+      recordingRef.current = createdRecording;
+      setRecording(createdRecording);
+      setIsRecordingPaused(false);
+      hasStartedRecordingRef.current = true;
     } catch (err) {
       console.error("Failed to start recording", err);
     } finally {
       startRecordingInProgressRef.current = false;
     }
-  };
+  }, [playInstrumental, recording]);
+
+  const pauseRecordingSession = useCallback(async () => {
+    const activeRecording = recordingRef.current;
+    if (!activeRecording) {
+      return;
+    }
+
+    try {
+      const status = await activeRecording.getStatusAsync();
+      if (status.canRecord && status.isRecording) {
+        await activeRecording.pauseAsync();
+      }
+    } catch (err) {
+      console.error("Failed to pause recording", err);
+    }
+
+    const instrumentSound = soundRef.current;
+    if (instrumentSound) {
+      try {
+        const instrumentStatus = await instrumentSound.getStatusAsync();
+        if (instrumentStatus.isLoaded && instrumentStatus.isPlaying) {
+          await instrumentSound.pauseAsync();
+        }
+      } catch (err) {
+        console.warn("Failed to pause instrumental playback", err);
+      }
+    }
+
+    try {
+      await stopVocalPlayback(false);
+    } catch (err) {
+      console.warn("Failed to pause vocal playback", err);
+    }
+
+    setIsRecordingPaused(true);
+  }, [stopVocalPlayback]);
+
+  const resumeRecording = useCallback(async () => {
+    const activeRecording = recordingRef.current;
+    if (!activeRecording) {
+      console.warn("No recording available to resume");
+      return;
+    }
+
+    try {
+      await playInstrumental();
+      const status = await activeRecording.getStatusAsync();
+      if (status.canRecord && !status.isRecording) {
+        await activeRecording.startAsync();
+      }
+      setIsRecordingPaused(false);
+    } catch (err) {
+      console.error("Failed to resume recording", err);
+    }
+  }, [playInstrumental]);
+
+  const handleMicPress = useCallback(() => {
+    if (countdown !== null) {
+      return;
+    }
+
+    if (startRecordingInProgressRef.current) {
+      return;
+    }
+
+    if (!recordingRef.current) {
+      if (!hasStartedRecordingRef.current) {
+        initialCountdownTriggeredRef.current = true;
+        triggerCountdown("start");
+      }
+      return;
+    }
+
+    if (isRecordingPaused) {
+      triggerCountdown("resume");
+    } else {
+      void pauseRecordingSession();
+    }
+  }, [countdown, isRecordingPaused, pauseRecordingSession, triggerCountdown]);
+
+  useEffect(() => {
+    if (countdown === null) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev === null) {
+          return prev;
+        }
+
+        if (prev <= 1) {
+          clearInterval(interval);
+          const purpose = countdownPurposeRef.current;
+          countdownPurposeRef.current = null;
+
+          if (purpose === "start") {
+            void startRecording();
+          } else if (purpose === "resume") {
+            void resumeRecording();
+          }
+
+          return null;
+        }
+
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [countdown, resumeRecording, startRecording]);
 
 type CreateRecordResponseData = {
   filePath: string;
@@ -1017,6 +1191,10 @@ const stopRecording = async (triggeredByAuto = false) => {
   if (!activeRecording) {
     return;
   }
+
+  setIsRecordingPaused(false);
+  hasStartedRecordingRef.current = false;
+  countdownPurposeRef.current = null;
 
   if (autoSubmitInProgressRef.current && triggeredByAuto) {
     return;
@@ -1186,7 +1364,12 @@ const stopRecording = async (triggeredByAuto = false) => {
           {lyrics.length > 0 ? (
             <ScrollView
               ref={lyricsScrollRef}
-              contentContainerStyle={styles.lyricsContainer}
+              contentContainerStyle={[
+                styles.lyricsContainer,
+                lyricPaddings.bottom > 0 && {
+                  paddingBottom: lyricPaddings.bottom,
+                },
+              ]}
               showsVerticalScrollIndicator={false}
               onContentSizeChange={handleContentSizeChange}
             >
@@ -1196,13 +1379,14 @@ const stopRecording = async (triggeredByAuto = false) => {
                 const rowAnimatedStyle = {
                   backgroundColor: animation.interpolate({
                     inputRange: [0, 1],
-                    outputRange: ["rgba(255,255,255,0)", "rgba(255,255,255,0.08)"],
+                    outputRange: ["rgba(255,255,255,0)", "rgba(255,255,255,0.28)"],
                   }),
+                  borderRadius: 18,
                   transform: [
                     {
                       scale: animation.interpolate({
                         inputRange: [0, 1],
-                        outputRange: [1, 1.02],
+                        outputRange: [1, 1.01],
                       }),
                     },
                   ],
@@ -1291,8 +1475,17 @@ const stopRecording = async (triggeredByAuto = false) => {
             />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.micButton}>
-            <Ionicons name="mic" size={50} color="white" />
+          <TouchableOpacity
+            style={[styles.micButton, isMicDisabled && styles.micButtonDisabled]}
+            onPress={handleMicPress}
+            disabled={isMicDisabled}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={micIconName}
+              size={50}
+              color={isMicDisabled ? "rgba(255,255,255,0.6)" : "white"}
+            />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1378,14 +1571,14 @@ const styles = StyleSheet.create({
     color: "#ddd",
   },
   lyricsWrapper: {
-    flex: 1,
+    height: "46%",
     justifyContent: "flex-start",
     width: "90%",
-    marginTop: 40,
+    marginTop: 32,
   },
   lyricsContainer: {
     paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingTop: 12,
   },
   lyricsPlaceholder: {
     flex: 1,
@@ -1400,13 +1593,14 @@ const styles = StyleSheet.create({
   },
   lyricRow: {
     width: "100%",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    marginVertical: 4,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    marginVertical: 6,
+    backgroundColor: "transparent",
   },
   lyrics: {
-    color: "rgba(255, 255, 255, 0.55)",
+    color: "rgba(255, 255, 255, 0.65)",
     fontSize: 18,
     textAlign: "left",
     lineHeight: 28,
@@ -1448,6 +1642,9 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     justifyContent: "center",
     alignItems: "center",
+  },
+  micButtonDisabled: {
+    opacity: 0.6,
   },
   confirmButton: {
     backgroundColor: "rgba(107, 107, 107, 0.5)",
