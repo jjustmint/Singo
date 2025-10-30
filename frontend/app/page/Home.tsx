@@ -83,16 +83,24 @@ export default function Home() {
 
   const handleGetSongs = useCallback(async () => {
     const fetchedSongs = await getAllsongs();
-    const mappedSongs: Song[] = fetchedSongs.data.map((song: any) => ({
-      id: song.song_id.toString(),
-      image:
-        buildAssetUri(song.album_cover) ??
-        "https://i.pinimg.com/564x/11/8e/7f/118e7f4d22f1e5ff4f6e2f1f2d1f3c4b5.jpg",
-      songName: song.title,
-      artist: song.singer,
-      previewUrl: buildAssetUri(song.previewsong),
-      key_signature: song.key_signature,
-    }));
+    const mappedSongs: Song[] = fetchedSongs.data.map((song: any) => {
+      const resolvedKey =
+        typeof song.key_signature === "string" && song.key_signature.trim().length > 0
+          ? song.key_signature
+          : null;
+
+      return {
+        id: song.song_id.toString(),
+        image:
+          buildAssetUri(song.album_cover) ??
+          "https://i.pinimg.com/564x/11/8e/7f/118e7f4d22f1e5ff4f6e2f1f2d1f3c4b5.jpg",
+        songName: song.title,
+        artist: song.singer,
+        previewUrl: buildAssetUri(song.previewsong),
+        key_signature: resolvedKey,
+        keySignature: resolvedKey,
+      };
+    });
     setSongs(mappedSongs);
     console.log("Fetched songs:", fetchedSongs.data);
   }, []);
@@ -108,7 +116,7 @@ export default function Home() {
   );
 
   const scrollToSection = (
-    section: "New Release" | "Trending" | "Top Rated"
+    section: "New Release" | "Trending" | "All Songs"
   ) => {
     const y = sectionPositions.current[section] || 0;
     const offsetBefore = 60; // space above section in pixels
@@ -238,7 +246,7 @@ export default function Home() {
               <CategoryTabs
                 scrollToSection={(category: string) =>
                   scrollToSection(
-                    category as "New Release" | "Trending" | "Top Rated"
+                    category as "New Release" | "Trending" | "All Songs"
                   )
                 }
               />
@@ -259,13 +267,13 @@ export default function Home() {
                     New Release
                   </Text>
                 </View>
-                <NewReleaseTabs />
+                <NewReleaseTabs userKey={userKey} />
               </View>
 
-              {/* Trending Section */}
+              {/* Top Rate Section */}
               <View
                 onLayout={(event) => onLayoutSection("Trending", event)}
-                ref={trendingRef}
+                ref={topRateRef}
               >
                 <View style={{ paddingHorizontal: 20 }}>
                   <Text
@@ -279,16 +287,14 @@ export default function Home() {
                   </Text>
                 </View>
                 <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
-                  {userKey !== null && (
-                    <TrendingList song={songs} userKey={userKey} />
-                  )}
+                  <TopRateTabs userKey={userKey} />
                 </View>
               </View>
 
-              {/* Top Rate Section */}
+              {/* Trending Section */}
               <View
-                onLayout={(event) => onLayoutSection("Top Rated", event)}
-                ref={topRateRef}
+                onLayout={(event) => onLayoutSection("All Songs", event)}
+                ref={trendingRef}
               >
                 <View style={{ paddingHorizontal: 20 }}>
                   <Text
@@ -298,11 +304,13 @@ export default function Home() {
                       fontWeight: "bold",
                     }}
                   >
-                    Top Rate
+                    All Songs
                   </Text>
                 </View>
                 <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
-                  <TopRateTabs />
+                  {userKey !== null && (
+                    <TrendingList song={songs} userKey={userKey} />
+                  )}
                 </View>
               </View>
             </View>
