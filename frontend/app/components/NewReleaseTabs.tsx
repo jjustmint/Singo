@@ -7,14 +7,20 @@ import {
   StyleSheet,
   ImageBackground,
   Dimensions,
+  Alert,
+  GestureResponderEvent,
 } from 'react-native';
-import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import { Audio, AVPlaybackStatus } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getLatestSongs } from '@/api/song/getLatest';
 import { getAllsongs } from '@/api/song/getAll';
 import { GlobalConstant } from '@/constant';
-import { SongType } from '@/api/types/song';
+import type { SongType as ApiSongType } from '@/api/types/song';
+import { previewBus } from '@/util/previewBus';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import type { RootStackParamList } from '../Types/Navigation';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.8;
@@ -25,14 +31,14 @@ const AUTO_SCROLL_INTERVAL = 5000;
 const RESET_ANIMATION_DELAY = 650;
 const FALLBACK_IMAGE = 'https://placehold.co/400x400?text=Singo';
 
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 type ReleaseSong = {
   id: string;
   name: string;
   singer: string;
   image: string;
   preview: string | null;
+  keySignature: string | null;
+  key_signature?: string | null;
 };
 
 const toMediaUri = (path?: string | null) => {
@@ -46,17 +52,34 @@ const toMediaUri = (path?: string | null) => {
   return encodeURI(`${GlobalConstant.API_URL}/${sanitized}`);
 };
 
-const mapSongToRelease = (song: SongType): ReleaseSong => ({
-  id: song.song_id.toString(),
-  name: song.title,
-  singer: song.singer ?? 'Unknown Artist',
-  image: toMediaUri(song.album_cover) ?? FALLBACK_IMAGE,
-  preview: toMediaUri(song.previewsong),
-});
+const mapSongToRelease = (song: ApiSongType): ReleaseSong => {
+  const resolvedKey =
+    typeof song.key_signature === 'string' && song.key_signature.trim().length > 0
+      ? song.key_signature
+      : null;
+
+  return {
+    id: song.song_id.toString(),
+    name: song.title,
+    singer: song.singer ?? 'Unknown Artist',
+    image: toMediaUri(song.album_cover) ?? FALLBACK_IMAGE,
+    preview: toMediaUri(song.previewsong),
+    keySignature: resolvedKey,
+    key_signature: resolvedKey,
+  };
+};
+
+type NavigationProp = StackNavigationProp<RootStackParamList, 'MainTabs'>;
 
 const LATEST_LIMIT = 5;
 
-const NewReleaseTabs = () => {
+type NewReleaseTabsProps = {
+  userKey?: string | null;
+  initialIndex?: number;
+  onIndexChange?: (index: number) => void;
+};
+
+const NewReleaseTabs: React.FC<NewReleaseTabsProps> = ({ userKey }) => {
   const flatListRef = useRef<FlatList>(null);
   const positionIndex = useRef(VISIBLE_INDEX);
   const [liked, setLiked] = useState<string[]>([]);
@@ -68,6 +91,13 @@ const NewReleaseTabs = () => {
   const [songs, setSongs] = useState<ReleaseSong[]>([]);
   const [loading, setLoading] = useState(true);
   const offsetRef = useRef(STEP * VISIBLE_INDEX);
+  const navigation = useNavigation<NavigationProp>();
+
+  const isIgnorableAudioError = useCallback(
+    (err: unknown) =>
+      err instanceof Error && /seeking interrupted/i.test(err.message),
+    []
+  );
 
   const unloadCurrentSound = useCallback(async () => {
     const currentSound = soundRef.current;
@@ -77,23 +107,24 @@ const NewReleaseTabs = () => {
 
     try {
       currentSound.setOnPlaybackStatusUpdate(null);
-      const status = await currentSound.getStatusAsync();
-      if (status.isLoaded && status.isPlaying) {
-        await currentSound.stopAsync();
-      }
+      await currentSound.stopAsync();
     } catch (err) {
-      console.warn('Unable to stop current preview cleanly:', err);
+      if (!isIgnorableAudioError(err)) {
+        console.warn('Unable to stop current preview cleanly:', err);
+      }
     }
 
     try {
       await currentSound.unloadAsync();
     } catch (err) {
-      console.warn('Unable to unload current preview cleanly:', err);
+      if (!isIgnorableAudioError(err)) {
+        console.warn('Unable to unload current preview cleanly:', err);
+      }
     }
 
     soundRef.current = null;
     currentPreviewIdRef.current = null;
-  }, []);
+  }, [isIgnorableAudioError]);
 
   const toggleLike = (id: string) => {
     setLiked((prev) =>
@@ -101,36 +132,32 @@ const NewReleaseTabs = () => {
     );
   };
 
-  const ensurePlayback = useCallback(async (sound: Audio.Sound) => {
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      const status = await sound.getStatusAsync();
-      if (!status.isLoaded) {
-        return false;
-      }
-      if (status.isPlaying) {
-        return true;
-      }
-
-      const position = typeof status.positionMillis === 'number' ? status.positionMillis : 0;
-
-      try {
-        await sound.playFromPositionAsync(position);
-      } catch (error) {
-        console.error('Unable to trigger preview playback', error);
-      }
-
-      await wait(120);
-    }
-
-    return false;
-  }, []);
-
   const stopRotation = useCallback(() => {
     if (rotationIntervalRef.current) {
       clearInterval(rotationIntervalRef.current);
       rotationIntervalRef.current = null;
     }
   }, []);
+
+  const handleNavigateToChooseKey = useCallback(
+    async (song: ReleaseSong) => {
+      previewBus.emit({ source: 'newrelease' });
+      await unloadCurrentSound();
+      stopRotation();
+      navigation.navigate('ChooseKey', {
+        song: {
+          id: song.id,
+          songName: song.name,
+          artist: song.singer,
+          image: song.image,
+          key_signature: song.key_signature ?? song.keySignature ?? undefined,
+          keySignature: song.keySignature ?? song.key_signature ?? undefined,
+        },
+        userKey,
+      });
+    },
+    [navigation, stopRotation, unloadCurrentSound, userKey]
+  );
 
   const loopedSongs = useMemo(() => {
     if (!songs.length) {
@@ -255,8 +282,11 @@ const NewReleaseTabs = () => {
         } else {
           stopRotation();
           setPreviewLoadingId(item.id);
+          previewBus.emit({ source: 'newrelease' });
           await currentSound.playAsync();
           setPlayingId(item.id);
+          setPreviewLoadingId(null);
+          return;
         }
       } catch (error) {
         console.error('Failed to toggle preview playback:', error);
@@ -268,6 +298,7 @@ const NewReleaseTabs = () => {
       return;
     }
 
+    previewBus.emit({ source: 'newrelease' });
     await unloadCurrentSound();
 
     try {
@@ -322,7 +353,12 @@ const NewReleaseTabs = () => {
         }
       };
 
-      const { sound, status } = await Audio.Sound.createAsync(
+      const sound = new Audio.Sound();
+      soundRef.current = sound;
+      currentPreviewIdRef.current = item.id;
+      sound.setOnPlaybackStatusUpdate(statusHandler);
+
+      const status = await sound.loadAsync(
         { uri: item.preview },
         {
           shouldPlay: true,
@@ -332,11 +368,8 @@ const NewReleaseTabs = () => {
           shouldCorrectPitch: true,
           progressUpdateIntervalMillis: 250,
         },
-        statusHandler
+        false
       );
-
-      soundRef.current = sound;
-      currentPreviewIdRef.current = item.id;
 
       console.log('Preview loaded status:', status);
 
@@ -345,10 +378,9 @@ const NewReleaseTabs = () => {
       }
 
       stopRotation();
-      if (!status.isPlaying) {
-        await sound.playAsync();
+      if (status.isPlaying) {
+        setPlayingId(item.id);
       }
-      setPlayingId(item.id);
     } catch (error) {
       console.error('Failed to play sound', error);
       setPlayingId(null);
@@ -365,7 +397,7 @@ const NewReleaseTabs = () => {
       try {
         setLoading(true);
         const response = await getLatestSongs(LATEST_LIMIT);
-        let workingList: SongType[] = Array.isArray(response?.data) ? response.data : [];
+        let workingList: ApiSongType[] = Array.isArray(response?.data) ? response.data : [];
 
         if ((!response?.success || workingList.length === 0)) {
           const fallbackResponse = await getAllsongs();
@@ -424,9 +456,56 @@ const NewReleaseTabs = () => {
     };
   }, [loopedSongs.length, playingId, resetPosition, startRotation, stopRotation, unloadCurrentSound]);
 
+  useEffect(() => {
+    const remove = previewBus.addListener((payload) => {
+      if (payload?.source === 'newrelease') {
+        return;
+      }
+      unloadCurrentSound().catch((err) =>
+        console.error('Failed to unload preview sound after external stop', err)
+      );
+    });
+
+    return () => {
+      remove();
+    };
+  }, [unloadCurrentSound]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!playingId && loopedSongs.length) {
+        stopRotation();
+        resetPosition(true);
+        startRotation();
+      }
+
+      return () => {
+        stopRotation();
+      };
+    }, [loopedSongs.length, playingId, resetPosition, startRotation, stopRotation])
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (loopedSongs.length && !playingId) {
+        stopRotation();
+        resetPosition(true);
+        startRotation();
+      }
+
+      return () => {
+        stopRotation();
+      };
+    }, [loopedSongs.length, playingId, resetPosition, startRotation, stopRotation])
+  );
+
   const renderItem = ({ item }: { item: ReleaseSong }) => {
     return (
-      <View style={{ marginHorizontal: CARD_SPACING / 2 }}>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        style={{ marginHorizontal: CARD_SPACING / 2 }}
+        onPress={() => handleNavigateToChooseKey(item)}
+      >
         <ImageBackground
           source={{ uri: item.image }}
           style={styles.card}
@@ -446,7 +525,10 @@ const NewReleaseTabs = () => {
 
           <TouchableOpacity
             style={styles.previewButton}
-            onPress={() => playOrPause(item)}
+            onPress={(event: GestureResponderEvent) => {
+              event.stopPropagation();
+              playOrPause(item);
+            }}
             disabled={!item.preview}
           >
             <MaterialIcons
@@ -456,7 +538,7 @@ const NewReleaseTabs = () => {
             />
           </TouchableOpacity>
         </ImageBackground>
-      </View>
+      </TouchableOpacity>
     );
   };
 

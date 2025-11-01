@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, FlatList } from 'react-native';
 
-const categories = ['New Release', 'Trending','Top Rated'];
+const categories = ['New Release', 'Trending','All Songs'];
 
 interface CategoryTabsProps {
   scrollToSection: (category: string) => void;

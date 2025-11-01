@@ -7,7 +7,6 @@ import {
   StyleSheet,
   FlatList,
   ActivityIndicator,
-  DeviceEventEmitter,
   Alert,
 } from 'react-native';
 import { FontAwesome } from '@expo/vector-icons';
@@ -18,11 +17,16 @@ import {
   InterruptionModeIOS,
   type AudioMode,
 } from 'expo-av';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import { getAudioVerById } from '@/api/song/getAudioById';
 import { getAllsongs } from '@/api/song/getAll';
 import { getRecordById, RecordType } from '@/api/getRecordById';
-import { SongType } from '@/api/types/song';
+import type { SongType as ApiSongType } from '@/api/types/song';
 import { buildAssetUri } from '@/app/utils/assetUri';
+import { previewBus } from '@/util/previewBus';
+import type { RootStackParamList } from '../Types/Navigation';
+import type { SongType as NavigationSongType } from '../Types/Song';
 
 interface Song {
   id: number;
@@ -32,6 +36,8 @@ interface Song {
   playCount: number;
   preview: string | null;
   versionId: number | null;
+  keySignature: string | null;
+  key_signature?: string | null;
 }
 
 const FALLBACK_COVER = 'https://via.placeholder.com/150';
@@ -51,6 +57,11 @@ type RecordSummary = {
   user_id: number | null;
 };
 
+const isIgnorableAudioError = (err: unknown) =>
+  err instanceof Error && /seeking interrupted/i.test(err.message);
+
+type NavigationProp = StackNavigationProp<RootStackParamList, 'MainTabs'>;
+
 // --- Card Component ---
 export const TopRateTabs: React.FC<{
   song: Song;
@@ -58,20 +69,58 @@ export const TopRateTabs: React.FC<{
   onToggle: (song: Song) => void;
   isPlaying: boolean;
   isLoading: boolean;
-}> = ({ song, index, onToggle, isPlaying, isLoading }) => {
+  userKey?: string | null;
+}> = ({ song, index, onToggle, isPlaying, isLoading, userKey }) => {
+  const navigation = useNavigation<NavigationProp>();
   // Rank styling
   const rankColors = ['#FFD700', '#C0C0C0', '#CD7F32']; // gold, silver, bronze
   const rankColor = rankColors[index] || '#fff';
   const rankSize = index < 3 ? 50 - index * 4 : 25; // 1=50, others=25
+  const imageUri = useMemo(() => song.image || FALLBACK_COVER, [song.image]);
+
+  const handleCardPress = useCallback(() => {
+    previewBus.emit({ source: 'toprate-card' });
+
+    const navigationSong: NavigationSongType = {
+      id: song.id.toString(),
+      songName: song.songName,
+      artist: song.artist,
+      image: imageUri,
+      previewUrl: song.preview ?? undefined,
+      key_signature: song.key_signature ?? song.keySignature ?? undefined,
+      keySignature: song.keySignature ?? song.key_signature ?? undefined,
+    };
+
+    navigation.navigate('ChooseKey', {
+      song: navigationSong,
+      userKey,
+      versionId: song.versionId ?? undefined,
+    });
+  }, [
+    imageUri,
+    navigation,
+    song.artist,
+    song.id,
+    song.keySignature,
+    song.key_signature,
+    song.preview,
+    song.songName,
+    song.versionId,
+    userKey,
+  ]);
 
   return (
-    <View style={styles.card}>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={handleCardPress}
+      activeOpacity={0.85}
+    >
       {/* Rank Number */}
       <Text style={[styles.rank, { color: rankColor, fontSize: rankSize }]}>
         {index + 1}
       </Text>
 
-      <Image source={{ uri: song.image }} style={styles.image} />
+      <Image source={{ uri: imageUri }} style={styles.image} />
       <View style={styles.rightContainer}>
         <View style={styles.textContainer}>
           <Text style={styles.songName} numberOfLines={1}>
@@ -90,7 +139,10 @@ export const TopRateTabs: React.FC<{
             isLoading && styles.iconButtonDisabled,
             !song.preview && styles.iconButtonUnavailable,
           ]}
-          onPress={() => onToggle(song)}
+          onPress={(event) => {
+            event.stopPropagation();
+            onToggle(song);
+          }}
           disabled={isLoading}
           activeOpacity={0.8}
         >
@@ -105,12 +157,12 @@ export const TopRateTabs: React.FC<{
           )}
         </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 
 // --- Screen Component ---
-const TopRateScreen: React.FC = () => {
+const TopRateScreen: React.FC<{ userKey?: string | null }> = ({ userKey }) => {
   const [topSongs, setTopSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -267,10 +319,10 @@ const TopRateScreen: React.FC = () => {
       }
 
       const allSongsRes = await getAllsongs();
-      const allSongs: SongType[] =
+      const allSongs: ApiSongType[] =
         (allSongsRes.success && Array.isArray(allSongsRes.data) ? allSongsRes.data : []) ?? [];
 
-      const songLookup = new Map<number, SongType>();
+      const songLookup = new Map<number, ApiSongType>();
       allSongs.forEach((song) => {
         songLookup.set(song.song_id, song);
       });
@@ -399,6 +451,8 @@ const TopRateScreen: React.FC = () => {
             playCount: aggregate.playCount,
             preview,
             versionId: aggregate.topVersionId ?? null,
+            keySignature: typeof song.key_signature === 'string' ? song.key_signature : null,
+            key_signature: typeof song.key_signature === 'string' ? song.key_signature : null,
           };
         })
         .filter(Boolean) as Song[];
@@ -419,14 +473,26 @@ const TopRateScreen: React.FC = () => {
         const cacheIsFresh = cached && Date.now() - cached.timestamp < CACHE_TTL_MS;
 
         if (cached?.data && Array.isArray(cached.data) && !cancelled) {
-          const sanitized = cached.data.map((item) => ({
-            ...item,
-            preview: typeof item.preview === 'string' ? item.preview : null,
-            versionId:
+          const sanitized = cached.data.map((item) => {
+            const normalizedPreview = typeof item.preview === 'string' ? item.preview : null;
+            const normalizedVersionId =
               typeof item.versionId === 'number' && Number.isFinite(item.versionId)
                 ? item.versionId
-                : null,
-          }));
+                : null;
+            const normalizedKey =
+              typeof item.keySignature === 'string' && item.keySignature.trim().length > 0
+                ? item.keySignature
+                : typeof item.key_signature === 'string' && item.key_signature.trim().length > 0
+                  ? item.key_signature
+                  : null;
+            return {
+              ...item,
+              preview: normalizedPreview,
+              versionId: normalizedVersionId,
+              keySignature: normalizedKey,
+              key_signature: normalizedKey,
+            };
+          });
           previewCacheRef.current.clear();
           sanitized.forEach((item) => {
             if (item.preview) {
@@ -435,7 +501,12 @@ const TopRateScreen: React.FC = () => {
           });
           setTopSongs(sanitized);
           const cacheHasPreviews = sanitized.some((item) => item.preview || item.versionId != null);
-          if (cacheIsFresh && cacheHasPreviews) {
+          const cacheHasKeys = sanitized.some(
+            (item) =>
+              typeof item.keySignature === 'string' ||
+              typeof item.key_signature === 'string'
+          );
+          if (cacheIsFresh && cacheHasPreviews && cacheHasKeys) {
             setLoading(false);
             return;
           }
@@ -479,13 +550,17 @@ const TopRateScreen: React.FC = () => {
         await currentSound.stopAsync();
       }
     } catch (err) {
-      console.warn('Unable to stop preview cleanly', err);
+      if (!isIgnorableAudioError(err)) {
+        console.warn('Unable to stop preview cleanly', err);
+      }
     }
 
     try {
       await currentSound.unloadAsync();
     } catch (err) {
-      console.warn('Unable to unload preview sound', err);
+      if (!isIgnorableAudioError(err)) {
+        console.warn('Unable to unload preview sound', err);
+      }
     }
 
     soundRef.current = null;
@@ -506,7 +581,7 @@ const TopRateScreen: React.FC = () => {
       setLoadingPreviewId(song.id);
 
       try {
-        DeviceEventEmitter.emit('preview:stop', { source: 'toprate' });
+        previewBus.emit({ source: 'toprate' });
         await stopPlayback();
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: false,
@@ -553,7 +628,7 @@ const TopRateScreen: React.FC = () => {
                 (item) => item?.song_id === song.id
               );
               const candidate = buildAssetUri(
-                (match as SongType | undefined)?.previewsong ?? null
+                (match as ApiSongType | undefined)?.previewsong ?? null
               );
               if (candidate) {
                 previewCacheRef.current.set(song.id, candidate);
@@ -615,7 +690,7 @@ const TopRateScreen: React.FC = () => {
   }, [stopPlayback]);
 
   useEffect(() => {
-    const sub = DeviceEventEmitter.addListener('preview:stop', (payload?: { source?: string }) => {
+    const remove = previewBus.addListener((payload) => {
       if (payload?.source === 'toprate') {
         return;
       }
@@ -623,7 +698,7 @@ const TopRateScreen: React.FC = () => {
     });
 
     return () => {
-      sub.remove();
+      remove();
     };
   }, [stopPlayback]);
 
@@ -656,6 +731,7 @@ const TopRateScreen: React.FC = () => {
           onToggle={handleTogglePreview}
           isPlaying={playingId === item.id}
           isLoading={loadingPreviewId === item.id}
+          userKey={userKey}
         />
       )}
       contentContainerStyle={{ paddingBottom: 20 }}
