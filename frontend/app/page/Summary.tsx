@@ -115,6 +115,8 @@ export default function SummaryScreen() {
   const instrumentEnabledRef = useRef(false);
   const userAdjustedInstrumentRef = useRef(false);
   const [userRecord, setUserRecord] = useState<UserRecord | null>(null);
+  const durationRef = useRef(duration);
+  const isSeekingRef = useRef(isSeeking);
 
   const DEFAULT_ISSUES: Issue[] = [
     { at: 5, label: "Duration : Too slow" },
@@ -139,6 +141,14 @@ export default function SummaryScreen() {
     () => formatTime(duration > 0 ? duration : 0),
     [duration]
   );
+
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
+
+  useEffect(() => {
+    isSeekingRef.current = isSeeking;
+  }, [isSeeking]);
 
   useEffect(() => {
     instrumentEnabledRef.current = instrumentEnabled;
@@ -246,99 +256,112 @@ export default function SummaryScreen() {
   }, [song_id]);
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchRecord = async () => {
       try {
+        setIsLoading(true);
         const res = await Axios.post("/private/getrecord", {
           record_id: recordId,
         });
 
-        if (res.data.success) {
-          setUserRecord(res.data.data); // just set the fetched record
+        if (!isMounted) {
+          return;
+        }
+
+        if (res.data.success && res.data.data) {
+          setUserRecord(res.data.data);
           console.log("Fetched record:", res.data.data);
+        } else {
+          setIsLoading(false);
         }
       } catch (err) {
-        console.error("Error fetching record:", err);
+        if (isMounted) {
+          console.error("Error fetching record:", err);
+          setIsLoading(false);
+        }
       }
     };
 
     fetchRecord();
+
+    return () => {
+      isMounted = false;
+    };
   }, [recordId]);
 
-  const handlePlaybackStatusUpdate = useCallback(
-    (status: AVPlaybackStatus) => {
-      if (!status.isLoaded) {
-        if ("error" in status && status.error) {
-          console.error("Playback status error:", status.error);
-        }
-        return;
+  const handlePlaybackStatusUpdate = useCallback((status: AVPlaybackStatus) => {
+    if (!status.isLoaded) {
+      if ("error" in status && status.error) {
+        console.error("Playback status error:", status.error);
       }
+      return;
+    }
 
-      if (status.durationMillis != null) {
-        setDuration(status.durationMillis / 1000);
-      }
+    if (status.durationMillis != null) {
+      setDuration(status.durationMillis / 1000);
+    }
 
-      if (status.didJustFinish) {
-        setIsPlaying(false);
-        setIsSeeking(false);
-        const finishedSeconds =
-          status.durationMillis != null
-            ? status.durationMillis / 1000
-            : duration > 0
-            ? duration
-            : 0;
-        setPosition(finishedSeconds);
-        setPlaybackCompleted(true);
-        if (instrumentalRef.current) {
-          const inst = instrumentalRef.current;
-          inst
-            .stopAsync()
-            .then(async () => {
-              try {
-                const targetVolume = instrumentEnabledRef.current
-                  ? INSTRUMENT_VOLUME
-                  : 0;
-                await inst.setVolumeAsync(targetVolume);
-              } catch (volErr) {
-                console.warn("Failed to reset instrumental volume", volErr);
-              }
-            })
-            .catch((err) => console.warn("Failed to stop instrumental", err));
-        }
-        return;
-      }
-
-      setIsPlaying(status.isPlaying);
-      if (status.isPlaying) {
-        setPlaybackCompleted(false);
-      }
-
-      if (!status.isPlaying && !status.didJustFinish) {
+    if (status.didJustFinish) {
+      setIsPlaying(false);
+      setIsSeeking(false);
+      const finishedSeconds =
+        status.durationMillis != null
+          ? status.durationMillis / 1000
+          : durationRef.current > 0
+          ? durationRef.current
+          : 0;
+      setPosition(finishedSeconds);
+      setPlaybackCompleted(true);
+      if (instrumentalRef.current) {
         const inst = instrumentalRef.current;
-        if (inst) {
-          inst
-            .getStatusAsync()
-            .then((instStatus) => {
-              if (
-                instStatus.isLoaded &&
-                instStatus.isPlaying &&
-                instrumentEnabledRef.current
-              ) {
-                return inst.pauseAsync();
-              }
-              return undefined;
-            })
-            .catch((err) =>
-              console.warn("Failed to sync instrumental state", err)
-            );
-        }
+        inst
+          .stopAsync()
+          .then(async () => {
+            try {
+              const targetVolume = instrumentEnabledRef.current
+                ? INSTRUMENT_VOLUME
+                : 0;
+              await inst.setVolumeAsync(targetVolume);
+            } catch (volErr) {
+              console.warn("Failed to reset instrumental volume", volErr);
+            }
+          })
+          .catch((err) => console.warn("Failed to stop instrumental", err));
       }
+      return;
+    }
 
-      if (!isSeeking && status.positionMillis != null) {
-        setPosition(status.positionMillis / 1000);
+    setIsPlaying(status.isPlaying);
+    if (status.isPlaying) {
+      setPlaybackCompleted(false);
+    }
+
+    if (!status.isPlaying && !status.didJustFinish) {
+      const inst = instrumentalRef.current;
+      if (inst) {
+        inst
+          .getStatusAsync()
+          .then((instStatus) => {
+            if (
+              instStatus.isLoaded &&
+              instStatus.isPlaying &&
+              instrumentEnabledRef.current
+            ) {
+              return inst.pauseAsync();
+            }
+            return undefined;
+          })
+          .catch((err) =>
+            console.warn("Failed to sync instrumental state", err)
+          );
       }
-    },
-    [isSeeking, duration]
-  );
+    }
+
+    if (!isSeekingRef.current && status.positionMillis != null) {
+      setPosition(status.positionMillis / 1000);
+    }
+  }, []);
 
   const loadAudioSources = useCallback(
     async (record: UserRecord) => {
@@ -450,8 +473,6 @@ export default function SummaryScreen() {
       loadAudioSources(userRecord).catch((error) =>
         console.error("Failed to prepare audio sources", error)
       );
-    } else {
-      setIsLoading(false);
     }
   }, [userRecord, loadAudioSources]);
 
