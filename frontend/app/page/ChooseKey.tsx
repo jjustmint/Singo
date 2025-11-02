@@ -33,6 +33,8 @@ const ChooseKey: React.FC = () => {
   const numericSongId = Number.parseInt(song_id, 10);
   const originalKey = song.key_signature;
 
+  const [vocalEnabled, setVocalEnabled] = useState(true);
+
   const [songList, setSongList] = useState<SongKeyType[]>([]);
   const [keys, setKeys] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -137,7 +139,7 @@ const ChooseKey: React.FC = () => {
 
   const handleConfirm = () => {
     if (songList.length > 0) {
-      navigation.navigate("MusicPlayer", { songKey: songList[currentIndex] });
+      navigation.navigate("MusicPlayer", { songKey: songList[currentIndex], vocalEnabled, });
     } else {
       console.error("No song selected");
     }
@@ -258,6 +260,17 @@ const ChooseKey: React.FC = () => {
       <TouchableOpacity style={styles.confirmButton} onPress={handleConfirm}>
         <Feather name="check" size={32} color="#3A6DFF" />
       </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.vocalButton}
+        onPress={() => setVocalEnabled(!vocalEnabled)}
+      >
+        <Feather
+          name={vocalEnabled ? "mic" : "mic-off"}
+          size={26}
+          color="white"
+        />
+      </TouchableOpacity>
     </ImageBackground>
   );
 };
@@ -300,4 +313,13 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     padding: 20,
   },
+  vocalButton: {
+  position: "absolute",
+  top: 80,
+  right: 20,
+  backgroundColor: "rgba(0,0,0,0.4)",
+  borderRadius: 30,
+  padding: 10,
+  zIndex: 3,
+},
 });
