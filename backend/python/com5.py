@@ -24,12 +24,12 @@ ALPHA = 0.40
 K_DECAY = 0.20
 
 # Component weights - balanced
-W_ACC  = 0.50   # favor DTW alignment more
-W_NAS  = 0.30
+W_ACC  = 0.35
+W_NAS  = 0.45
 W_BASE = 0.20
 
 # Mistake detection - MORE AGGRESSIVE
-MISTAKE_SLOPE   = 0.65  # was 0.65 - steeper penalty for mistakes
+MISTAKE_SLOPE   = 0.8  # was 0.65 - steeper penalty for mistakes
 MIN_GAP         = 0.2  # was 0.35 - detect shorter mistakes
 ENERGY_THRESH   = 0.06  # was 0.12 - lower threshold to catch more mistakes
 SEMITONE_THRESH = 2.0  # was 2.0 - stricter pitch detection
@@ -41,14 +41,17 @@ KEY_SHIFT_PENALTY_PER_STEP = 0.04  # was 0.04 - doubled
 
 # Score calibration - BIGGER SPREAD
 SCORE_SPREAD_FACTOR = 1.3  # was 1.3 - more spread between good/bad
-POOR_PENALTY_MULTIPLIER = 2.0  # was 1.5 - harsher on poor performance
+POOR_PENALTY_MULTIPLIER = 2.5  # was 1.5 - harsher on poor performance
 
 # NEW: Mistake severity penalties
-MISTAKE_PENALTY_WEIGHT = 0.5 
+MISTAKE_PENALTY_WEIGHT = 0.8 
 
 # Voiced gating thresholds
 VOICED_PCT_USER = 25
 VOICED_PCT_ORIG = 25
+
+MIN_VOCAL_RMS = 0.0035  # tune if needed
+PEAK_CHROMA_MIN = 1e-7  # prevents NaN-ish edge cases
 
 # ----------------- Pydantic -----------------
 class CompareRequest(BaseModel):
@@ -173,11 +176,7 @@ def detect_mistake_points(orig_unit, user_unit, path, sr,
         description = ""
         
         # Check for missing notes (user not singing when they should)
-        if eo > thr_orig and eu < thr_user:
-            reason = "missing"
-            severity = 2
-            description = "Note not sung"
-        elif eo > thr_orig and eu > thr_user:
+        if eo > thr_orig and eu > thr_user:
             # Both singing - check for pitch errors
             reason, severity, description = classify_pitch_error(exp_midi, act_midi)
         
@@ -285,7 +284,11 @@ def detect_vocal_quality(rms, spectral_flatness, chroma_raw):
     Detect if the audio contains actual singing or just noise/silence
     """
     avg_rms = float(np.mean(rms))
-    if avg_rms < 0.002:
+
+    if np.mean(np.abs(chroma_raw)) < 1e-5:
+        return False, 0.0, "No chroma content detected (silence)."
+
+    if avg_rms < 0.002 or np.max(rms) < 0.004:
         return False, 0.0, "Audio is too quiet or silent"
     
     avg_flatness = float(np.mean(spectral_flatness))
@@ -311,14 +314,73 @@ def detect_vocal_quality(rms, spectral_flatness, chroma_raw):
         0.2 * min(1.0, voicing_ratio / 0.5)
     )
     
+    if quality_score < 0.25:
+        return False, float(quality_score), "Low vocal presence detected"
+
     quality_score = min(1.0, quality_score * 1.25)
     return True, float(quality_score), "Valid vocal detected"
+
+def extract_chroma_with_wave(path):
+    """
+    Load waveform + extract chroma features (so we can check silence before scoring)
+    """
+    y, sr = librosa.load(path, sr=SR, mono=True, dtype=np.float32)
+    y, sr2, chroma_raw, chroma_norm, energy_vec, rms, flat = extract_chroma_from_song(path)
+    return y, sr2, chroma_raw, chroma_norm, energy_vec, rms, flat
+
+def voiced_fraction_yin(y, sr):
+    fmin = librosa.note_to_hz("C2")
+    fmax = librosa.note_to_hz("C7")
+    f0 = librosa.yin(y, fmin=fmin, fmax=fmax, sr=sr,
+                     frame_length=N_FFT, hop_length=HOP)
+    voiced_mask = np.isfinite(f0)
+    voiced_frac = float(np.mean(voiced_mask)) if f0.size else 0.0
+    median_f0 = float(np.nanmedian(f0)) if np.any(voiced_mask) else 0.0
+
+    # --- NEW: reject steady hums or constant tones ---
+    if np.std(f0[np.isfinite(f0)]) < 3.0:   # <3 Hz variation ⇒ constant tone
+        voiced_frac = 0.0                    # treat as unvoiced/silent
+        median_f0 = 0.0
+
+    return voiced_frac, median_f0
 
 # ----------------- FastAPI route -----------------
 @app.post("/compare")
 async def compare(request: CompareRequest):
     try:
-        # Parallel extraction
+         # 1) Load raw user waveform FIRST (no NR/HPSS yet)
+        y_user, sr_user = librosa.load(
+            request.userSongPath, sr=SR, mono=True, dtype=np.float32
+        )
+
+        # 2) Hard gate on voiced pitch presence (YIN)
+        vf, f0_med = voiced_fraction_yin(y_user, sr_user)
+        logging.info(f"[YIN gate] voiced_frac={vf:.3f}  median_f0={f0_med:.1f} Hz")
+
+        if vf < 0.10 or f0_med < 80:  # low voiced % OR low constant hum pitch
+            return JSONResponse({
+                "success": True,
+                "data": {
+                    "mistakes": [],
+                    "finalScore": 0.0,
+                    "qualityTier": "No Singing Detected",
+                    "message": "No valid singing detected (likely background hum or silence)."
+                }
+            })
+
+        # Reject if almost no voiced frames (noise/hiss/silence)
+        if vf < 0.10:  # tune to 0.08–0.15 as you prefer
+            return JSONResponse({
+                "success": True,
+                "data": {
+                    "mistakes": [],
+                    "finalScore": 0.0,
+                    "qualityTier": "No Singing Detected",
+                    "message": "No voiced singing detected in your recording."
+                }
+            })
+
+        # 3) Proceed with your EXISTING parallel feature extraction
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as ex:
             f1 = ex.submit(extract_chroma_from_song, request.originalSongPath)
             f2 = ex.submit(extract_chroma_from_song, request.userSongPath)
@@ -328,6 +390,26 @@ async def compare(request: CompareRequest):
         # Check if user audio contains actual vocals
         is_valid, vocal_quality, quality_reason = detect_vocal_quality(rms_user, flat_user, C_user_raw)
         
+        # --- Absolute silence / low energy guard ---
+        total_energy = float(np.sum(rms_user))
+        avg_rms = float(np.mean(rms_user))
+        peak_chroma = float(np.max(C_user_raw))
+
+        logging.info(f"Silence check | total_energy={total_energy:.6f} | avg_rms={avg_rms:.6f} | peak_chroma={peak_chroma:.6e}")
+
+        # Reject if average RMS is extremely low or total energy tiny
+        if total_energy < 0.5 or avg_rms < 0.0015 or peak_chroma < 1e-6:
+            logging.warning("Rejected: no significant vocal energy detected.")
+            return JSONResponse({
+                "success": True,
+                "data": {
+                    "mistakes": [],
+                    "finalScore": 0.0,
+                    "qualityTier": "No Singing Detected",
+                    "message": "Your recording contains no audible singing or voice energy."
+                }
+            })
+
         if not is_valid:
             logging.warning(f"Invalid vocal detected: {quality_reason}")
             return JSONResponse({
@@ -384,7 +466,7 @@ async def compare(request: CompareRequest):
                 "end_time": round(et, 2),
                 "duration": duration,
                 "semitone_difference": m.get("semitone_diff", 0),
-                "pitch_diff_hz": round(pitch_diff, 2),
+                "pitch_diff": round(pitch_diff, 2),
                 "frames": m.get("frames", 0)
             })
 
@@ -405,8 +487,9 @@ async def compare(request: CompareRequest):
             ratio = min(1.0, mistake_frames / max(1, voiced_frames))
             base_accuracy = 100.0 * (1.0 - MISTAKE_SLOPE * ratio)
         else:
-            base_accuracy = 50.0
-        base_accuracy = float(np.clip(base_accuracy, 0.0, 100.0))
+            base_accuracy = 0.0
+            
+        # base_accuracy = float(np.clip(base_accuracy, 0.0, 100.0))
 
         # NAS with detailed metrics
         nas, nas_count, avg_pitch_error, correct_pct = note_agreement_score(
@@ -422,11 +505,11 @@ async def compare(request: CompareRequest):
 
         # NEW: Direct mistake penalty (per mistake, not per frame)
         mistake_penalty = total_mistakes * MISTAKE_PENALTY_WEIGHT
-        if total_mistakes > 15:
-            mistake_penalty *= 1.1  # Extra penalty for many mistakes
-        if total_mistakes > 24:
-            mistake_penalty *= 1.2
-        if total_mistakes > 30:
+        if total_mistakes > 0:
+            mistake_penalty *= 1.2  # Extra penalty for many mistakes
+        if total_mistakes > 10:
+            mistake_penalty *= 1.4
+        if total_mistakes > 20:
             mistake_penalty *= 1.5
 
         mistake_ratio = mistake_frames / max(1, voiced_frames) if voiced_frames > 0 else 0.0
@@ -461,6 +544,51 @@ async def compare(request: CompareRequest):
                 final = spread_score - extra_penalty - 5.0
                 quality_tier = "Needs Practice"
             
+        sung_frames = np.sum(e_user > thr_user)
+        total_frames_user = len(e_user)
+        user_sing_ratio = sung_frames / max(1, total_frames_user)
+
+        # Penalize low singing coverage
+        # === Singing coverage penalty (within user's own recording) ===
+        if user_sing_ratio < 0.3:
+            # barely sang anything — harsh penalty
+            final *= 0.4
+            quality_tier = "Too Little Singing"
+        elif user_sing_ratio < 0.5:
+            final *= 0.7
+            quality_tier = "Low Singing Activity"
+        elif user_sing_ratio < 0.7:
+            final *= 0.9
+
+        user_duration_sec = len(e_user) * HOP / SR
+
+        if user_duration_sec < 30:
+            final = 0.0
+            quality_tier = "Recording Too Short, Need at least 45 seconds."
+            return JSONResponse({
+                "success": True,
+                "data": {
+                    "mistakes": [],
+                    "finalScore": 0.0,
+                    "qualityTier": quality_tier,
+                    "message": "No clear singing detected in your recording."
+                }
+            })
+
+        if vocal_quality < 0.3 or user_sing_ratio < 0.2:
+            final = 0.0
+            quality_tier = "No Singing Detected"
+            return JSONResponse({
+                "success": True,
+                "data": {
+                    "mistakes": [],
+                    "finalScore": 0.0,
+                    "qualityTier": quality_tier,
+                    "message": "No clear singing detected in your recording."
+                }
+            })
+
+
         # clamp to 0-100
         final = float(np.clip(final, 0.0, 100.0))
         
@@ -484,6 +612,7 @@ async def compare(request: CompareRequest):
         logging.info(f"DTW Acc: {accuracy:.2f}, NAS: {nas_score:.2f}, Base: {base_accuracy:.2f}")
         logging.info(f"Mistake Penalty: {mistake_penalty:.2f}")
         logging.info(f"Final Score: {final:.2f} | Quality: {quality_tier}")
+        logging.info(f"User duration: {user_duration_sec:.2f}s | Singing coverage: {user_sing_ratio:.2f}")
         logging.info(f"=====================")
 
         return JSONResponse({
