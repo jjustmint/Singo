@@ -1,4 +1,11 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo, type ComponentProps } from "react";
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useMemo,
+  type ComponentProps,
+} from "react";
 import {
   View,
   Text,
@@ -116,7 +123,7 @@ const MusicPlayer: React.FC = () => {
   const route = useRoute<MusicPlayerRouteProp>();
   const navigation = useNavigation<MusicPlayerNavProp>();
 
-  const { songKey } = route.params;
+  const { songKey, vocalEnabled: initialVocalEnabled } = route.params;
 
   const [loading, setLoading] = useState(true);
 
@@ -165,7 +172,7 @@ const MusicPlayer: React.FC = () => {
   const [singer, setSinger] = useState<string | undefined>(undefined);
 
   const [loadingResult, setLoadingResult] = useState(false);
-  const [vocalEnabled, setVocalEnabled] = useState(true);
+  const [vocalEnabled, setVocalEnabled] = useState(initialVocalEnabled ?? true);
   const vocalEnabledRef = useRef(vocalEnabled);
   const [hasVocalTrack, setHasVocalTrack] = useState(false);
 
@@ -244,8 +251,9 @@ const MusicPlayer: React.FC = () => {
         const allowPlayback = forceEnable ?? vocalEnabled;
 
         if (!allowPlayback) {
-          vocalResumePositionRef.current = instrumentStatus.positionMillis ?? vocalResumePositionRef.current;
-          if ('isPlaying' in vocalStatus && vocalStatus.isPlaying) {
+          vocalResumePositionRef.current =
+            instrumentStatus.positionMillis ?? vocalResumePositionRef.current;
+          if ("isPlaying" in vocalStatus && vocalStatus.isPlaying) {
             await vocalSound.pauseAsync();
           }
           return;
@@ -253,7 +261,9 @@ const MusicPlayer: React.FC = () => {
 
         const targetPosition = instrumentStatus.positionMillis ?? 0;
 
-        const difference = Math.abs((vocalStatus.positionMillis ?? 0) - targetPosition);
+        const difference = Math.abs(
+          (vocalStatus.positionMillis ?? 0) - targetPosition
+        );
         if (difference > 220) {
           if (vocalSyncingRef.current) {
             return;
@@ -269,7 +279,7 @@ const MusicPlayer: React.FC = () => {
         vocalResumePositionRef.current = targetPosition;
 
         if (shouldPlay) {
-          if ('isPlaying' in vocalStatus && !vocalStatus.isPlaying) {
+          if ("isPlaying" in vocalStatus && !vocalStatus.isPlaying) {
             await vocalSound.playAsync();
           }
         } else if (vocalStatus.isPlaying) {
@@ -363,7 +373,7 @@ const MusicPlayer: React.FC = () => {
       try {
         const vocalStatus = await currentVocal.getStatusAsync();
         if (vocalStatus.isLoaded) {
-          if ('isPlaying' in vocalStatus && vocalStatus.isPlaying) {
+          if ("isPlaying" in vocalStatus && vocalStatus.isPlaying) {
             await currentVocal.stopAsync();
           }
           await currentVocal.unloadAsync();
@@ -460,13 +470,20 @@ const MusicPlayer: React.FC = () => {
         `${Date.now()}-${safeFileName}`
       );
 
-      const downloadedFile = await File.downloadFileAsync(remoteUri, targetFile, {
-        idempotent: true,
-      });
+      const downloadedFile = await File.downloadFileAsync(
+        remoteUri,
+        targetFile,
+        {
+          idempotent: true,
+        }
+      );
 
       return downloadedFile.uri;
     } catch (error) {
-      console.warn("Falling back to streaming audio due to caching failure", error);
+      console.warn(
+        "Falling back to streaming audio due to caching failure",
+        error
+      );
       return remoteUri;
     }
   }, []);
@@ -490,14 +507,23 @@ const MusicPlayer: React.FC = () => {
       }
 
       try {
-        return await Audio.Sound.createAsync({ uri: candidateUri }, initialStatus);
+        return await Audio.Sound.createAsync(
+          { uri: candidateUri },
+          initialStatus
+        );
       } catch (primaryError) {
-        console.warn("Primary audio load failed, retrying with cached copy", primaryError);
+        console.warn(
+          "Primary audio load failed, retrying with cached copy",
+          primaryError
+        );
 
         if (!usedCachedCopy) {
           const localUri = await ensureLocalAudioFile(uri);
           if (localUri && localUri !== candidateUri) {
-            return await Audio.Sound.createAsync({ uri: localUri }, initialStatus);
+            return await Audio.Sound.createAsync(
+              { uri: localUri },
+              initialStatus
+            );
           }
         }
 
@@ -523,7 +549,10 @@ const MusicPlayer: React.FC = () => {
       const playbackUri = instrumentUri ?? vocalUri;
 
       if (!playbackUri) {
-        console.error("Unable to resolve audio URI from response:", response.data);
+        console.error(
+          "Unable to resolve audio URI from response:",
+          response.data
+        );
         return;
       }
 
@@ -541,16 +570,18 @@ const MusicPlayer: React.FC = () => {
         setDuration(st.durationMillis / 1000);
       }
 
-      const hasSeparateVocal = Boolean(instrumentUri && vocalUri && instrumentUri !== vocalUri);
+      const hasSeparateVocal = Boolean(
+        instrumentUri && vocalUri && instrumentUri !== vocalUri
+      );
       setHasVocalTrack(hasSeparateVocal);
       setVocalEnabled(hasSeparateVocal);
 
       if (hasSeparateVocal && vocalUri) {
         try {
-          const { sound: vocalSound } = await loadSoundWithFallback(
-            vocalUri,
-            { shouldPlay: false, volume: 0.6 }
-          );
+          const { sound: vocalSound } = await loadSoundWithFallback(vocalUri, {
+            shouldPlay: false,
+            volume: 0.6,
+          });
           vocalSoundRef.current = vocalSound;
         } catch (error) {
           console.error("Failed to load vocal track:", error);
@@ -588,7 +619,8 @@ const MusicPlayer: React.FC = () => {
           } else if (isVocalEnabled) {
             void alignVocalWithInstrument(status.isPlaying === true);
           } else {
-            vocalResumePositionRef.current = status.positionMillis ?? vocalResumePositionRef.current;
+            vocalResumePositionRef.current =
+              status.positionMillis ?? vocalResumePositionRef.current;
           }
         }
 
@@ -664,6 +696,7 @@ const MusicPlayer: React.FC = () => {
         console.error("Sound is not loaded");
         return;
       }
+
       const status = await currentSound.getStatusAsync();
       if (!status.isLoaded) {
         console.error("Instrumental sound is not fully loaded");
@@ -673,30 +706,35 @@ const MusicPlayer: React.FC = () => {
       const vocalSound = vocalSoundRef.current;
       const shouldPlayVocal = Boolean(vocalSound && vocalEnabledRef.current);
 
+      // === If currently playing → pause both ===
+      if (status.isPlaying) {
+        await currentSound.pauseAsync();
+        if (shouldPlayVocal && vocalSound) {
+          await vocalSound.pauseAsync();
+        }
+        return; // done pausing
+      }
+
+      // === Otherwise, resume both ===
       const startPosition =
         typeof status.positionMillis === "number" && status.positionMillis > 0
           ? status.positionMillis
           : 0;
 
-      if (!status.isPlaying) {
-        if (startPosition !== 0) {
-          try {
-            await currentSound.setPositionAsync(startPosition);
-          } catch (err) {
-            console.warn("Failed to set instrumental position", err);
-          }
+      await currentSound.setPositionAsync(startPosition);
+      await currentSound.playAsync();
+
+      if (shouldPlayVocal && vocalSound) {
+        const instrStatus = await currentSound.getStatusAsync();
+        if (instrStatus.isLoaded) {
+          await vocalSound.setPositionAsync(instrStatus.positionMillis ?? 0);
         }
-        await currentSound.playAsync();
-        if (shouldPlayVocal) {
-          await syncVocalToInstrument(true, VOCAL_VOLUME);
-        }
-      } else if (shouldPlayVocal) {
-        await syncVocalToInstrument(true, VOCAL_VOLUME);
+        await vocalSound.playAsync();
       }
     } catch (error) {
-      console.error("Error playing instrumental:", error);
+      console.error("Error toggling playback:", error);
     }
-  }, [syncVocalToInstrument]);
+  }, []);
 
   const toggleVocalLayer = useCallback(async () => {
     if (!hasVocalTrack) {
@@ -847,7 +885,10 @@ const MusicPlayer: React.FC = () => {
 
       const { top, height } = getLineMetrics(index);
       const lineMidpoint = top + height / 2;
-      const rawMaxOffset = Math.max(lyricsContentHeight - lyricsContainerHeight, 0);
+      const rawMaxOffset = Math.max(
+        lyricsContentHeight - lyricsContainerHeight,
+        0
+      );
       const middleAnchor = lyricsContainerHeight * 0.5;
       const desiredOffset = lineMidpoint - middleAnchor;
 
@@ -885,11 +926,7 @@ const MusicPlayer: React.FC = () => {
 
   const scrollToHighlight = useCallback(
     (index: number, animated = true) => {
-      if (
-        index < 0 ||
-        !lyricsScrollRef.current ||
-        lyricsContainerHeight <= 0
-      ) {
+      if (index < 0 || !lyricsScrollRef.current || lyricsContainerHeight <= 0) {
         return;
       }
 
@@ -935,7 +972,12 @@ const MusicPlayer: React.FC = () => {
     if (highlightIndex >= 0) {
       scrollToHighlight(highlightIndex, false);
     }
-  }, [lyricsContainerHeight, lyricsContentHeight, highlightIndex, scrollToHighlight]);
+  }, [
+    lyricsContainerHeight,
+    lyricsContentHeight,
+    highlightIndex,
+    scrollToHighlight,
+  ]);
 
   useEffect(() => {
     const previousIndex = previousHighlightRef.current;
@@ -1341,10 +1383,7 @@ const MusicPlayer: React.FC = () => {
 
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Image
-            source={{ uri: resolvedCover }}
-            style={styles.albumArt}
-          />
+          <Image source={{ uri: resolvedCover }} style={styles.albumArt} />
           <View style={{ marginLeft: 12 }}>
             <Text style={styles.songTitle}>{title}</Text>
             <Text style={styles.artist}>{singer}</Text>
@@ -1370,7 +1409,10 @@ const MusicPlayer: React.FC = () => {
                 const rowAnimatedStyle = {
                   backgroundColor: animation.interpolate({
                     inputRange: [0, 1],
-                    outputRange: ["rgba(255,255,255,0)", "rgba(255,255,255,0.28)"],
+                    outputRange: [
+                      "rgba(255,255,255,0)",
+                      "rgba(255,255,255,0.28)",
+                    ],
                   }),
                   borderRadius: 18,
                   transform: [
@@ -1460,20 +1502,20 @@ const MusicPlayer: React.FC = () => {
         </View>
 
         <View style={styles.controls}>
-          <TouchableOpacity
-            onPress={toggleVocalLayer}
-            style={[styles.vocalToggle, !hasVocalTrack && styles.vocalToggleDisabled]}
-            disabled={!hasVocalTrack}
-          >
+          {/* Placeholder button (left) */}
+          <View style={styles.vocalToggle}>
             <MaterialIcons
-              name={vocalEnabled ? "record-voice-over" : "voice-over-off"}
+              name="record-voice-over"
               size={28}
-              color="white"
+              color="transparent"
             />
-          </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
-            style={[styles.micButton, isMicDisabled && styles.micButtonDisabled]}
+            style={[
+              styles.micButton,
+              isMicDisabled && styles.micButtonDisabled,
+            ]}
             onPress={handleMicPress}
             disabled={isMicDisabled}
             activeOpacity={0.8}
@@ -1488,10 +1530,7 @@ const MusicPlayer: React.FC = () => {
           <TouchableOpacity
             onPress={() => stopRecording()}
             disabled={!recording}
-            style={[
-              styles.confirmButton,
-              !recording && styles.confirmDisabled,
-            ]}
+            style={[styles.confirmButton, !recording && styles.confirmDisabled]}
           >
             <MaterialIcons name="done" size={28} color="white" />
           </TouchableOpacity>
@@ -1623,7 +1662,7 @@ const styles = StyleSheet.create({
     marginBottom: 80,
   },
   vocalToggle: {
-    backgroundColor: "rgba(107, 107, 107, 0.5)",
+    // backgroundColor: "rgba(107, 107, 107, 0.5)",
     padding: 12,
     borderRadius: 30,
     justifyContent: "center",
