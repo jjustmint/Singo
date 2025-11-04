@@ -176,9 +176,12 @@ def detect_mistake_points(orig_unit, user_unit, path, sr,
         description = ""
         
         # Check for missing notes (user not singing when they should)
-        if eo > thr_orig and eu > thr_user:
+        if eo > thr_orig * 0.8 and eu > thr_user * 0.8:
             # Both singing - check for pitch errors
             reason, severity, description = classify_pitch_error(exp_midi, act_midi)
+        elif eo > thr_orig and eu <= thr_user * 0.8:
+            # Missing note
+            reason, severity, description = "missing", 2, "User missed expected note"
         
         if reason:
             # Merge consecutive mistakes of the same type
@@ -436,6 +439,15 @@ async def compare(request: CompareRequest):
         C_user_unit = np.roll(C_user_unit, -shift, axis=0)
         C_user_raw  = np.roll(C_user_raw,  -shift, axis=0)
 
+        # Crop both chromas to common overlap (for partial recordings)
+        max_frames = min(C_orig_unit.shape[1], C_user_unit.shape[1])
+        C_orig_unit = C_orig_unit[:, :max_frames]
+        C_user_unit = C_user_unit[:, :max_frames]
+        C_orig_raw  = C_orig_raw[:, :max_frames]
+        C_user_raw  = C_user_raw[:, :max_frames]
+        e_orig      = e_orig[:max_frames]
+        e_user      = e_user[:max_frames]
+
         # Calibrated DTW accuracy
         accuracy, path, eff_nd, nd_self, nd_pair = dtw_calibrated_accuracy(
             C_orig_unit, C_user_unit, alpha=ALPHA, k=K_DECAY
@@ -484,7 +496,7 @@ async def compare(request: CompareRequest):
 
         # Base accuracy with stronger mistake penalty
         if voiced_frames > 0:
-            ratio = min(1.0, mistake_frames / max(1, voiced_frames))
+            ratio = min(1.0, mistake_frames / (voiced_frames + 50))
             base_accuracy = 100.0 * (1.0 - MISTAKE_SLOPE * ratio)
         else:
             base_accuracy = 0.0
@@ -496,6 +508,9 @@ async def compare(request: CompareRequest):
             C_orig_raw, C_user_raw, path, e_orig, e_user, thr_orig, thr_user
         )
         nas_score = 100.0 * nas
+        # Prevent NAS instability for shorter clips
+        C_orig_unit = librosa.util.normalize(C_orig_unit, axis=1)
+        C_user_unit = librosa.util.normalize(C_user_unit, axis=1)
 
         # Penalties - INCREASED
         timing_penalty = compute_timing_penalty(path, sr1, hop_length=HOP)
@@ -511,6 +526,12 @@ async def compare(request: CompareRequest):
             mistake_penalty *= 1.4
         if total_mistakes > 20:
             mistake_penalty *= 1.5
+        
+        # Duration normalization — makes short clips comparable to full songs
+        duration_ratio = len(C_user_unit[0]) / max(1, len(C_orig_unit[0]))
+        timing_penalty *= duration_ratio
+        mistake_penalty *= duration_ratio
+        energy_corr_penalty *= duration_ratio
 
         mistake_ratio = mistake_frames / max(1, voiced_frames) if voiced_frames > 0 else 0.0
 
@@ -535,14 +556,11 @@ async def compare(request: CompareRequest):
             
             if overall_quality > 0.75 and mistake_ratio < 0.20 and total_mistakes < 15:
                 final = spread_score + 10.0
-                quality_tier = "Good"
             elif overall_quality > 0.55 and mistake_ratio < 0.35 and total_mistakes < 26:
                 final = spread_score + 5.0
-                quality_tier = "Average"
             else:
                 extra_penalty = mistake_ratio * 15.0 * POOR_PENALTY_MULTIPLIER
                 final = spread_score - extra_penalty - 5.0
-                quality_tier = "Needs Practice"
             
         sung_frames = np.sum(e_user > thr_user)
         total_frames_user = len(e_user)
@@ -588,10 +606,33 @@ async def compare(request: CompareRequest):
                 }
             })
 
-
         # clamp to 0-100
         final = float(np.clip(final, 0.0, 100.0))
-        
+
+        # === Adjust final score based on song coverage ===
+        coverage_ratio = len(C_user_unit[0]) / max(1, len(C_orig_unit[0]))
+
+        if coverage_ratio < 0.5:
+            coverage_factor = 0.6
+        elif coverage_ratio < 0.7:
+            coverage_factor = 0.75
+        elif coverage_ratio < 0.95:
+            coverage_factor = 0.9
+        else:
+            coverage_factor = 1.0
+
+        final *= coverage_factor
+
+        # Re-assign tier to match adjusted score
+        if final >= 90:
+            quality_tier = "Excellent"
+        elif final >= 75:
+            quality_tier = "Good"
+        elif final >= 60:
+            quality_tier = "Average"
+        else:
+            quality_tier = "Needs Practice"
+
         # Generate mistake summary by type
         mistake_summary = {}
         for m in mistakes:

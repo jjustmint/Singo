@@ -28,11 +28,14 @@ export const findChartBoard = async (versionId: number, date: Date) => {
   }
   
 
-export const getChallengeSong = async(start_date: string) => {
+export const getChallengeSong = async(date: string) => {
     const challenge = await prisma.challenge.findFirst({
         where: {
           end_date: {
-            gte: new Date(start_date),
+            gte: new Date(date),
+          },
+          start_date: {
+            lte: new Date(date),
           },
         },
         orderBy: {
