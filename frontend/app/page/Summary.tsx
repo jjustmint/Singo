@@ -40,6 +40,7 @@ export type SongType = {
 type Issue = {
   at: number;
   label: string;
+  color: string;
 };
 
 type UserRecord = {
@@ -91,6 +92,31 @@ const resolveMediaUri = (path?: string | null) => {
 const ensureSafeFileName = (filename: string) =>
   filename.replace(/[^a-zA-Z0-9._-]/g, "_");
 
+const MISTAKE_COLOR_MAP: Record<string, string> = {
+  "too-high-major": "#ff4d8d",
+  "too-high": "#ff7abf",
+  "slightly-high": "#ff9bd6",
+  "too-low-major": "#4368ff",
+  "too-low": "#6c63ff",
+  "slightly-low": "#8b87ff",
+  missing: "#ffb74d",
+};
+
+const FALLBACK_MISTAKE_COLOR = "#ff7abf";
+
+const DEFAULT_ISSUES: Issue[] = [
+  {
+    at: 5,
+    label: "Slightly high moment",
+    color: MISTAKE_COLOR_MAP["slightly-high"],
+  },
+  {
+    at: 30,
+    label: "Too low section",
+    color: MISTAKE_COLOR_MAP["too-low"],
+  },
+];
+
 // ------------------- SUMMARY SCREEN -------------------
 type SummaryRouteProp = RouteProp<RootStackParamList, "Summary">;
 
@@ -118,10 +144,6 @@ export default function SummaryScreen() {
   const durationRef = useRef(duration);
   const isSeekingRef = useRef(isSeeking);
 
-  const DEFAULT_ISSUES: Issue[] = [
-    { at: 5, label: "Duration : Too slow" },
-    { at: 30, label: "Off Key : Too high" },
-  ];
 
   const theTrack = track ?? {
     id: "0",
@@ -836,11 +858,11 @@ export default function SummaryScreen() {
           setIssues(mappedIssues);
         } else {
           // fallback if no mistakes
-          setIssues(DEFAULT_ISSUES);
+          setIssues([...DEFAULT_ISSUES]);
         }
       } catch (err) {
         console.error("Error fetching mistakes:", err);
-        setIssues(DEFAULT_ISSUES);
+        setIssues([...DEFAULT_ISSUES]);
       }
     };
     fetchMistakes();
@@ -995,13 +1017,15 @@ export default function SummaryScreen() {
               <TouchableOpacity
                 key={`${it.at}-${idx}`}
                 activeOpacity={0.8}
-                style={styles.issueItem}
+                style={[styles.issueItem, { borderLeftColor: it.color }]}
                 onPress={() => {
                   void seekToPosition(it.at, isPlaying);
                 }}
               >
                 <Text style={styles.issueTime}>{formatTime(it.at)}</Text>
-                <Text style={styles.issueText}>{it.label}</Text>
+                <Text style={[styles.issueText, { color: it.color }]}>
+                  {it.label}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -1017,24 +1041,57 @@ function mistakeToIssue(m: MistakeType): Issue {
   const atSeconds =
     rawStart > 1000 ? rawStart / 1000 : rawStart;
   const at = Math.max(0, atSeconds);
-  let label = "";
+  const reasonKey = (m.reason ?? "").toLowerCase();
+  const color = MISTAKE_COLOR_MAP[reasonKey] ?? FALLBACK_MISTAKE_COLOR;
+  const pitchDetail = buildPitchDetail(m.pitch_diff, reasonKey);
 
-  switch (m.reason) {
+  let label: string;
+
+  switch (reasonKey) {
     case "missing": {
       const rawDuration = (m.timestamp_end ?? 0) - (m.timestamp_start ?? 0);
       const duration =
         rawDuration > 1000 ? rawDuration / 1000 : rawDuration;
-      label = `Missing part (${formatSeconds(duration)})`;
+      label = `Missing phrase (${formatSeconds(duration)})`;
       break;
     }
-    case "off-key":
-      label = `Off-key by ${m.pitch_diff} semitones`;
+    case "too-high-major":
+      label = `Way too high${pitchDetail}`;
       break;
-    default:
-      label = m.reason ?? "Unknown issue";
+    case "too-high":
+      label = `Too high${pitchDetail}`;
+      break;
+    case "slightly-high":
+      label = `Slightly high${pitchDetail}`;
+      break;
+    case "too-low-major":
+      label = `Way too low${pitchDetail}`;
+      break;
+    case "too-low":
+      label = `Too low${pitchDetail}`;
+      break;
+    case "slightly-low":
+      label = `Slightly low${pitchDetail}`;
+      break;
+    case "off-key":
+      label = `Off key${pitchDetail}`;
+      break;
+    default: {
+      const formatted =
+        reasonKey.length > 0
+          ? reasonKey
+              .split(/[-_]/)
+              .map((part) =>
+                part.length ? part[0].toUpperCase() + part.slice(1) : part
+              )
+              .join(" ")
+          : "Pitch variation detected";
+      label = `${formatted}${pitchDetail}`;
+      break;
+    }
   }
 
-  return { at, label };
+  return { at, label, color };
 }
 
 function formatTime(sec: number) {
@@ -1049,6 +1106,25 @@ function formatSeconds(sec?: number) {
   const m = Math.floor(sec / 60);
   const s = Math.round(sec % 60);
   return `${m}m${s ? ` ${s}s` : ""}`;
+}
+
+function buildPitchDetail(diff?: number, reasonKey?: string) {
+  if (typeof diff !== "number" || Number.isNaN(diff) || diff <= 0) {
+    return "";
+  }
+
+  const precision = diff >= 10 ? 0 : diff >= 1 ? 1 : 2;
+  const formatted = diff.toFixed(precision);
+
+  if (!reasonKey) {
+    return ` (+${formatted} Hz)`;
+  }
+
+  if (reasonKey.includes("low")) {
+    return ` (-${formatted} Hz)`;
+  }
+
+  return ` (+${formatted} Hz)`;
 }
 
 // ------------------- STYLES -------------------
@@ -1113,9 +1189,16 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     flexDirection: "row",
     alignItems: "center",
+    borderLeftWidth: 4,
+    borderLeftColor: "transparent",
   },
   issueTime: { width: 60, color: "#111", fontWeight: "800", fontSize: 14 },
-  issueText: { color: "#111", fontSize: 14, fontWeight: "600" },
+  issueText: {
+    color: "#111",
+    fontSize: 14,
+    fontWeight: "600",
+    flexShrink: 1,
+  },
   playbackControlsRow: {
     flexDirection: "row",
     alignItems: "center",

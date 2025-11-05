@@ -73,31 +73,51 @@ const DEFAULT_RECORDING_EXTENSION = "m4a";
 const RECORDING_DIRECTORY_NAME = "recordings";
 const MAX_RECORDING_UPLOAD_BYTES = 950 * 1024; // ≈0.95 MB safety limit
 
+const baseAndroidRecording = Audio.RecordingOptionsPresets.HIGH_QUALITY.android;
+const baseIosRecording = Audio.RecordingOptionsPresets.HIGH_QUALITY.ios;
+const baseWebRecording = Audio.RecordingOptionsPresets.HIGH_QUALITY.web;
+
 const COMPRESSED_RECORDING_OPTIONS: Audio.RecordingOptions = {
+  ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
   isMeteringEnabled: true,
   android: {
+    ...(baseAndroidRecording ?? {}),
     extension: `.${DEFAULT_RECORDING_EXTENSION}`,
-    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-    audioEncoder: Audio.AndroidAudioEncoder.AAC,
     sampleRate: 22050,
     numberOfChannels: 1,
     bitRate: 32000,
   },
   ios: {
+    ...(baseIosRecording ?? {}),
     extension: `.${DEFAULT_RECORDING_EXTENSION}`,
-    audioQuality: Audio.IOSAudioQuality.Medium,
     sampleRate: 22050,
     numberOfChannels: 1,
     bitRate: 32000,
-    outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
   },
   web: {
+    ...(baseWebRecording ?? {}),
     mimeType: "audio/webm",
     bitsPerSecond: 32000,
   },
 };
 
 const bytesToMegabytes = (bytes: number) => bytes / (1024 * 1024);
+
+type FileSizeCandidate = { size?: number | null };
+
+const resolveFileSize = (info: unknown): number | null => {
+  if (
+    info &&
+    typeof info === "object" &&
+    "size" in (info as Record<string, unknown>)
+  ) {
+    const candidate = (info as FileSizeCandidate).size;
+    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+};
 
 const resolveSafeRecordingExtension = (uri: string) => {
   const match = uri.match(/\.([a-z0-9]+)(?:\?|$)/i);
@@ -146,7 +166,7 @@ const persistRecordingFileAsync = async (
       const info = await getInfoAsync(sourceUri);
       return {
         uri: sourceUri,
-        size: typeof info.size === "number" ? info.size : null,
+        size: resolveFileSize(info),
       };
     } catch (infoError) {
       console.warn("Failed to inspect recording file", infoError);
@@ -167,7 +187,7 @@ const persistRecordingFileAsync = async (
     const info = await getInfoAsync(targetUri);
     return {
       uri: targetUri,
-      size: typeof info.size === "number" ? info.size : null,
+      size: resolveFileSize(info),
     };
   } catch (error) {
     console.warn("Failed to persist recording file, using original path", error);
