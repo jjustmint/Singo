@@ -231,7 +231,11 @@ const ChooseKey: React.FC = () => {
 
   const handleConfirm = () => {
     if (songList.length > 0) {
-      navigation.navigate("MusicPlayer", { songKey: songList[currentIndex], vocalEnabled, });
+      navigation.navigate("MusicPlayer", {
+        songKey: songList[currentIndex],
+        vocalEnabled,
+        isWeeklyChallenge: isLockedWeekly,
+      });
     } else {
       console.error("No song selected");
     }
