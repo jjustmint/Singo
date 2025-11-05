@@ -11,6 +11,7 @@ import {
   Text,
   Image,
   StyleSheet,
+  Alert,
   TouchableOpacity,
   SafeAreaView,
   ActivityIndicator,
@@ -26,6 +27,13 @@ import {
   AVPlaybackStatusToSet,
 } from "expo-av";
 import { Directory, File, Paths } from "expo-file-system";
+import {
+  deleteAsync,
+  getInfoAsync,
+  makeDirectoryAsync,
+  copyAsync,
+  documentDirectory,
+} from "expo-file-system/legacy";
 import Slider from "@react-native-community/slider";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import {
@@ -41,6 +49,7 @@ import { createRecord } from "@/api/createRecord";
 import { getAudioVerById } from "@/api/song/getAudioById";
 import { getLyrics } from "@/api/song/getLyrics";
 import { LyricLineType } from "@/api/types/lyrics";
+import { getLeaderboard } from "@/api/leaderboard";
 import { buildAssetUri } from "../utils/assetUri";
 
 type MusicPlayerRouteProp = RouteProp<RootStackParamList, "MusicPlayer">;
@@ -61,6 +70,224 @@ const FALLBACK_COVER = "https://via.placeholder.com/150";
 const LYRIC_TIMING_UPPER_BOUND_SECONDS = 600;
 const LYRICS_UNAVAILABLE_MESSAGE = "This song does not support lyrics yet.";
 const VOCAL_VOLUME = 0.6;
+const DEFAULT_RECORDING_EXTENSION = "m4a";
+const RECORDING_DIRECTORY_NAME = "recordings";
+const MAX_RECORDING_UPLOAD_BYTES = 950 * 1024; // ≈0.95 MB safety limit
+const WEEKLY_CHALLENGE_LOOKBACK_DAYS = 14;
+const WEEKLY_CHALLENGE_FALLBACK_START = "2025-09-26";
+const WEEKLY_CHALLENGE_CACHE_MAX_AGE_MS = 1000 * 60 * 5;
+
+type WeeklyChallengeCache = { versionId: number | null; fetchedAt: number };
+
+let weeklyChallengeCache: WeeklyChallengeCache | null = null;
+
+const normaliseVersionId = (candidate: unknown): number | null => {
+  if (typeof candidate === "number" && Number.isFinite(candidate)) {
+    return candidate;
+  }
+  if (typeof candidate === "string") {
+    const parsed = Number.parseInt(candidate, 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  return null;
+};
+
+const resolveWeeklyChallengeVersionId = async (): Promise<number | null> => {
+  const now = Date.now();
+
+  if (
+    weeklyChallengeCache &&
+    now - weeklyChallengeCache.fetchedAt < WEEKLY_CHALLENGE_CACHE_MAX_AGE_MS
+  ) {
+    return weeklyChallengeCache.versionId;
+  }
+
+  const today = new Date();
+
+  for (
+    let offset = 0;
+    offset < WEEKLY_CHALLENGE_LOOKBACK_DAYS;
+    offset += 1
+  ) {
+    const candidate = new Date(today);
+    candidate.setDate(today.getDate() - offset);
+    const isoDate = candidate.toISOString().split("T")[0];
+
+    try {
+      const response = await getLeaderboard(isoDate);
+      const versionId = normaliseVersionId(
+        response?.data?.challengeSong?.version_id
+      );
+      if (versionId != null) {
+        weeklyChallengeCache = {
+          versionId,
+          fetchedAt: Date.now(),
+        };
+        return versionId;
+      }
+    } catch (err) {
+      console.warn(
+        `[MusicPlayer] Leaderboard fetch failed for ${isoDate}`,
+        err
+      );
+    }
+  }
+
+  try {
+    const fallbackResponse = await getLeaderboard(
+      WEEKLY_CHALLENGE_FALLBACK_START
+    );
+    const versionId = normaliseVersionId(
+      fallbackResponse?.data?.challengeSong?.version_id
+    );
+    weeklyChallengeCache = {
+      versionId,
+      fetchedAt: Date.now(),
+    };
+    return versionId;
+  } catch (err) {
+    console.warn("[MusicPlayer] Fallback leaderboard fetch failed", err);
+    weeklyChallengeCache = {
+      versionId: null,
+      fetchedAt: Date.now(),
+    };
+    return null;
+  }
+};
+
+const baseAndroidRecording = Audio.RecordingOptionsPresets.HIGH_QUALITY.android;
+const baseIosRecording = Audio.RecordingOptionsPresets.HIGH_QUALITY.ios;
+const baseWebRecording = Audio.RecordingOptionsPresets.HIGH_QUALITY.web;
+
+const COMPRESSED_RECORDING_OPTIONS: Audio.RecordingOptions = {
+  ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+  isMeteringEnabled: true,
+  android: {
+    ...(baseAndroidRecording ?? {}),
+    extension: `.${DEFAULT_RECORDING_EXTENSION}`,
+    sampleRate: 22050,
+    numberOfChannels: 1,
+    bitRate: 32000,
+  },
+  ios: {
+    ...(baseIosRecording ?? {}),
+    extension: `.${DEFAULT_RECORDING_EXTENSION}`,
+    sampleRate: 22050,
+    numberOfChannels: 1,
+    bitRate: 32000,
+  },
+  web: {
+    ...(baseWebRecording ?? {}),
+    mimeType: "audio/webm",
+    bitsPerSecond: 32000,
+  },
+};
+
+const bytesToMegabytes = (bytes: number) => bytes / (1024 * 1024);
+
+type FileSizeCandidate = { size?: number | null };
+
+const resolveFileSize = (info: unknown): number | null => {
+  if (
+    info &&
+    typeof info === "object" &&
+    "size" in (info as Record<string, unknown>)
+  ) {
+    const candidate = (info as FileSizeCandidate).size;
+    if (typeof candidate === "number" && Number.isFinite(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+const resolveSafeRecordingExtension = (uri: string) => {
+  const match = uri.match(/\.([a-z0-9]+)(?:\?|$)/i);
+  const candidate = match?.[1]?.toLowerCase();
+  if (!candidate) {
+    return DEFAULT_RECORDING_EXTENSION;
+  }
+  if (candidate === "caf") {
+    return DEFAULT_RECORDING_EXTENSION;
+  }
+  return candidate;
+};
+
+const ensureRecordingDirectoryAsync = async (): Promise<string | null> => {
+  const documentDirectoryUri = documentDirectory;
+  if (!documentDirectoryUri) {
+    return null;
+  }
+
+  const directory = `${documentDirectoryUri}${RECORDING_DIRECTORY_NAME}`;
+
+  try {
+    await makeDirectoryAsync(directory, { intermediates: true });
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !/directory.*exists/i.test(error.message ?? "")
+    ) {
+      console.warn("Failed to prepare local recordings directory", error);
+    }
+  }
+
+  return directory;
+};
+
+type PersistedRecording = {
+  uri: string;
+  size: number | null;
+};
+
+const persistRecordingFileAsync = async (
+  sourceUri: string
+): Promise<PersistedRecording> => {
+  const fallbackInfo = async (): Promise<PersistedRecording> => {
+    try {
+      const info = await getInfoAsync(sourceUri);
+      return {
+        uri: sourceUri,
+        size: resolveFileSize(info),
+      };
+    } catch (infoError) {
+      console.warn("Failed to inspect recording file", infoError);
+      return { uri: sourceUri, size: null };
+    }
+  };
+
+  try {
+    const directory = await ensureRecordingDirectoryAsync();
+    if (!directory) {
+      return await fallbackInfo();
+    }
+
+    const extension = resolveSafeRecordingExtension(sourceUri);
+    const targetUri = `${directory}/recording-${Date.now()}.${extension}`;
+    await copyAsync({ from: sourceUri, to: targetUri });
+
+    const info = await getInfoAsync(targetUri);
+    return {
+      uri: targetUri,
+      size: resolveFileSize(info),
+    };
+  } catch (error) {
+    console.warn("Failed to persist recording file, using original path", error);
+    return await fallbackInfo();
+  }
+};
+
+const deleteFileIfExists = async (uri: string) => {
+  if (!uri) {
+    return;
+  }
+
+  try {
+    await deleteAsync(uri, { idempotent: true });
+  } catch (error) {
+    console.warn("Failed to delete file", error);
+  }
+};
 
 const buildFallbackLyrics = (
   songId: number,
@@ -123,7 +350,11 @@ const MusicPlayer: React.FC = () => {
   const route = useRoute<MusicPlayerRouteProp>();
   const navigation = useNavigation<MusicPlayerNavProp>();
 
-  const { songKey, vocalEnabled: initialVocalEnabled } = route.params;
+  const {
+    songKey,
+    vocalEnabled: initialVocalEnabled,
+    isWeeklyChallenge: routeWeeklyFlag,
+  } = route.params;
 
   const [loading, setLoading] = useState(true);
 
@@ -173,8 +404,15 @@ const MusicPlayer: React.FC = () => {
 
   const [loadingResult, setLoadingResult] = useState(false);
   const [vocalEnabled, setVocalEnabled] = useState(initialVocalEnabled ?? true);
+  const [isWeeklyChallenge, setIsWeeklyChallenge] = useState(
+    Boolean(routeWeeklyFlag)
+  );
+  const [weeklySongCompleted, setWeeklySongCompleted] = useState(false);
   const vocalEnabledRef = useRef(vocalEnabled);
+  const isWeeklyChallengeRef = useRef(isWeeklyChallenge);
+  const weeklySongCompletedRef = useRef(weeklySongCompleted);
   const [hasVocalTrack, setHasVocalTrack] = useState(false);
+  const originalPathRef = useRef<string | null>(songKey.ori_path ?? null);
 
   useEffect(() => {
     soundRef.current = sound;
@@ -187,6 +425,65 @@ const MusicPlayer: React.FC = () => {
   useEffect(() => {
     vocalEnabledRef.current = vocalEnabled;
   }, [vocalEnabled]);
+
+  useEffect(() => {
+    isWeeklyChallengeRef.current = isWeeklyChallenge;
+    if (!isWeeklyChallenge) {
+      setWeeklySongCompleted(false);
+    }
+  }, [isWeeklyChallenge]);
+
+  useEffect(() => {
+    weeklySongCompletedRef.current = weeklySongCompleted;
+  }, [weeklySongCompleted]);
+
+  useEffect(() => {
+    setWeeklySongCompleted(false);
+  }, [songKey.version_id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (routeWeeklyFlag) {
+      if (!isWeeklyChallenge) {
+        setIsWeeklyChallenge(true);
+      }
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const versionId = songKey?.version_id;
+    if (typeof versionId !== "number" || Number.isNaN(versionId)) {
+      if (isWeeklyChallenge) {
+        setIsWeeklyChallenge(false);
+      }
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const checkWeeklyStatus = async () => {
+      try {
+        const weeklyVersionId = await resolveWeeklyChallengeVersionId();
+        if (!cancelled) {
+          setIsWeeklyChallenge(
+            weeklyVersionId != null && weeklyVersionId === versionId
+          );
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setIsWeeklyChallenge(false);
+        }
+      }
+    };
+
+    checkWeeklyStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [routeWeeklyFlag, songKey.version_id, isWeeklyChallenge]);
 
   const triggerCountdown = useCallback(
     (purpose: "start" | "resume") => {
@@ -546,6 +843,7 @@ const MusicPlayer: React.FC = () => {
       console.log("GETAUDIOVERBYID", response.data);
       const instrumentUri = buildAssetUri(response.data?.instru_path);
       const vocalUri = buildAssetUri(response.data?.ori_path);
+      originalPathRef.current = response.data?.ori_path ?? songKey.ori_path ?? null;
       const playbackUri = instrumentUri ?? vocalUri;
 
       if (!playbackUri) {
@@ -625,6 +923,9 @@ const MusicPlayer: React.FC = () => {
         }
 
         if (status.didJustFinish) {
+          if (isWeeklyChallengeRef.current) {
+            setWeeklySongCompleted(true);
+          }
           setIsPlaying(false);
           setPosition(0);
           if (!autoSubmitInProgressRef.current) {
@@ -1104,12 +1405,15 @@ const MusicPlayer: React.FC = () => {
 
       console.log("Creating recording...");
       const { recording: createdRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
+        COMPRESSED_RECORDING_OPTIONS
       );
       console.log("Recording created successfully");
       recordingRef.current = createdRecording;
       setRecording(createdRecording);
       setIsRecordingPaused(false);
+      if (isWeeklyChallengeRef.current) {
+        setWeeklySongCompleted(false);
+      }
       hasStartedRecordingRef.current = true;
     } catch (err) {
       console.error("Failed to start recording", err);
@@ -1229,22 +1533,20 @@ const MusicPlayer: React.FC = () => {
     return () => clearInterval(interval);
   }, [countdown, resumeRecording, startRecording]);
 
-  type CreateRecordResponseData = {
-    filePath: string;
-    mistakes: any[];
-    recordId: number;
-    score: number;
-  };
-
-  type CreateRecordResponse = {
-    success: boolean;
-    msg?: string;
-    data: CreateRecordResponseData;
-  };
-
   const stopRecording = async (triggeredByAuto = false) => {
     const activeRecording = recordingRef.current ?? recording;
     if (!activeRecording) {
+      return;
+    }
+
+    if (
+      !triggeredByAuto &&
+      isWeeklyChallengeRef.current &&
+      !weeklySongCompletedRef.current
+    ) {
+      console.log(
+        "[MusicPlayer] Ignoring manual stop before weekly challenge completes"
+      );
       return;
     }
 
@@ -1263,29 +1565,10 @@ const MusicPlayer: React.FC = () => {
     try {
       await activeRecording.stopAndUnloadAsync();
       const uri = activeRecording.getURI();
-      setRecordingUri(uri);
       recordingRef.current = null;
       setRecording(null);
 
-      if (sound) {
-        await sound.stopAsync();
-        await sound.unloadAsync();
-        setSound(null);
-      }
-
-      if (vocalSoundRef.current) {
-        try {
-          await stopVocalPlayback(true);
-          await vocalSoundRef.current.unloadAsync();
-        } catch (error) {
-          console.warn("Failed to reset vocal track after recording", error);
-        } finally {
-          vocalSoundRef.current = null;
-          vocalSyncingRef.current = false;
-          setHasVocalTrack(false);
-          setVocalEnabled(false);
-        }
-      }
+      await stopAndUnloadCurrentSound();
 
       console.log("Recording stopped and instrumental audio unloaded");
 
@@ -1294,42 +1577,82 @@ const MusicPlayer: React.FC = () => {
         return;
       }
 
-      const source = new File(uri);
-      const target = new File(Paths.document, "recording.m4a");
+      const { uri: persistedUri, size } = await persistRecordingFileAsync(uri);
+      setRecordingUri(persistedUri);
 
-      if (target.exists) target.delete();
-      source.copy(target);
-      console.log(`Recording saved as .m4a file at: ${target.uri}`);
+      if (typeof size === "number") {
+        console.log(
+          `Recording size: ${bytesToMegabytes(size).toFixed(2)} MB (${size} bytes)`
+        );
 
-      if (!songKey.ori_path) throw new Error("Original path is missing");
+        if (size > MAX_RECORDING_UPLOAD_BYTES) {
+          Alert.alert(
+            "Recording Too Large",
+            "Your recording is too large to upload. Please record a shorter take and try again."
+          );
+          if (persistedUri !== uri) {
+            await deleteFileIfExists(persistedUri);
+          }
+          setRecordingUri(null);
+          return;
+        }
+      }
+
+      const originalPathForSubmission =
+        originalPathRef.current ?? songKey.ori_path ?? null;
+      if (!originalPathForSubmission) {
+        console.error("No original path available for createRecord submission");
+        return;
+      }
 
       setLoadingResult(true);
 
-      const response = (await createRecord(
-        target.uri,
+      const response = await createRecord(
+        persistedUri,
         `${songKey.version_id}`,
         songKey.key_signature,
-        songKey.ori_path
-      )) as unknown as CreateRecordResponse;
+        originalPathForSubmission,
+        size ?? undefined
+      );
 
       const responseData = response.data;
 
-      if (response.success && responseData?.score !== undefined) {
-        navigation.navigate("Result", {
-          score: responseData.score,
-          song_id: songKey.song_id,
-          recordId: responseData.recordId,
-          version_id: songKey.version_id,
-          localUri: target.uri,
-        });
-        console.log("Navigated to Result screen successfully");
-      } else {
-        console.error("No valid score returned from backend:", response);
+      if (!response.success) {
+        Alert.alert(
+          "Upload Failed",
+          response.message ??
+            response.msg ??
+            "Could not upload your recording. Please record a shorter take and try again."
+        );
+        return;
       }
+
+      if (
+        !responseData ||
+        typeof responseData.score !== "number" ||
+        Number.isNaN(responseData.score)
+      ) {
+        console.error("No valid score returned from backend:", response);
+        Alert.alert(
+          "Scoring Error",
+          "We could not retrieve a score for your recording. Please try again."
+        );
+        return;
+      }
+
+      navigation.navigate("Result", {
+        score: responseData.score,
+        song_id: songKey.song_id,
+        recordId: responseData.recordId,
+        version_id: songKey.version_id,
+        localUri: persistedUri,
+      });
+      console.log("Navigated to Result screen successfully");
     } catch (err) {
       console.error("Error in stopRecording:", err);
     } finally {
       setLoadingResult(false);
+      autoSubmitInProgressRef.current = false;
       console.log("stopRecording process completed.");
     }
   };
@@ -1340,6 +1663,10 @@ const MusicPlayer: React.FC = () => {
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
+
+  const confirmShouldBeHidden =
+    isWeeklyChallenge && Boolean(recording) && !weeklySongCompleted;
+  const confirmButtonDisabled = !recording;
 
   const animatedBarStyle = {
     transform: [
@@ -1527,13 +1854,25 @@ const MusicPlayer: React.FC = () => {
             />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => stopRecording()}
-            disabled={!recording}
-            style={[styles.confirmButton, !recording && styles.confirmDisabled]}
-          >
-            <MaterialIcons name="done" size={28} color="white" />
-          </TouchableOpacity>
+          {confirmShouldBeHidden ? (
+            <View
+              style={[styles.confirmButton, styles.confirmHiddenPlaceholder]}
+              pointerEvents="none"
+            >
+              <MaterialIcons name="done" size={28} color="transparent" />
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={() => stopRecording()}
+              disabled={confirmButtonDisabled}
+              style={[
+                styles.confirmButton,
+                confirmButtonDisabled && styles.confirmDisabled,
+              ]}
+            >
+              <MaterialIcons name="done" size={28} color="white" />
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.animationContainer}>
@@ -1690,6 +2029,10 @@ const styles = StyleSheet.create({
   },
   confirmDisabled: {
     opacity: 0.4,
+  },
+  confirmHiddenPlaceholder: {
+    backgroundColor: "transparent",
+    opacity: 0,
   },
   animationContainer: {
     flexDirection: "row",

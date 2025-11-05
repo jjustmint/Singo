@@ -162,7 +162,10 @@ export const TopRateTabs: React.FC<{
 };
 
 // --- Screen Component ---
-const TopRateScreen: React.FC<{ userKey?: string | null }> = ({ userKey }) => {
+const TopRateScreen: React.FC<{ userKey?: string | null; refreshToken?: number }> = ({
+  userKey,
+  refreshToken,
+}) => {
   const [topSongs, setTopSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -173,6 +176,7 @@ const TopRateScreen: React.FC<{ userKey?: string | null }> = ({ userKey }) => {
 
   useEffect(() => {
     let cancelled = false;
+    const forceRefresh = typeof refreshToken === 'number' && refreshToken > 0;
 
     type CachePayload = {
       timestamp: number;
@@ -220,7 +224,7 @@ const TopRateScreen: React.FC<{ userKey?: string | null }> = ({ userKey }) => {
         }
 
         try {
-          const response = await getRecordById(recordId);
+          const response = await getRecordById(recordId, { suppressLog: true });
           if (!response.success || !response.data) {
             recordCache.set(recordId, null);
             return null;
@@ -506,7 +510,7 @@ const TopRateScreen: React.FC<{ userKey?: string | null }> = ({ userKey }) => {
               typeof item.keySignature === 'string' ||
               typeof item.key_signature === 'string'
           );
-          if (cacheIsFresh && cacheHasPreviews && cacheHasKeys) {
+          if (cacheIsFresh && cacheHasPreviews && cacheHasKeys && !forceRefresh) {
             setLoading(false);
             return;
           }
@@ -537,7 +541,7 @@ const TopRateScreen: React.FC<{ userKey?: string | null }> = ({ userKey }) => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshToken]);
 
   const stopPlayback = useCallback(async () => {
     const currentSound = soundRef.current;

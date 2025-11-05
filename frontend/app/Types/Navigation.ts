@@ -18,7 +18,11 @@ export type RootStackParamList = {
   SignIn: undefined;
   voicetest: undefined;
   params?: { song?: SongType & { selectedKey?: string } };
-  MusicPlayer: { songKey: any; vocalEnabled?: boolean };
+  MusicPlayer: {
+    songKey: SongKeyType;
+    vocalEnabled?: boolean;
+    isWeeklyChallenge?: boolean;
+  };
   Result: { score: number; song_id: number; recordId: number; version_id: number; localUri?: string | null };
   Summary: {
     score: number;
@@ -33,6 +37,10 @@ export type RootStackParamList = {
 
 export type ChooseKeyParams = { song: SongType; selectedKey?: string | null; versionId?: number };
 
-export type MusicPlayerParams = { songKey: SongKeyType };
+export type MusicPlayerParams = {
+  songKey: SongKeyType;
+  vocalEnabled?: boolean;
+  isWeeklyChallenge?: boolean;
+};
 
 export type TabKey = "home" | "stats" | "profile";

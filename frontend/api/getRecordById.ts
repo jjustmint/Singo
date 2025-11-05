@@ -13,14 +13,24 @@ export type RecordType = {
 
 type RecordResponse = BaseResponse<RecordType | null>;
 
-export const getRecordById = async (recordId: number): Promise<RecordResponse> => {
+export type GetRecordByIdOptions = {
+  suppressLog?: boolean;
+};
+
+export const getRecordById = async (
+  recordId: number,
+  options: GetRecordByIdOptions = {}
+): Promise<RecordResponse> => {
+  const { suppressLog = false } = options;
   try {
     const response = await Axios.post<RecordResponse>("/private/getrecord", {
       record_id: recordId,
     });
     return response.data;
   } catch (e) {
-    console.error("Error fetching record:", e);
+    if (!suppressLog) {
+      console.error("Error fetching record:", e);
+    }
     return {
       success: false,
       message: "Network error",
