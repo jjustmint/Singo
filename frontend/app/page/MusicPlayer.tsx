@@ -26,7 +26,6 @@ import {
   InterruptionModeIOS,
   AVPlaybackStatusToSet,
 } from "expo-av";
-import { Directory, File, Paths } from "expo-file-system";
 import {
   deleteAsync,
   getInfoAsync,
@@ -42,7 +41,7 @@ import {
   useNavigation,
   useRoute,
 } from "@react-navigation/native";
-import { RootStackParamList } from "../Types/Navigation";
+import { RootStackParamList } from "@/types/Navigation";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { getSong } from "@/api/song/getSong";
 import { createRecord } from "@/api/createRecord";
@@ -50,7 +49,8 @@ import { getAudioVerById } from "@/api/song/getAudioById";
 import { getLyrics } from "@/api/song/getLyrics";
 import { LyricLineType } from "@/api/types/lyrics";
 import { getLeaderboard } from "@/api/leaderboard";
-import { buildAssetUri } from "../utils/assetUri";
+import { buildAssetUri } from "@/util/assetUri";
+import { ensureLocalAudioFile, consumePrefetchedAudio } from "@/util/audioCache";
 
 type MusicPlayerRouteProp = RouteProp<RootStackParamList, "MusicPlayer">;
 type MusicPlayerNavProp = StackNavigationProp<
@@ -408,6 +408,8 @@ const MusicPlayer: React.FC = () => {
     Boolean(routeWeeklyFlag)
   );
   const [weeklySongCompleted, setWeeklySongCompleted] = useState(false);
+  const [minimumOverlayElapsed, setMinimumOverlayElapsed] = useState(false);
+  const [shouldDelayOverlay, setShouldDelayOverlay] = useState(false);
   const vocalEnabledRef = useRef(vocalEnabled);
   const isWeeklyChallengeRef = useRef(isWeeklyChallenge);
   const weeklySongCompletedRef = useRef(weeklySongCompleted);
@@ -744,47 +746,6 @@ const MusicPlayer: React.FC = () => {
     };
   }, [cleanupAudioResources]);
 
-  const ensureLocalAudioFile = useCallback(async (remoteUri: string) => {
-    try {
-      const cacheRoot = Paths.cache;
-      if (!cacheRoot?.uri) {
-        throw new Error("Cache directory unavailable");
-      }
-
-      const audioCacheDir = new Directory(cacheRoot, "audio-cache");
-      try {
-        audioCacheDir.create({ intermediates: true, idempotent: true });
-      } catch (dirError) {
-        console.warn("Audio cache directory setup warning:", dirError);
-      }
-
-      const lastSegment =
-        remoteUri.split("/").pop()?.split("?")[0].split("#")[0] ??
-        `audio-${Date.now()}.mp3`;
-      const safeFileName = lastSegment.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const targetFile = new File(
-        audioCacheDir,
-        `${Date.now()}-${safeFileName}`
-      );
-
-      const downloadedFile = await File.downloadFileAsync(
-        remoteUri,
-        targetFile,
-        {
-          idempotent: true,
-        }
-      );
-
-      return downloadedFile.uri;
-    } catch (error) {
-      console.warn(
-        "Falling back to streaming audio due to caching failure",
-        error
-      );
-      return remoteUri;
-    }
-  }, []);
-
   const REMOTE_AUDIO_PATTERN = /^https?:\/\//i;
 
   const loadSoundWithFallback = useCallback(
@@ -839,6 +800,8 @@ const MusicPlayer: React.FC = () => {
       hasStartedRecordingRef.current = false;
       initialCountdownTriggeredRef.current = false;
       await stopAndUnloadCurrentSound();
+      const prefetchPromise = consumePrefetchedAudio(songKey.version_id);
+      setShouldDelayOverlay(Boolean(prefetchPromise));
       const response = await getAudioVerById(songKey.version_id);
       console.log("GETAUDIOVERBYID", response.data);
       const instrumentUri = buildAssetUri(response.data?.instru_path);
@@ -857,8 +820,27 @@ const MusicPlayer: React.FC = () => {
       console.log("Instrumental URI:", instrumentUri);
       console.log("Original URI:", vocalUri);
 
+      let prefetchedAudio: any = null;
+      if (prefetchPromise) {
+        try {
+          prefetchedAudio = await prefetchPromise;
+        } catch (err) {
+          console.warn("Prefetched audio failed to resolve", err);
+          setShouldDelayOverlay(false);
+        }
+      }
+
+      const resolvedInstrumentUri =
+        prefetchedAudio?.localInstrumentUri ??
+        prefetchedAudio?.instrumentUri ??
+        playbackUri;
+      const resolvedVocalUri =
+        prefetchedAudio?.localVocalUri ??
+        prefetchedAudio?.vocalUri ??
+        vocalUri;
+
       const { sound: newInstrumentSound } = await loadSoundWithFallback(
-        playbackUri
+        resolvedInstrumentUri ?? resolvedVocalUri
       );
       soundRef.current = newInstrumentSound;
       setSound(newInstrumentSound);
@@ -876,10 +858,13 @@ const MusicPlayer: React.FC = () => {
 
       if (hasSeparateVocal && vocalUri) {
         try {
-          const { sound: vocalSound } = await loadSoundWithFallback(vocalUri, {
+          const { sound: vocalSound } = await loadSoundWithFallback(
+            resolvedVocalUri ?? vocalUri,
+            {
             shouldPlay: false,
             volume: 0.6,
-          });
+            }
+          );
           vocalSoundRef.current = vocalSound;
         } catch (error) {
           console.error("Failed to load vocal track:", error);
@@ -1079,7 +1064,6 @@ const MusicPlayer: React.FC = () => {
     let isActive = true;
     setLoading(true);
     setMetadataReady(false);
-
     (async () => {
       await handleGetSongById(songKey.song_id);
       if (isActive) {
@@ -1106,6 +1090,27 @@ const MusicPlayer: React.FC = () => {
       });
     }, 0);
   }, [lyrics]);
+
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+
+    if (!shouldDelayOverlay) {
+      setMinimumOverlayElapsed(true);
+      return;
+    }
+
+    if (minimumOverlayElapsed) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setMinimumOverlayElapsed(true);
+    }, 5000);
+
+    return () => clearTimeout(timer);
+  }, [loading, shouldDelayOverlay, minimumOverlayElapsed]);
 
   useEffect(() => {
     if (
@@ -1355,6 +1360,7 @@ const MusicPlayer: React.FC = () => {
     const nextLoading = !(metadataReady && audioReady);
     setLoading((prev) => (prev === nextLoading ? prev : nextLoading));
   }, [metadataReady, audioReady]);
+
 
   const micIconName: ComponentProps<typeof Ionicons>["name"] = !recording
     ? "mic"
@@ -1682,14 +1688,19 @@ const MusicPlayer: React.FC = () => {
   if (loading) {
     return (
       <ImageBackground
-        source={{ uri: FALLBACK_COVER }}
+        source={{ uri: buildAssetUri(image) ?? FALLBACK_COVER }}
         style={styles.bgImage}
         resizeMode="cover"
-        blurRadius={15}
+        blurRadius={18}
       >
         <View style={styles.overlay} />
-        <SafeAreaView style={[styles.container, { justifyContent: "center" }]}>
-          <ActivityIndicator size="large" color="#fff" />
+        <SafeAreaView style={styles.loadingContainer}>
+          <Ionicons name="headset" size={72} color="#FFFFFF" />
+          <Text style={styles.loadingTitle}>Use Headphones</Text>
+          <Text style={styles.loadingMessage}>
+            Plug in for clearer vocals, better pitch tracking, and the smoothest
+            Singo session.
+          </Text>
         </SafeAreaView>
       </ImageBackground>
     );
@@ -1917,7 +1928,31 @@ const styles = StyleSheet.create({
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  loadingContainer: {
+    flex: 1,
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 18,
+    paddingHorizontal: 24,
+  },
+  loadingTitle: {
+    color: "#ffffff",
+    fontSize: 20,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
+  loadingMessage: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "600",
+    textAlign: "center",
+    opacity: 0.85,
+    lineHeight: 20,
+    maxWidth: 260,
   },
   container: {
     flex: 1,

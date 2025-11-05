@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, SafeAreaView } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
-import { RootStackParamList } from "../Types/Navigation";
+import { RootStackParamList } from "@/types/Navigation";
 
 // ✅ Type navigation and route props
 type ResultNavProp = StackNavigationProp<RootStackParamList, "Result">;

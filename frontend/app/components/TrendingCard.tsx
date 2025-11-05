@@ -3,10 +3,10 @@ import { View, Text, Image, TouchableOpacity, StyleSheet, FlatList, ActivityIndi
 import { FontAwesome } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
-import { SongType } from "../Types/Song";
-import { GlobalConstant } from "@/constant";
+import { SongType } from "@/types/Song";
 import { Audio, AVPlaybackStatus } from "expo-av";
 import { previewBus } from "@/util/previewBus";
+import { buildAssetUri } from "@/util/assetUri";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const isIgnorableAudioError = (err: unknown) =>
@@ -36,6 +36,7 @@ const TrendingCard: React.FC<TrendingCardProps> = ({ song, isPlaying, isLoading,
   const imageUri = useMemo(() => buildAssetUri(song.image) ?? "https://i.pinimg.com/564x/11/8e/7f/118e7f4d22f1e5ff4f6e2f1f2d1f3c4b5.jpg", [song.image]);
 
   const handleCardPress = () => {
+    previewBus.emit({ source: "navigation" });
     navigation.navigate("ChooseKey", { song, userKey});
   };
 
@@ -68,25 +69,6 @@ const TrendingCard: React.FC<TrendingCardProps> = ({ song, isPlaying, isLoading,
       </View>
     </TouchableOpacity>
   );
-};
-
-const buildAssetUri = (path?: string | null) => {
-  if (!path) {
-    return null;
-  }
-
-  const normalised = path.replace(/\\/g, "/");
-
-  if (normalised.startsWith("http://") || normalised.startsWith("https://")) {
-    return normalised;
-  }
-
-  const trimmed = normalised.replace(/^\/+/, "");
-  const withoutDataPrefix = trimmed.startsWith("data/")
-    ? trimmed.replace(/^data\//, "")
-    : trimmed;
-
-  return encodeURI(`${GlobalConstant.API_URL}/${withoutDataPrefix}`);
 };
 
 const TrendingList: React.FC<{ song: TrendingSong[]; userKey?: string | null }> = ({ song, userKey }) => {

@@ -13,7 +13,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import type { HistoryType } from "../../../backend/src/types/getHistory";
-import type { RootStackParamList } from "../Types/Navigation";
+import type { RootStackParamList } from "@/types/Navigation";
 import { getAudioVerById } from "@/api/song/getAudioById";
 import { getSong } from "@/api/song/getSong";
 import { GlobalConstant } from "@/constant";
