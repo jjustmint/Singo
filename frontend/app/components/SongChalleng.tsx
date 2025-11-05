@@ -14,8 +14,8 @@ import { StackNavigationProp } from "@react-navigation/stack";
 
 import { getSong } from "@/api/song/getSong";
 import { getAudioVerById } from "@/api/song/getAudioById";
-import { RootStackParamList } from "../Types/Navigation";
-import { SongType } from "../Types/Song";
+import { RootStackParamList } from "@/types/Navigation";
+import { SongType } from "@/types/Song";
 import { resolveProfileImage } from "./ProfileInfo";
 
 interface WeeklySong {

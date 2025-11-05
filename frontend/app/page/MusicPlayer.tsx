@@ -42,7 +42,7 @@ import {
   useNavigation,
   useRoute,
 } from "@react-navigation/native";
-import { RootStackParamList } from "../Types/Navigation";
+import { RootStackParamList } from "@/types/Navigation";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { getSong } from "@/api/song/getSong";
 import { createRecord } from "@/api/createRecord";
@@ -50,7 +50,7 @@ import { getAudioVerById } from "@/api/song/getAudioById";
 import { getLyrics } from "@/api/song/getLyrics";
 import { LyricLineType } from "@/api/types/lyrics";
 import { getLeaderboard } from "@/api/leaderboard";
-import { buildAssetUri } from "../utils/assetUri";
+import { buildAssetUri } from "@/util/assetUri";
 
 type MusicPlayerRouteProp = RouteProp<RootStackParamList, "MusicPlayer">;
 type MusicPlayerNavProp = StackNavigationProp<

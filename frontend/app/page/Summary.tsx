@@ -17,7 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp, CommonActions } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { getRecordById } from "@/api/getRecordById";
-import { RootStackParamList } from "../Types/Navigation";
+import { RootStackParamList } from "@/types/Navigation";
 import { getMistakes } from "@/api/getMistakes";
 import { getSong } from "@/api/song/getSong";
 import { SongType as ApiSongType } from "@/api/types/song"; // API version
@@ -27,7 +27,7 @@ import { Directory, File, Paths } from "expo-file-system";
 import { Axios } from "@/util/AxiosInstance";
 import { GlobalConstant } from "@/constant";
 import { getAudioVerById } from "@/api/song/getAudioById";
-import { buildAssetUri } from "../utils/assetUri";
+import { buildAssetUri } from "@/util/assetUri";
 
 // ------------------- APP TYPES -------------------
 export type SongType = {

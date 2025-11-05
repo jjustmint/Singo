@@ -11,10 +11,10 @@ import { LinearGradient } from "expo-linear-gradient";
 import { getSong } from "@/api/song/getSong";
 import { getSongkey } from "@/api/getSongKey";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
-import { RootStackParamList } from "../Types/Navigation";
+import { RootStackParamList, type PrefetchedSongBundle } from "@/types/Navigation";
 import { StackNavigationProp } from "@react-navigation/stack";
-import { SongKeyType } from "../Types/SongKey";
-import { buildAssetUri } from "../utils/assetUri";
+import { SongKeyType } from "@/types/SongKey";
+import { buildAssetUri } from "@/util/assetUri";
 
 const FALLBACK_COVER = "https://via.placeholder.com/600x600?text=No+Cover";
 

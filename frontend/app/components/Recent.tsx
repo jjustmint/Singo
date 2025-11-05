@@ -3,7 +3,7 @@ import { View, Text, Image, StyleSheet, TouchableOpacity } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { HistoryType } from "../../../backend/src/types/getHistory";
-import type { RootStackParamList } from "../Types/Navigation";
+import type { RootStackParamList } from "@/types/Navigation";
 import { getAudioVerById } from "@/api/song/getAudioById";
 import { getSong } from "@/api/song/getSong";
 import { GlobalConstant } from "@/constant";

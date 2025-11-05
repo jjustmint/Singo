@@ -12,7 +12,7 @@ import { HistoryType } from "../../../backend/src/types/getHistory";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { StackNavigationProp } from "@react-navigation/stack";
-import type { RootStackParamList } from "../Types/Navigation";
+import type { RootStackParamList } from "@/types/Navigation";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export default function Profile() {
