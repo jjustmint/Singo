@@ -11,6 +11,7 @@ import {
   Text,
   Image,
   StyleSheet,
+  Alert,
   TouchableOpacity,
   SafeAreaView,
   ActivityIndicator,
@@ -26,6 +27,13 @@ import {
   AVPlaybackStatusToSet,
 } from "expo-av";
 import { Directory, File, Paths } from "expo-file-system";
+import {
+  deleteAsync,
+  getInfoAsync,
+  makeDirectoryAsync,
+  copyAsync,
+  documentDirectory,
+} from "expo-file-system/legacy";
 import Slider from "@react-native-community/slider";
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
 import {
@@ -61,6 +69,123 @@ const FALLBACK_COVER = "https://via.placeholder.com/150";
 const LYRIC_TIMING_UPPER_BOUND_SECONDS = 600;
 const LYRICS_UNAVAILABLE_MESSAGE = "This song does not support lyrics yet.";
 const VOCAL_VOLUME = 0.6;
+const DEFAULT_RECORDING_EXTENSION = "m4a";
+const RECORDING_DIRECTORY_NAME = "recordings";
+const MAX_RECORDING_UPLOAD_BYTES = 950 * 1024; // ≈0.95 MB safety limit
+
+const COMPRESSED_RECORDING_OPTIONS: Audio.RecordingOptions = {
+  isMeteringEnabled: true,
+  android: {
+    extension: `.${DEFAULT_RECORDING_EXTENSION}`,
+    outputFormat: Audio.AndroidOutputFormat.MPEG_4,
+    audioEncoder: Audio.AndroidAudioEncoder.AAC,
+    sampleRate: 22050,
+    numberOfChannels: 1,
+    bitRate: 32000,
+  },
+  ios: {
+    extension: `.${DEFAULT_RECORDING_EXTENSION}`,
+    audioQuality: Audio.IOSAudioQuality.Medium,
+    sampleRate: 22050,
+    numberOfChannels: 1,
+    bitRate: 32000,
+    outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
+  },
+  web: {
+    mimeType: "audio/webm",
+    bitsPerSecond: 32000,
+  },
+};
+
+const bytesToMegabytes = (bytes: number) => bytes / (1024 * 1024);
+
+const resolveSafeRecordingExtension = (uri: string) => {
+  const match = uri.match(/\.([a-z0-9]+)(?:\?|$)/i);
+  const candidate = match?.[1]?.toLowerCase();
+  if (!candidate) {
+    return DEFAULT_RECORDING_EXTENSION;
+  }
+  if (candidate === "caf") {
+    return DEFAULT_RECORDING_EXTENSION;
+  }
+  return candidate;
+};
+
+const ensureRecordingDirectoryAsync = async (): Promise<string | null> => {
+  const documentDirectoryUri = documentDirectory;
+  if (!documentDirectoryUri) {
+    return null;
+  }
+
+  const directory = `${documentDirectoryUri}${RECORDING_DIRECTORY_NAME}`;
+
+  try {
+    await makeDirectoryAsync(directory, { intermediates: true });
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !/directory.*exists/i.test(error.message ?? "")
+    ) {
+      console.warn("Failed to prepare local recordings directory", error);
+    }
+  }
+
+  return directory;
+};
+
+type PersistedRecording = {
+  uri: string;
+  size: number | null;
+};
+
+const persistRecordingFileAsync = async (
+  sourceUri: string
+): Promise<PersistedRecording> => {
+  const fallbackInfo = async (): Promise<PersistedRecording> => {
+    try {
+      const info = await getInfoAsync(sourceUri);
+      return {
+        uri: sourceUri,
+        size: typeof info.size === "number" ? info.size : null,
+      };
+    } catch (infoError) {
+      console.warn("Failed to inspect recording file", infoError);
+      return { uri: sourceUri, size: null };
+    }
+  };
+
+  try {
+    const directory = await ensureRecordingDirectoryAsync();
+    if (!directory) {
+      return await fallbackInfo();
+    }
+
+    const extension = resolveSafeRecordingExtension(sourceUri);
+    const targetUri = `${directory}/recording-${Date.now()}.${extension}`;
+    await copyAsync({ from: sourceUri, to: targetUri });
+
+    const info = await getInfoAsync(targetUri);
+    return {
+      uri: targetUri,
+      size: typeof info.size === "number" ? info.size : null,
+    };
+  } catch (error) {
+    console.warn("Failed to persist recording file, using original path", error);
+    return await fallbackInfo();
+  }
+};
+
+const deleteFileIfExists = async (uri: string) => {
+  if (!uri) {
+    return;
+  }
+
+  try {
+    await deleteAsync(uri, { idempotent: true });
+  } catch (error) {
+    console.warn("Failed to delete file", error);
+  }
+};
 
 const buildFallbackLyrics = (
   songId: number,
@@ -1106,7 +1231,7 @@ const MusicPlayer: React.FC = () => {
 
       console.log("Creating recording...");
       const { recording: createdRecording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
+        COMPRESSED_RECORDING_OPTIONS
       );
       console.log("Recording created successfully");
       recordingRef.current = createdRecording;
@@ -1231,19 +1356,6 @@ const MusicPlayer: React.FC = () => {
     return () => clearInterval(interval);
   }, [countdown, resumeRecording, startRecording]);
 
-  type CreateRecordResponseData = {
-    filePath: string;
-    mistakes: any[];
-    recordId: number;
-    score: number;
-  };
-
-  type CreateRecordResponse = {
-    success: boolean;
-    msg?: string;
-    data: CreateRecordResponseData;
-  };
-
   const stopRecording = async (triggeredByAuto = false) => {
     const activeRecording = recordingRef.current ?? recording;
     if (!activeRecording) {
@@ -1265,7 +1377,6 @@ const MusicPlayer: React.FC = () => {
     try {
       await activeRecording.stopAndUnloadAsync();
       const uri = activeRecording.getURI();
-      setRecordingUri(uri);
       recordingRef.current = null;
       setRecording(null);
 
@@ -1278,12 +1389,26 @@ const MusicPlayer: React.FC = () => {
         return;
       }
 
-      const source = new File(uri);
-      const target = new File(Paths.document, "recording.m4a");
+      const { uri: persistedUri, size } = await persistRecordingFileAsync(uri);
+      setRecordingUri(persistedUri);
 
-      if (target.exists) target.delete();
-      source.copy(target);
-      console.log(`Recording saved as .m4a file at: ${target.uri}`);
+      if (typeof size === "number") {
+        console.log(
+          `Recording size: ${bytesToMegabytes(size).toFixed(2)} MB (${size} bytes)`
+        );
+
+        if (size > MAX_RECORDING_UPLOAD_BYTES) {
+          Alert.alert(
+            "Recording Too Large",
+            "Your recording is too large to upload. Please record a shorter take and try again."
+          );
+          if (persistedUri !== uri) {
+            await deleteFileIfExists(persistedUri);
+          }
+          setRecordingUri(null);
+          return;
+        }
+      }
 
       const originalPathForSubmission =
         originalPathRef.current ?? songKey.ori_path ?? null;
@@ -1294,27 +1419,47 @@ const MusicPlayer: React.FC = () => {
 
       setLoadingResult(true);
 
-      const response = (await createRecord(
-        target.uri,
+      const response = await createRecord(
+        persistedUri,
         `${songKey.version_id}`,
         songKey.key_signature,
-        originalPathForSubmission
-      )) as unknown as CreateRecordResponse;
+        originalPathForSubmission,
+        size ?? undefined
+      );
 
       const responseData = response.data;
 
-      if (response.success && responseData?.score !== undefined) {
-        navigation.navigate("Result", {
-          score: responseData.score,
-          song_id: songKey.song_id,
-          recordId: responseData.recordId,
-          version_id: songKey.version_id,
-          localUri: target.uri,
-        });
-        console.log("Navigated to Result screen successfully");
-      } else {
-        console.error("No valid score returned from backend:", response);
+      if (!response.success) {
+        Alert.alert(
+          "Upload Failed",
+          response.message ??
+            response.msg ??
+            "Could not upload your recording. Please record a shorter take and try again."
+        );
+        return;
       }
+
+      if (
+        !responseData ||
+        typeof responseData.score !== "number" ||
+        Number.isNaN(responseData.score)
+      ) {
+        console.error("No valid score returned from backend:", response);
+        Alert.alert(
+          "Scoring Error",
+          "We could not retrieve a score for your recording. Please try again."
+        );
+        return;
+      }
+
+      navigation.navigate("Result", {
+        score: responseData.score,
+        song_id: songKey.song_id,
+        recordId: responseData.recordId,
+        version_id: songKey.version_id,
+        localUri: persistedUri,
+      });
+      console.log("Navigated to Result screen successfully");
     } catch (err) {
       console.error("Error in stopRecording:", err);
     } finally {
