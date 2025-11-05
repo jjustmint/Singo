@@ -175,6 +175,7 @@ const MusicPlayer: React.FC = () => {
   const [vocalEnabled, setVocalEnabled] = useState(initialVocalEnabled ?? true);
   const vocalEnabledRef = useRef(vocalEnabled);
   const [hasVocalTrack, setHasVocalTrack] = useState(false);
+  const originalPathRef = useRef<string | null>(songKey.ori_path ?? null);
 
   useEffect(() => {
     soundRef.current = sound;
@@ -546,6 +547,7 @@ const MusicPlayer: React.FC = () => {
       console.log("GETAUDIOVERBYID", response.data);
       const instrumentUri = buildAssetUri(response.data?.instru_path);
       const vocalUri = buildAssetUri(response.data?.ori_path);
+      originalPathRef.current = response.data?.ori_path ?? songKey.ori_path ?? null;
       const playbackUri = instrumentUri ?? vocalUri;
 
       if (!playbackUri) {
@@ -1267,25 +1269,7 @@ const MusicPlayer: React.FC = () => {
       recordingRef.current = null;
       setRecording(null);
 
-      if (sound) {
-        await sound.stopAsync();
-        await sound.unloadAsync();
-        setSound(null);
-      }
-
-      if (vocalSoundRef.current) {
-        try {
-          await stopVocalPlayback(true);
-          await vocalSoundRef.current.unloadAsync();
-        } catch (error) {
-          console.warn("Failed to reset vocal track after recording", error);
-        } finally {
-          vocalSoundRef.current = null;
-          vocalSyncingRef.current = false;
-          setHasVocalTrack(false);
-          setVocalEnabled(false);
-        }
-      }
+      await stopAndUnloadCurrentSound();
 
       console.log("Recording stopped and instrumental audio unloaded");
 
@@ -1301,7 +1285,12 @@ const MusicPlayer: React.FC = () => {
       source.copy(target);
       console.log(`Recording saved as .m4a file at: ${target.uri}`);
 
-      if (!songKey.ori_path) throw new Error("Original path is missing");
+      const originalPathForSubmission =
+        originalPathRef.current ?? songKey.ori_path ?? null;
+      if (!originalPathForSubmission) {
+        console.error("No original path available for createRecord submission");
+        return;
+      }
 
       setLoadingResult(true);
 
@@ -1309,7 +1298,7 @@ const MusicPlayer: React.FC = () => {
         target.uri,
         `${songKey.version_id}`,
         songKey.key_signature,
-        songKey.ori_path
+        originalPathForSubmission
       )) as unknown as CreateRecordResponse;
 
       const responseData = response.data;
@@ -1330,6 +1319,7 @@ const MusicPlayer: React.FC = () => {
       console.error("Error in stopRecording:", err);
     } finally {
       setLoadingResult(false);
+      autoSubmitInProgressRef.current = false;
       console.log("stopRecording process completed.");
     }
   };

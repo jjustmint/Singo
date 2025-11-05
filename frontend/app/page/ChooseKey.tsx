@@ -21,6 +21,112 @@ const FALLBACK_COVER = "https://via.placeholder.com/600x600?text=No+Cover";
 type ChooseKeyRouteProp = RouteProp<RootStackParamList, "ChooseKey">;
 type ChooseKeyNavProp = StackNavigationProp<RootStackParamList, "ChooseKey">;
 
+const NOTE_TO_SEMITONE: Record<string, number> = {
+  C: 0,
+  "C#": 1,
+  Db: 1,
+  D: 2,
+  "D#": 3,
+  Eb: 3,
+  E: 4,
+  F: 5,
+  "F#": 6,
+  Gb: 6,
+  G: 7,
+  "G#": 8,
+  Ab: 8,
+  A: 9,
+  "A#": 10,
+  Bb: 10,
+  B: 11,
+};
+
+const extractTonic = (value?: string | null): string | null => {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+
+  const match = value.trim().match(/^([A-Ga-g])([#b♭]?)/);
+  if (!match) {
+    return null;
+  }
+
+  const letter = match[1].toUpperCase();
+  let accidental = match[2] ?? "";
+  if (accidental === "♭") {
+    accidental = "b";
+  }
+  if (accidental === "#") {
+    return `${letter}#`;
+  }
+  if (accidental === "b") {
+    return `${letter}b`;
+  }
+  return letter;
+};
+
+const computeSuggestedIndex = (
+  keySignatures: string[],
+  userPreferredKey?: string | null
+): number => {
+  if (!Array.isArray(keySignatures) || keySignatures.length === 0) {
+    return 0;
+  }
+
+  if (typeof userPreferredKey !== "string" || userPreferredKey.trim() === "") {
+    return 0;
+  }
+
+  const normalizedPreferred = userPreferredKey.trim().toLowerCase();
+  const exactMatchIndex = keySignatures.findIndex(
+    (k) => (k ?? "").trim().toLowerCase() === normalizedPreferred
+  );
+  if (exactMatchIndex !== -1) {
+    return exactMatchIndex;
+  }
+
+  const preferredTonic = extractTonic(userPreferredKey);
+  if (!preferredTonic) {
+    return 0;
+  }
+
+  const tonicMatchIndex = keySignatures.findIndex(
+    (k) => extractTonic(k) === preferredTonic
+  );
+  if (tonicMatchIndex !== -1) {
+    return tonicMatchIndex;
+  }
+
+  const preferredSemitone = NOTE_TO_SEMITONE[preferredTonic];
+  if (preferredSemitone == null) {
+    return 0;
+  }
+
+  let bestIndex = 0;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  keySignatures.forEach((signature, index) => {
+    const candidateTonic = extractTonic(signature);
+    if (!candidateTonic) {
+      return;
+    }
+    const candidateSemitone = NOTE_TO_SEMITONE[candidateTonic];
+    if (candidateSemitone == null) {
+      return;
+    }
+
+    const rawDistance = Math.abs(preferredSemitone - candidateSemitone);
+    const wrappedDistance = Math.min(rawDistance, 12 - rawDistance);
+
+    if (wrappedDistance < bestDistance) {
+      bestDistance = wrappedDistance;
+      bestIndex = index;
+    }
+  });
+
+  return bestIndex;
+};
+
 const ChooseKey: React.FC = () => {
   const route = useRoute<ChooseKeyRouteProp>();
   const navigation = useNavigation<ChooseKeyNavProp>();
@@ -38,6 +144,7 @@ const ChooseKey: React.FC = () => {
   const [songList, setSongList] = useState<SongKeyType[]>([]);
   const [keys, setKeys] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [suggestedIndex, setSuggestedIndex] = useState(0);
   const [isLockedWeekly, setIsLockedWeekly] = useState(false);
   const [coverUri, setCoverUri] = useState<string>(
     buildAssetUri(image) ?? FALLBACK_COVER
@@ -63,6 +170,7 @@ const ChooseKey: React.FC = () => {
         },
       ]);
       setCurrentIndex(0);
+      setSuggestedIndex(0);
       setIsLockedWeekly(true);
       return;
     }
@@ -71,34 +179,18 @@ const ChooseKey: React.FC = () => {
     const fetchKeys = async () => {
       try {
         const data = await getSongkey(numericSongId);
-        const keySignatures = data.data.map((item) => item.key_signature);
+        const keySignatures = data.data.map(
+          (item) => item.key_signature ?? "Unknown"
+        );
         setKeys(keySignatures);
         setSongList(data.data);
 
         console.log("🎵 userKey:", userKey);
         console.log("🎵 Available keys:", keySignatures);
 
-        if (userKey) {
-          const normalizedUserKey = userKey.toLowerCase().trim();
-
-          // Find best match
-          let index = keySignatures.findIndex(
-            (k) => k.toLowerCase().trim() === normalizedUserKey
-          );
-
-          // Try tonic match if no exact match
-          if (index === -1) {
-            const userTonic = normalizedUserKey.split(" ")[0]; // e.g. "g" from "g minor"
-            index = keySignatures.findIndex((k) =>
-              k.toLowerCase().includes(userTonic)
-            );
-          }
-
-          console.log("🎯 Found index for userKey:", index);
-          setCurrentIndex(index !== -1 ? index : 0);
-        } else {
-          setCurrentIndex(0);
-        }
+        const recommendedIndex = computeSuggestedIndex(keySignatures, userKey);
+        setSuggestedIndex(recommendedIndex);
+        setCurrentIndex(recommendedIndex);
       } catch (error) {
         console.error("Error fetching keys:", error);
       }
@@ -180,7 +272,9 @@ const ChooseKey: React.FC = () => {
           <Feather name="chevron-left" size={40} color="white" />
         </TouchableOpacity>
 
-        <Text style={styles.keyText}>{keys[currentIndex]}</Text>
+        <Text style={styles.keyText}>
+          {keys[currentIndex] ?? "No key available"}
+        </Text>
 
         <TouchableOpacity
           onPress={handleNext}
@@ -201,7 +295,6 @@ const ChooseKey: React.FC = () => {
         (() => {
           const normalizedCurrent = keys[currentIndex]?.toUpperCase().trim();
           const normalizedOriginal = song.key_signature?.toUpperCase().trim();
-          const userTonic = userKey?.split(" ")[0].toUpperCase();
 
           // Check if this is the original key
           const isOriginal =
@@ -209,43 +302,8 @@ const ChooseKey: React.FC = () => {
               ? normalizedCurrent === normalizedOriginal
               : false;
 
-          // Determine the closest key to user's tonic
-          let closestIndex = -1;
-          if (userTonic && keys.length > 0) {
-            const pitchOrder = [
-              "C",
-              "C#",
-              "D",
-              "D#",
-              "E",
-              "F",
-              "F#",
-              "G",
-              "G#",
-              "A",
-              "A#",
-              "B",
-            ];
-            let minDistance = 12;
-
-            keys.forEach((key, idx) => {
-              const keyTonic = key.split(" ")[0].toUpperCase();
-              const userIdx = pitchOrder.indexOf(userTonic);
-              const keyIdx = pitchOrder.indexOf(keyTonic);
-              if (userIdx !== -1 && keyIdx !== -1) {
-                const distance = Math.min(
-                  Math.abs(userIdx - keyIdx),
-                  12 - Math.abs(userIdx - keyIdx)
-                );
-                if (distance < minDistance) {
-                  minDistance = distance;
-                  closestIndex = idx;
-                }
-              }
-            });
-          }
-
-          const isSuggested = closestIndex === currentIndex;
+          const isSuggested =
+            keys.length > 0 && currentIndex === suggestedIndex;
 
           // Decide what to display
           if (isOriginal && isSuggested)

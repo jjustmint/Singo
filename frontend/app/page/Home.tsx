@@ -1,5 +1,12 @@
-import React, { useCallback, useRef, useState } from "react";
-import { View, Text, Image, Dimensions, FlatList } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import {
+  View,
+  Text,
+  Image,
+  Dimensions,
+  FlatList,
+  InteractionManager,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
 import CategoryTabs from "../components/CategoryTabs";
@@ -41,9 +48,24 @@ export default function Home() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
   const [userKey, setUserKey] = useState<string | null>(null);
+  const [refreshCounter, setRefreshCounter] = useState(0);
   const newReleaseRef = useRef<View>(null);
   const trendingRef = useRef<View>(null);
   const topRateRef = useRef<View>(null);
+  const hasFocusedOnceRef = useRef(false);
+  const lastFetchedRef = useRef(0);
+  const isFetchingRef = useRef(false);
+  const isActiveRef = useRef(true);
+  const backgroundRefreshTimeout = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const backgroundInteractionHandle =
+    useRef<ReturnType<typeof InteractionManager.runAfterInteractions> | null>(
+      null
+    );
+  const hasBroadcastInitialRefreshRef = useRef(false);
+  const STALE_THRESHOLD_MS = 1000 * 60; // 1 minute
+  const BACKGROUND_REFRESH_DELAY_MS = 400;
 
   const sectionPositions = useRef<{ [key: string]: number }>({});
 
@@ -74,6 +96,9 @@ export default function Home() {
     const user = fetchedUsername.data.username;
     const photo = fetchedUsername.data.photo ?? null;
     const preferredKey = fetchedUsername.data.user_key ?? null;
+    if (!isActiveRef.current) {
+      return;
+    }
     setUsername(user);
     setPhotoUrl(buildPhotoUrl(photo));
     setUserKey(preferredKey);
@@ -101,18 +126,107 @@ export default function Home() {
         keySignature: resolvedKey,
       };
     });
+    if (!isActiveRef.current) {
+      return;
+    }
     setSongs(mappedSongs);
     console.log("Fetched songs:", fetchedSongs.data);
   }, []);
 
-  const loadHomeData = useCallback(async () => {
-    await Promise.all([handleGetUsername(), handleGetSongs()]);
-  }, [handleGetUsername, handleGetSongs]);
+  const cancelBackgroundInteraction = useCallback(() => {
+    const handle = backgroundInteractionHandle.current as
+      | { cancel?: () => void }
+      | null;
+    if (handle?.cancel) {
+      handle.cancel();
+    }
+    backgroundInteractionHandle.current = null;
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      isActiveRef.current = false;
+      if (backgroundRefreshTimeout.current) {
+        clearTimeout(backgroundRefreshTimeout.current);
+        backgroundRefreshTimeout.current = null;
+      }
+      cancelBackgroundInteraction();
+    };
+  }, [cancelBackgroundInteraction]);
+
+  const loadHomeData = useCallback(
+    async ({ skipIfFresh = false }: { skipIfFresh?: boolean } = {}) => {
+      const now = Date.now();
+      if (skipIfFresh && now - lastFetchedRef.current < STALE_THRESHOLD_MS) {
+        return;
+      }
+      if (isFetchingRef.current) {
+        return;
+      }
+      isFetchingRef.current = true;
+      try {
+        await Promise.all([handleGetUsername(), handleGetSongs()]);
+        if (isActiveRef.current) {
+          lastFetchedRef.current = Date.now();
+          if (!hasBroadcastInitialRefreshRef.current) {
+            hasBroadcastInitialRefreshRef.current = true;
+          } else {
+            setRefreshCounter((previous) => previous + 1);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load home data:", error);
+      } finally {
+        isFetchingRef.current = false;
+      }
+    },
+    [handleGetSongs, handleGetUsername, STALE_THRESHOLD_MS]
+  );
+
+  const scheduleBackgroundRefresh = useCallback(() => {
+    if (backgroundRefreshTimeout.current) {
+      clearTimeout(backgroundRefreshTimeout.current);
+      backgroundRefreshTimeout.current = null;
+    }
+    cancelBackgroundInteraction();
+    backgroundRefreshTimeout.current = setTimeout(() => {
+      backgroundRefreshTimeout.current = null;
+      backgroundInteractionHandle.current =
+        InteractionManager.runAfterInteractions(() => {
+          backgroundInteractionHandle.current = null;
+          void loadHomeData();
+        });
+    }, BACKGROUND_REFRESH_DELAY_MS);
+  }, [cancelBackgroundInteraction, loadHomeData, BACKGROUND_REFRESH_DELAY_MS]);
 
   useFocusEffect(
     useCallback(() => {
-      loadHomeData();
-    }, [loadHomeData])
+      let cancelled = false;
+
+      if (backgroundRefreshTimeout.current) {
+        clearTimeout(backgroundRefreshTimeout.current);
+        backgroundRefreshTimeout.current = null;
+      }
+      cancelBackgroundInteraction();
+
+      const task = InteractionManager.runAfterInteractions(() => {
+        if (cancelled) {
+          return;
+        }
+
+        const skipIfFresh = hasFocusedOnceRef.current;
+        void loadHomeData({ skipIfFresh });
+        hasFocusedOnceRef.current = true;
+      });
+
+      return () => {
+        cancelled = true;
+        if (typeof task.cancel === "function") {
+          task.cancel();
+        }
+        scheduleBackgroundRefresh();
+      };
+    }, [cancelBackgroundInteraction, loadHomeData, scheduleBackgroundRefresh])
   );
 
   const scrollToSection = (
@@ -267,7 +381,7 @@ export default function Home() {
                     New Release
                   </Text>
                 </View>
-                <NewReleaseTabs userKey={userKey} />
+                <NewReleaseTabs userKey={userKey} refreshToken={refreshCounter} />
               </View>
 
               {/* Top Rate Section */}
@@ -287,7 +401,7 @@ export default function Home() {
                   </Text>
                 </View>
                 <View style={{ paddingHorizontal: 20, marginTop: 10 }}>
-                  <TopRateTabs userKey={userKey} />
+                  <TopRateTabs userKey={userKey} refreshToken={refreshCounter} />
                 </View>
               </View>
 

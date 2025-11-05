@@ -77,9 +77,10 @@ type NewReleaseTabsProps = {
   userKey?: string | null;
   initialIndex?: number;
   onIndexChange?: (index: number) => void;
+  refreshToken?: number;
 };
 
-const NewReleaseTabs: React.FC<NewReleaseTabsProps> = ({ userKey }) => {
+const NewReleaseTabs: React.FC<NewReleaseTabsProps> = ({ userKey, refreshToken }) => {
   const flatListRef = useRef<FlatList>(null);
   const positionIndex = useRef(VISIBLE_INDEX);
   const [liked, setLiked] = useState<string[]>([]);
@@ -431,7 +432,7 @@ const NewReleaseTabs: React.FC<NewReleaseTabsProps> = ({ userKey }) => {
         console.error('Failed to unload preview sound', err)
       );
     };
-  }, [unloadCurrentSound]);
+  }, [refreshToken, unloadCurrentSound]);
 
   useEffect(() => {
     const wasRunning = rotationIntervalRef.current !== null;

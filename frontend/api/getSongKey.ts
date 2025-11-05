@@ -1,6 +1,7 @@
 import { Axios } from "@/util/AxiosInstance";
 import { BaseResponse } from "./types/baseResponse"
 import { SongKeyType } from "./types/songKey";
+import type { AxiosError } from "axios";
 
 type SongKeyResponse = BaseResponse<SongKeyType[]>;
 export const getSongkey = async (audio_id: number): Promise<SongKeyResponse> => {
@@ -13,9 +14,12 @@ export const getSongkey = async (audio_id: number): Promise<SongKeyResponse> => 
         return response.data;
 
     } catch (e) {
-        Object.entries(e as {[key: string]: any}).forEach(([key, value]) => {
-            console.log(`${key}: ${value}`);
-        });
+        const err = e as AxiosError | Error | unknown;
+        const message =
+            (typeof err === "object" && err !== null && "message" in err && typeof (err as any).message === "string")
+                ? (err as any).message
+                : "Unexpected error";
+        console.warn(`[getSongkey] request failed: ${message}`);
         return {
             success: false,
             message: "Network error",
