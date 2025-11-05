@@ -2,7 +2,15 @@ import { Axios } from "@/util/AxiosInstance";
 import { MistakeType } from "./types/mistakes";
 import { BaseResponse } from "./types/baseResponse";
 
-type MistakeResponse = BaseResponse<MistakeType[]>;
+export type MistakeSummaryPayload = {
+    recordId: number;
+    filePath: string;
+    score: number;
+    qualityTier?: string;
+    mistakes: MistakeType[];
+};
+
+type MistakeResponse = BaseResponse<MistakeType[] | MistakeSummaryPayload>;
 
 export const getMistakes = async (recordingId: number): Promise<MistakeResponse> => {
     try {

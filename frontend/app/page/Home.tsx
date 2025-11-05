@@ -17,7 +17,7 @@ import { getUser } from "@/api/getUser";
 import { GlobalConstant } from "@/constant";
 import { getAllsongs } from "@/api/song/getAll";
 import { useFocusEffect } from "@react-navigation/native";
-import { SongType as BaseSongType } from "../Types/Song";
+import { SongType as BaseSongType } from "@/types/Song";
 
 const { width } = Dimensions.get("window");
 

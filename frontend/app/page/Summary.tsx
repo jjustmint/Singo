@@ -17,8 +17,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp, CommonActions } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { getRecordById } from "@/api/getRecordById";
-import { RootStackParamList } from "../Types/Navigation";
-import { getMistakes } from "@/api/getMistakes";
+import { RootStackParamList } from "@/types/Navigation";
+import { getMistakes, MistakeSummaryPayload } from "@/api/getMistakes";
 import { getSong } from "@/api/song/getSong";
 import { SongType as ApiSongType } from "@/api/types/song"; // API version
 import { MistakeType } from "@/api/types/mistakes";
@@ -27,7 +27,8 @@ import { Directory, File, Paths } from "expo-file-system";
 import { Axios } from "@/util/AxiosInstance";
 import { GlobalConstant } from "@/constant";
 import { getAudioVerById } from "@/api/song/getAudioById";
-import { buildAssetUri } from "../utils/assetUri";
+import { buildAssetUri } from "@/util/assetUri";
+import { previewBus } from "@/util/previewBus";
 
 // ------------------- APP TYPES -------------------
 export type SongType = {
@@ -104,19 +105,6 @@ const MISTAKE_COLOR_MAP: Record<string, string> = {
 
 const FALLBACK_MISTAKE_COLOR = "#ff7abf";
 
-const DEFAULT_ISSUES: Issue[] = [
-  {
-    at: 5,
-    label: "Slightly high moment",
-    color: MISTAKE_COLOR_MAP["slightly-high"],
-  },
-  {
-    at: 30,
-    label: "Too low section",
-    color: MISTAKE_COLOR_MAP["too-low"],
-  },
-];
-
 // ------------------- SUMMARY SCREEN -------------------
 type SummaryRouteProp = RouteProp<RootStackParamList, "Summary">;
 
@@ -128,6 +116,7 @@ export default function SummaryScreen() {
 
   const [track, setTrack] = useState<SongType | null>(null);
   const [issues, setIssues] = useState<Issue[]>([]);
+  const [qualityTier, setQualityTier] = useState<string | null>(null);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -151,8 +140,10 @@ export default function SummaryScreen() {
     artist: "Unknown Artist",
     image: "https://placehold.co/300x300",
   };
-  const theIssues = issues.length > 0 ? issues : DEFAULT_ISSUES;
+  const hasMistakes = issues.length > 0;
   const theScore = typeof score === "number" ? score : 0;
+  const shouldShowQualityTier = Boolean(qualityTier) && !hasMistakes;
+  const showEmptyMistakesState = !hasMistakes && !shouldShowQualityTier;
 
   const posLabel = useMemo(() => formatTime(position), [position]);
   const sliderMax = useMemo(
@@ -164,9 +155,13 @@ export default function SummaryScreen() {
     [duration]
   );
 
-  useEffect(() => {
-    durationRef.current = duration;
-  }, [duration]);
+useEffect(() => {
+  previewBus.emit({ source: "navigation" });
+}, []);
+
+useEffect(() => {
+  durationRef.current = duration;
+}, [duration]);
 
   useEffect(() => {
     isSeekingRef.current = isSeeking;
@@ -847,26 +842,69 @@ export default function SummaryScreen() {
   // ------------------- FETCH MISTAKES -------------------
   useEffect(() => {
     const fetchMistakes = async () => {
-      if (!recordId) return;
+      if (!recordId) {
+        setIssues([]);
+        setQualityTier(null);
+        return;
+      }
       try {
         const res = await getMistakes(recordId);
         console.log("Fetched mistakes:", res.data);
 
-        if (res.success && res.data.length > 0) {
-          // Map API mistakes to your Issue type
-          const mappedIssues = res.data.map(mistakeToIssue);
-          setIssues(mappedIssues);
-        } else {
-          // fallback if no mistakes
-          setIssues([...DEFAULT_ISSUES]);
+        if (!res.success) {
+          setIssues([]);
+          setQualityTier(null);
+          return;
         }
+
+        const payload = res.data as MistakeType[] | MistakeSummaryPayload | undefined;
+
+        if (Array.isArray(payload)) {
+          if (payload.length > 0) {
+            const mappedIssues = payload.map(mistakeToIssue);
+            setIssues(mappedIssues);
+            setQualityTier(null);
+          } else {
+            setIssues([]);
+            setQualityTier(theScore <= 0 ? "No Singing Detected" : null);
+          }
+          return;
+        }
+
+        if (payload && typeof payload === "object") {
+          const { mistakes = [], qualityTier: nextQualityTier, score: payloadScore } =
+            payload as MistakeSummaryPayload;
+
+          if (Array.isArray(mistakes) && mistakes.length > 0) {
+            const mappedIssues = mistakes.map(mistakeToIssue);
+            setIssues(mappedIssues);
+            setQualityTier(null);
+            return;
+          }
+
+          const derivedTier =
+            nextQualityTier ??
+            (typeof payloadScore === "number" && payloadScore <= 0
+              ? "No Singing Detected"
+              : theScore <= 0
+              ? "No Singing Detected"
+              : null);
+
+          setIssues([]);
+          setQualityTier(derivedTier);
+          return;
+        }
+
+        setIssues([]);
+        setQualityTier(theScore <= 0 ? "No Singing Detected" : null);
       } catch (err) {
         console.error("Error fetching mistakes:", err);
-        setIssues([...DEFAULT_ISSUES]);
+        setIssues([]);
+        setQualityTier(theScore <= 0 ? "No Singing Detected" : null);
       }
     };
     fetchMistakes();
-  }, [recordId]);
+  }, [recordId, theScore]);
 
   useEffect(() => {
     return () => {
@@ -1011,23 +1049,38 @@ export default function SummaryScreen() {
           )}
 
           {/* Missing Part */}
-          <Text style={styles.sectionTitle}>Mistakes</Text>
+          <Text style={styles.sectionTitle}>
+            {shouldShowQualityTier ? "Something wrong!" : "Performance Insight"}
+          </Text>
           <View style={styles.issueFrame}>
-            {theIssues.map((it, idx) => (
-              <TouchableOpacity
-                key={`${it.at}-${idx}`}
-                activeOpacity={0.8}
-                style={[styles.issueItem, { borderLeftColor: it.color }]}
-                onPress={() => {
-                  void seekToPosition(it.at, isPlaying);
-                }}
-              >
-                <Text style={styles.issueTime}>{formatTime(it.at)}</Text>
-                <Text style={[styles.issueText, { color: it.color }]}>
-                  {it.label}
+            {hasMistakes ? (
+              issues.map((it, idx) => (
+                <TouchableOpacity
+                  key={`${it.at}-${idx}`}
+                  activeOpacity={0.8}
+                  style={[styles.issueItem, { borderLeftColor: it.color }]}
+                  onPress={() => {
+                    void seekToPosition(it.at, isPlaying);
+                  }}
+                >
+                  <Text style={styles.issueTime}>{formatTime(it.at)}</Text>
+                  <Text style={[styles.issueText, { color: it.color }]}>
+                    {it.label}
+                  </Text>
+                </TouchableOpacity>
+              ))
+            ) : shouldShowQualityTier ? (
+              <View style={styles.qualityTierCard}>
+                <Text style={styles.qualityTierTitle}>{qualityTier}</Text>
+              </View>
+            ) : showEmptyMistakesState ? (
+              <View style={styles.emptyMistakeCard}>
+                <Text style={styles.emptyMistakeTitle}>No mistakes recorded</Text>
+                <Text style={styles.emptyMistakeSubtitle}>
+                  Nice work! Keep practicing to boost your score even further.
                 </Text>
-              </TouchableOpacity>
-            ))}
+              </View>
+            ) : null}
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -1232,5 +1285,47 @@ const styles = StyleSheet.create({
   },
   instrumentToggleDisabled: {
     opacity: 0.35,
+  },
+  qualityTierCard: {
+    borderRadius: 18,
+    paddingVertical: 24,
+    paddingHorizontal: 18,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
+    alignItems: "center",
+  },
+  qualityTierTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  qualityTierSubtitle: {
+    color: "#ffffffcc",
+    fontSize: 13,
+    marginTop: 10,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  emptyMistakeCard: {
+    borderRadius: 18,
+    paddingVertical: 22,
+    paddingHorizontal: 18,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+    alignItems: "center",
+  },
+  emptyMistakeTitle: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  emptyMistakeSubtitle: {
+    color: "#ffffffcc",
+    fontSize: 13,
+    marginTop: 8,
+    textAlign: "center",
+    lineHeight: 18,
   },
 });

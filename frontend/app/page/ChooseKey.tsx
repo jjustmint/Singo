@@ -11,10 +11,11 @@ import { LinearGradient } from "expo-linear-gradient";
 import { getSong } from "@/api/song/getSong";
 import { getSongkey } from "@/api/getSongKey";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
-import { RootStackParamList } from "../Types/Navigation";
+import { RootStackParamList } from "@/types/Navigation";
 import { StackNavigationProp } from "@react-navigation/stack";
-import { SongKeyType } from "../Types/SongKey";
-import { buildAssetUri } from "../utils/assetUri";
+import { SongKeyType } from "@/types/SongKey";
+import { buildAssetUri } from "@/util/assetUri";
+import { prefetchAudioVersion } from "@/util/audioCache";
 
 const FALLBACK_COVER = "https://via.placeholder.com/600x600?text=No+Cover";
 
@@ -141,11 +142,28 @@ const ChooseKey: React.FC = () => {
 
   const [vocalEnabled, setVocalEnabled] = useState(true);
 
-  const [songList, setSongList] = useState<SongKeyType[]>([]);
-  const [keys, setKeys] = useState<string[]>([]);
+  const initialSongList: SongKeyType[] =
+    selectedKey && versionId
+      ? [
+          {
+            version_id: versionId,
+            song_id: numericSongId,
+            instru_path: "",
+            ori_path: null,
+            key_signature: selectedKey,
+          },
+        ]
+      : [];
+
+  const hasInitialPrefetch = Boolean(selectedKey && versionId);
+  const [songList, setSongList] = useState<SongKeyType[]>(initialSongList);
+  const [keys, setKeys] = useState<string[]>(
+    hasInitialPrefetch && selectedKey ? [selectedKey] : []
+  );
   const [currentIndex, setCurrentIndex] = useState(0);
   const [suggestedIndex, setSuggestedIndex] = useState(0);
-  const [isLockedWeekly, setIsLockedWeekly] = useState(false);
+  const [isLockedWeekly, setIsLockedWeekly] = useState(hasInitialPrefetch);
+  const [keysLoading, setKeysLoading] = useState(!hasInitialPrefetch);
   const [coverUri, setCoverUri] = useState<string>(
     buildAssetUri(image) ?? FALLBACK_COVER
   );
@@ -158,26 +176,13 @@ const ChooseKey: React.FC = () => {
     }
 
     // Weekly challenge case
-    if (selectedKey && versionId) {
-      setKeys([selectedKey]);
-      setSongList([
-        {
-          version_id: versionId,
-          song_id: numericSongId,
-          instru_path: "",
-          ori_path: null,
-          key_signature: selectedKey,
-        },
-      ]);
-      setCurrentIndex(0);
-      setSuggestedIndex(0);
-      setIsLockedWeekly(true);
+    if (hasInitialPrefetch) {
       return;
     }
 
-    // Normal case: fetch all keys
     const fetchKeys = async () => {
       try {
+        setKeysLoading(true);
         const data = await getSongkey(numericSongId);
         const keySignatures = data.data.map(
           (item) => item.key_signature ?? "Unknown"
@@ -191,13 +196,23 @@ const ChooseKey: React.FC = () => {
         const recommendedIndex = computeSuggestedIndex(keySignatures, userKey);
         setSuggestedIndex(recommendedIndex);
         setCurrentIndex(recommendedIndex);
+        const versionForPrefetch = data.data[recommendedIndex];
+        if (versionForPrefetch) {
+          void prefetchAudioVersion(
+            versionForPrefetch.version_id,
+            versionForPrefetch.instru_path,
+            versionForPrefetch.ori_path
+          );
+        }
       } catch (error) {
         console.error("Error fetching keys:", error);
+      } finally {
+        setKeysLoading(false);
       }
     };
 
     fetchKeys();
-  }, [numericSongId, selectedKey, versionId, userKey, song_id]);
+  }, [numericSongId, selectedKey, versionId, userKey, song_id, hasInitialPrefetch]);
 
   // === Fetch cover ===
   useEffect(() => {
@@ -219,6 +234,17 @@ const ChooseKey: React.FC = () => {
   }, [image, numericSongId]);
 
   // === Navigation buttons ===
+  useEffect(() => {
+    const currentVersion = songList[currentIndex];
+    if (currentVersion) {
+      void prefetchAudioVersion(
+        currentVersion.version_id,
+        currentVersion.instru_path,
+        currentVersion.ori_path
+      );
+    }
+  }, [songList, currentIndex]);
+
   const handleNext = () => {
     if (isLockedWeekly) return;
     if (currentIndex < keys.length - 1) setCurrentIndex(currentIndex + 1);
@@ -231,8 +257,14 @@ const ChooseKey: React.FC = () => {
 
   const handleConfirm = () => {
     if (songList.length > 0) {
+      const selectedVersion = songList[currentIndex];
+      void prefetchAudioVersion(
+        selectedVersion.version_id,
+        selectedVersion.instru_path,
+        selectedVersion.ori_path
+      );
       navigation.navigate("MusicPlayer", {
-        songKey: songList[currentIndex],
+        songKey: selectedVersion,
         vocalEnabled,
         isWeeklyChallenge: isLockedWeekly,
       });
@@ -277,7 +309,7 @@ const ChooseKey: React.FC = () => {
         </TouchableOpacity>
 
         <Text style={styles.keyText}>
-          {keys[currentIndex] ?? "No key available"}
+          {!keysLoading && keys.length > 0 ? keys[currentIndex] : "Loading..."}
         </Text>
 
         <TouchableOpacity

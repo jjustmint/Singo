@@ -14,8 +14,9 @@ import { StackNavigationProp } from "@react-navigation/stack";
 
 import { getSong } from "@/api/song/getSong";
 import { getAudioVerById } from "@/api/song/getAudioById";
-import { RootStackParamList } from "../Types/Navigation";
-import { SongType } from "../Types/Song";
+import { RootStackParamList } from "@/types/Navigation";
+import { SongType } from "@/types/Song";
+import { previewBus } from "@/util/previewBus";
 import { resolveProfileImage } from "./ProfileInfo";
 
 interface WeeklySong {
@@ -56,6 +57,7 @@ export default function SongChallenge({ audioId }: Props) {
       artist: weeklySong.singer,
     };
 
+    previewBus.emit({ source: "navigation" });
     navigation.push("ChooseKey", {
       song: songPayload,
       selectedKey: weeklySong.keySignature,

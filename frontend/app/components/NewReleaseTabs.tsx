@@ -20,7 +20,7 @@ import type { SongType as ApiSongType } from '@/api/types/song';
 import { previewBus } from '@/util/previewBus';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import type { RootStackParamList } from '../Types/Navigation';
+import type { RootStackParamList } from '@/types/Navigation';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.8;

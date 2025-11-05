@@ -21,7 +21,7 @@ import * as ImagePicker from "expo-image-picker";
 import { getUser } from "@/api/getUser";
 import { updateUserProfile } from "@/api/profile/updateUser";
 import { updateProfilePhoto } from "@/api/profile/updatePhoto";
-import type { RootStackParamList } from "../Types/Navigation";
+import type { RootStackParamList } from "@/types/Navigation";
 import { GlobalConstant } from "@/constant";
 
 const resolveRemoteImage = (photo?: string | null) => {

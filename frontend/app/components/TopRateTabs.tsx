@@ -23,10 +23,10 @@ import { getAudioVerById } from '@/api/song/getAudioById';
 import { getAllsongs } from '@/api/song/getAll';
 import { getRecordById, RecordType } from '@/api/getRecordById';
 import type { SongType as ApiSongType } from '@/api/types/song';
-import { buildAssetUri } from '@/app/utils/assetUri';
+import { buildAssetUri } from '@/util/assetUri';
 import { previewBus } from '@/util/previewBus';
-import type { RootStackParamList } from '../Types/Navigation';
-import type { SongType as NavigationSongType } from '../Types/Song';
+import type { RootStackParamList } from '@/types/Navigation';
+import type { SongType as NavigationSongType } from '@/types/Song';
 
 interface Song {
   id: number;
