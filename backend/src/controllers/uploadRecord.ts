@@ -90,6 +90,9 @@ export const uploadRecordAndScoreController = async (c: Context) => {
         recordId: newRecord.record_id,
         filePath: mp3Path,
         score: result?.data?.finalScore,
+        qualityTier: result?.data?.qualityTier,
+        message: result?.message,
+        mistakeSummary: result?.data?.mistakeSummary,
         mistakes: result?.data?.mistakes,
       }),
       200
