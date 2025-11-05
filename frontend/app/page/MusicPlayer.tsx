@@ -49,6 +49,7 @@ import { createRecord } from "@/api/createRecord";
 import { getAudioVerById } from "@/api/song/getAudioById";
 import { getLyrics } from "@/api/song/getLyrics";
 import { LyricLineType } from "@/api/types/lyrics";
+import { getLeaderboard } from "@/api/leaderboard";
 import { buildAssetUri } from "../utils/assetUri";
 
 type MusicPlayerRouteProp = RouteProp<RootStackParamList, "MusicPlayer">;
@@ -72,6 +73,87 @@ const VOCAL_VOLUME = 0.6;
 const DEFAULT_RECORDING_EXTENSION = "m4a";
 const RECORDING_DIRECTORY_NAME = "recordings";
 const MAX_RECORDING_UPLOAD_BYTES = 950 * 1024; // ≈0.95 MB safety limit
+const WEEKLY_CHALLENGE_LOOKBACK_DAYS = 14;
+const WEEKLY_CHALLENGE_FALLBACK_START = "2025-09-26";
+const WEEKLY_CHALLENGE_CACHE_MAX_AGE_MS = 1000 * 60 * 5;
+
+type WeeklyChallengeCache = { versionId: number | null; fetchedAt: number };
+
+let weeklyChallengeCache: WeeklyChallengeCache | null = null;
+
+const normaliseVersionId = (candidate: unknown): number | null => {
+  if (typeof candidate === "number" && Number.isFinite(candidate)) {
+    return candidate;
+  }
+  if (typeof candidate === "string") {
+    const parsed = Number.parseInt(candidate, 10);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  return null;
+};
+
+const resolveWeeklyChallengeVersionId = async (): Promise<number | null> => {
+  const now = Date.now();
+
+  if (
+    weeklyChallengeCache &&
+    now - weeklyChallengeCache.fetchedAt < WEEKLY_CHALLENGE_CACHE_MAX_AGE_MS
+  ) {
+    return weeklyChallengeCache.versionId;
+  }
+
+  const today = new Date();
+
+  for (
+    let offset = 0;
+    offset < WEEKLY_CHALLENGE_LOOKBACK_DAYS;
+    offset += 1
+  ) {
+    const candidate = new Date(today);
+    candidate.setDate(today.getDate() - offset);
+    const isoDate = candidate.toISOString().split("T")[0];
+
+    try {
+      const response = await getLeaderboard(isoDate);
+      const versionId = normaliseVersionId(
+        response?.data?.challengeSong?.version_id
+      );
+      if (versionId != null) {
+        weeklyChallengeCache = {
+          versionId,
+          fetchedAt: Date.now(),
+        };
+        return versionId;
+      }
+    } catch (err) {
+      console.warn(
+        `[MusicPlayer] Leaderboard fetch failed for ${isoDate}`,
+        err
+      );
+    }
+  }
+
+  try {
+    const fallbackResponse = await getLeaderboard(
+      WEEKLY_CHALLENGE_FALLBACK_START
+    );
+    const versionId = normaliseVersionId(
+      fallbackResponse?.data?.challengeSong?.version_id
+    );
+    weeklyChallengeCache = {
+      versionId,
+      fetchedAt: Date.now(),
+    };
+    return versionId;
+  } catch (err) {
+    console.warn("[MusicPlayer] Fallback leaderboard fetch failed", err);
+    weeklyChallengeCache = {
+      versionId: null,
+      fetchedAt: Date.now(),
+    };
+    return null;
+  }
+};
 
 const baseAndroidRecording = Audio.RecordingOptionsPresets.HIGH_QUALITY.android;
 const baseIosRecording = Audio.RecordingOptionsPresets.HIGH_QUALITY.ios;
@@ -268,7 +350,11 @@ const MusicPlayer: React.FC = () => {
   const route = useRoute<MusicPlayerRouteProp>();
   const navigation = useNavigation<MusicPlayerNavProp>();
 
-  const { songKey, vocalEnabled: initialVocalEnabled } = route.params;
+  const {
+    songKey,
+    vocalEnabled: initialVocalEnabled,
+    isWeeklyChallenge: routeWeeklyFlag,
+  } = route.params;
 
   const [loading, setLoading] = useState(true);
 
@@ -318,7 +404,13 @@ const MusicPlayer: React.FC = () => {
 
   const [loadingResult, setLoadingResult] = useState(false);
   const [vocalEnabled, setVocalEnabled] = useState(initialVocalEnabled ?? true);
+  const [isWeeklyChallenge, setIsWeeklyChallenge] = useState(
+    Boolean(routeWeeklyFlag)
+  );
+  const [weeklySongCompleted, setWeeklySongCompleted] = useState(false);
   const vocalEnabledRef = useRef(vocalEnabled);
+  const isWeeklyChallengeRef = useRef(isWeeklyChallenge);
+  const weeklySongCompletedRef = useRef(weeklySongCompleted);
   const [hasVocalTrack, setHasVocalTrack] = useState(false);
   const originalPathRef = useRef<string | null>(songKey.ori_path ?? null);
 
@@ -333,6 +425,65 @@ const MusicPlayer: React.FC = () => {
   useEffect(() => {
     vocalEnabledRef.current = vocalEnabled;
   }, [vocalEnabled]);
+
+  useEffect(() => {
+    isWeeklyChallengeRef.current = isWeeklyChallenge;
+    if (!isWeeklyChallenge) {
+      setWeeklySongCompleted(false);
+    }
+  }, [isWeeklyChallenge]);
+
+  useEffect(() => {
+    weeklySongCompletedRef.current = weeklySongCompleted;
+  }, [weeklySongCompleted]);
+
+  useEffect(() => {
+    setWeeklySongCompleted(false);
+  }, [songKey.version_id]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (routeWeeklyFlag) {
+      if (!isWeeklyChallenge) {
+        setIsWeeklyChallenge(true);
+      }
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const versionId = songKey?.version_id;
+    if (typeof versionId !== "number" || Number.isNaN(versionId)) {
+      if (isWeeklyChallenge) {
+        setIsWeeklyChallenge(false);
+      }
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const checkWeeklyStatus = async () => {
+      try {
+        const weeklyVersionId = await resolveWeeklyChallengeVersionId();
+        if (!cancelled) {
+          setIsWeeklyChallenge(
+            weeklyVersionId != null && weeklyVersionId === versionId
+          );
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setIsWeeklyChallenge(false);
+        }
+      }
+    };
+
+    checkWeeklyStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [routeWeeklyFlag, songKey.version_id, isWeeklyChallenge]);
 
   const triggerCountdown = useCallback(
     (purpose: "start" | "resume") => {
@@ -772,6 +923,9 @@ const MusicPlayer: React.FC = () => {
         }
 
         if (status.didJustFinish) {
+          if (isWeeklyChallengeRef.current) {
+            setWeeklySongCompleted(true);
+          }
           setIsPlaying(false);
           setPosition(0);
           if (!autoSubmitInProgressRef.current) {
@@ -1257,6 +1411,9 @@ const MusicPlayer: React.FC = () => {
       recordingRef.current = createdRecording;
       setRecording(createdRecording);
       setIsRecordingPaused(false);
+      if (isWeeklyChallengeRef.current) {
+        setWeeklySongCompleted(false);
+      }
       hasStartedRecordingRef.current = true;
     } catch (err) {
       console.error("Failed to start recording", err);
@@ -1382,6 +1539,17 @@ const MusicPlayer: React.FC = () => {
       return;
     }
 
+    if (
+      !triggeredByAuto &&
+      isWeeklyChallengeRef.current &&
+      !weeklySongCompletedRef.current
+    ) {
+      console.log(
+        "[MusicPlayer] Ignoring manual stop before weekly challenge completes"
+      );
+      return;
+    }
+
     setIsRecordingPaused(false);
     hasStartedRecordingRef.current = false;
     countdownPurposeRef.current = null;
@@ -1495,6 +1663,10 @@ const MusicPlayer: React.FC = () => {
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
+
+  const confirmShouldBeHidden =
+    isWeeklyChallenge && Boolean(recording) && !weeklySongCompleted;
+  const confirmButtonDisabled = !recording;
 
   const animatedBarStyle = {
     transform: [
@@ -1682,13 +1854,25 @@ const MusicPlayer: React.FC = () => {
             />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => stopRecording()}
-            disabled={!recording}
-            style={[styles.confirmButton, !recording && styles.confirmDisabled]}
-          >
-            <MaterialIcons name="done" size={28} color="white" />
-          </TouchableOpacity>
+          {confirmShouldBeHidden ? (
+            <View
+              style={[styles.confirmButton, styles.confirmHiddenPlaceholder]}
+              pointerEvents="none"
+            >
+              <MaterialIcons name="done" size={28} color="transparent" />
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={() => stopRecording()}
+              disabled={confirmButtonDisabled}
+              style={[
+                styles.confirmButton,
+                confirmButtonDisabled && styles.confirmDisabled,
+              ]}
+            >
+              <MaterialIcons name="done" size={28} color="white" />
+            </TouchableOpacity>
+          )}
         </View>
 
         <View style={styles.animationContainer}>
@@ -1845,6 +2029,10 @@ const styles = StyleSheet.create({
   },
   confirmDisabled: {
     opacity: 0.4,
+  },
+  confirmHiddenPlaceholder: {
+    backgroundColor: "transparent",
+    opacity: 0,
   },
   animationContainer: {
     flexDirection: "row",
