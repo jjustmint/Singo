@@ -187,8 +187,11 @@ export default function Leaderboard() {
         const cached = JSON.parse(cachedRaw) as LeaderboardCachePayload;
         if (cancelled) return;
 
-        if (Array.isArray(cached?.weeklyRanking)) {
-          setWeeklyRanking((prev) => prev ?? cached.weeklyRanking);
+        const cachedWeeklyRanking: User[] | undefined = cached?.weeklyRanking;
+        if (Array.isArray(cachedWeeklyRanking)) {
+          setWeeklyRanking((prev) =>
+            prev === null ? cachedWeeklyRanking : prev
+          );
         }
 
         if (cached?.challengeVersionId !== undefined) {
