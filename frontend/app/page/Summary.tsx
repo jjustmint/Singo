@@ -28,6 +28,7 @@ import { Axios } from "@/util/AxiosInstance";
 import { GlobalConstant } from "@/constant";
 import { getAudioVerById } from "@/api/song/getAudioById";
 import { buildAssetUri } from "@/util/assetUri";
+import { previewBus } from "@/util/previewBus";
 
 // ------------------- APP TYPES -------------------
 export type SongType = {
@@ -164,9 +165,13 @@ export default function SummaryScreen() {
     [duration]
   );
 
-  useEffect(() => {
-    durationRef.current = duration;
-  }, [duration]);
+useEffect(() => {
+  previewBus.emit({ source: "navigation" });
+}, []);
+
+useEffect(() => {
+  durationRef.current = duration;
+}, [duration]);
 
   useEffect(() => {
     isSeekingRef.current = isSeeking;

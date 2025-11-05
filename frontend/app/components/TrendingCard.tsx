@@ -36,6 +36,7 @@ const TrendingCard: React.FC<TrendingCardProps> = ({ song, isPlaying, isLoading,
   const imageUri = useMemo(() => buildAssetUri(song.image) ?? "https://i.pinimg.com/564x/11/8e/7f/118e7f4d22f1e5ff4f6e2f1f2d1f3c4b5.jpg", [song.image]);
 
   const handleCardPress = () => {
+    previewBus.emit({ source: "navigation" });
     navigation.navigate("ChooseKey", { song, userKey});
   };
 
