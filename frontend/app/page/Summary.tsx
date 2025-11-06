@@ -532,58 +532,43 @@ useEffect(() => {
     [duration]
   );
 
-  const resumePlaybackAt = useCallback(
-    async (positionMillis: number) => {
-      const recordingSound = soundRef.current;
-      if (!recordingSound) {
-        return;
-      }
+  const resumePlaybackAt = useCallback(async (positionMillis: number) => {
+    const recordingSound = soundRef.current;
+    if (!recordingSound) {
+      return;
+    }
 
-      const targetMillis = Math.max(0, positionMillis);
+    const targetMillis = Math.max(0, positionMillis);
 
-      const instrumentSound = instrumentalRef.current;
-      const shouldPlayInstrument =
-        Boolean(instrumentSound) && instrumentEnabledRef.current;
+    const instrumentSound = instrumentalRef.current;
+    const shouldPlayInstrument =
+      Boolean(instrumentSound) && instrumentEnabledRef.current;
 
-      try {
-        await recordingSound.setPositionAsync(targetMillis);
-      } catch (err) {
-        console.warn("Failed to set recording position", err);
-      }
+    try {
+      const statusUpdates: Array<Promise<AVPlaybackStatus>> = [
+        recordingSound.setStatusAsync({
+          shouldPlay: true,
+          positionMillis: targetMillis,
+        }),
+      ];
 
       if (instrumentSound) {
-        try {
-          await instrumentSound.setPositionAsync(targetMillis);
-        } catch (err) {
-          console.warn("Failed to set instrumental position", err);
-        }
-
-        try {
-          await instrumentSound.setVolumeAsync(
-            shouldPlayInstrument ? INSTRUMENT_VOLUME : 0
-          );
-        } catch (err) {
-          console.warn("Failed to adjust instrumental volume", err);
-        }
+        statusUpdates.push(
+          instrumentSound.setStatusAsync({
+            shouldPlay: shouldPlayInstrument,
+            positionMillis: targetMillis,
+            volume: shouldPlayInstrument ? INSTRUMENT_VOLUME : 0,
+          })
+        );
       }
 
-      try {
-        if (shouldPlayInstrument && instrumentSound) {
-          await Promise.all([
-            recordingSound.playAsync(),
-            instrumentSound.playAsync(),
-          ]);
-        } else {
-          await recordingSound.playAsync();
-        }
-        setIsPlaying(true);
-      } catch (resumeError) {
-        console.error("Error resuming playback", resumeError);
-        setIsPlaying(false);
-      }
-    },
-    []
-  );
+      await Promise.all(statusUpdates);
+      setIsPlaying(true);
+    } catch (resumeError) {
+      console.error("Error resuming playback", resumeError);
+      setIsPlaying(false);
+    }
+  }, []);
 
   const seekToPosition = useCallback(
     async (value: number, resumePlayback?: boolean) => {
@@ -612,8 +597,6 @@ useEffect(() => {
         await currentSound.setPositionAsync(targetMillis);
 
         const instrumentSound = instrumentalRef.current;
-        const instrumentReady =
-          Boolean(instrumentSound && instrumentEnabledRef.current);
         if (instrumentSound) {
           try {
             const instrumentStatus = await instrumentSound.getStatusAsync();

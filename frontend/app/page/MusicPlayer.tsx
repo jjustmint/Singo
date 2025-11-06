@@ -72,7 +72,7 @@ const LYRICS_UNAVAILABLE_MESSAGE = "This song does not support lyrics yet.";
 const VOCAL_VOLUME = 0.6;
 const DEFAULT_RECORDING_EXTENSION = "m4a";
 const RECORDING_DIRECTORY_NAME = "recordings";
-const MAX_RECORDING_UPLOAD_BYTES = 950 * 1024; // ≈0.95 MB safety limit
+const MAX_RECORDING_UPLOAD_BYTES = 24 * 1024 * 1024; // 24 MB local gate to match backend allowance
 const WEEKLY_CHALLENGE_LOOKBACK_DAYS = 14;
 const WEEKLY_CHALLENGE_FALLBACK_START = "2025-09-26";
 const WEEKLY_CHALLENGE_CACHE_MAX_AGE_MS = 1000 * 60 * 5;
@@ -975,7 +975,12 @@ const MusicPlayer: React.FC = () => {
     void alignVocalWithInstrument(isPlaying, true);
   }, [alignVocalWithInstrument, hasVocalTrack, isPlaying, vocalEnabled]);
 
-  const playInstrumental = useCallback(async () => {
+  type InstrumentPlayOptions = {
+    forcePlay?: boolean;
+    positionMillis?: number;
+  };
+
+  const playInstrumental = useCallback(async (options?: InstrumentPlayOptions) => {
     try {
       const currentSound = soundRef.current;
       if (!currentSound) {
@@ -991,31 +996,55 @@ const MusicPlayer: React.FC = () => {
 
       const vocalSound = vocalSoundRef.current;
       const shouldPlayVocal = Boolean(vocalSound && vocalEnabledRef.current);
+      const forcePlay = options?.forcePlay === true;
+      const requestedPosition =
+        typeof options?.positionMillis === "number" && Number.isFinite(options.positionMillis)
+          ? Math.max(0, options.positionMillis)
+          : null;
 
-      // === If currently playing → pause both ===
-      if (status.isPlaying) {
+      if (status.isPlaying && !forcePlay) {
         await currentSound.pauseAsync();
         if (shouldPlayVocal && vocalSound) {
           await vocalSound.pauseAsync();
         }
-        return; // done pausing
+        return;
       }
 
-      // === Otherwise, resume both ===
-      const startPosition =
-        typeof status.positionMillis === "number" && status.positionMillis > 0
+      const durationMillis =
+        typeof status.durationMillis === "number" ? status.durationMillis : null;
+      let startPosition =
+        requestedPosition ??
+        (typeof status.positionMillis === "number" && status.positionMillis > 0
           ? status.positionMillis
-          : 0;
+          : 0);
 
-      await currentSound.setPositionAsync(startPosition);
-      await currentSound.playAsync();
+      if (
+        durationMillis != null &&
+        startPosition >= durationMillis - 250
+      ) {
+        startPosition = 0;
+      }
+
+      const instrumentStatusToSet: AVPlaybackStatusToSet = {
+        shouldPlay: true,
+        positionMillis: Math.max(0, Math.floor(startPosition)),
+      };
+
+      await currentSound.setStatusAsync(instrumentStatusToSet);
 
       if (shouldPlayVocal && vocalSound) {
-        const instrStatus = await currentSound.getStatusAsync();
-        if (instrStatus.isLoaded) {
-          await vocalSound.setPositionAsync(instrStatus.positionMillis ?? 0);
+        try {
+          const vocalStatusToSet: AVPlaybackStatusToSet = {
+            shouldPlay: true,
+            positionMillis: instrumentStatusToSet.positionMillis,
+            volume: VOCAL_VOLUME,
+          };
+          await vocalSound.setStatusAsync(vocalStatusToSet);
+        } catch (vocalError) {
+          if (!isIgnorableAudioWarning(vocalError)) {
+            console.warn("Failed to align vocal track", vocalError);
+          }
         }
-        await vocalSound.playAsync();
       }
     } catch (error) {
       console.error("Error toggling playback:", error);
@@ -1406,21 +1435,25 @@ const MusicPlayer: React.FC = () => {
         playThroughEarpieceAndroid: false,
       });
 
-      console.log("Playing instrumental...");
-      await playInstrumental();
-
-      console.log("Creating recording...");
-      const { recording: createdRecording } = await Audio.Recording.createAsync(
+      console.log("Preparing recording...");
+      const recordingInstance = new Audio.Recording();
+      await recordingInstance.prepareToRecordAsync(
         COMPRESSED_RECORDING_OPTIONS
       );
-      console.log("Recording created successfully");
-      recordingRef.current = createdRecording;
-      setRecording(createdRecording);
+      recordingRef.current = recordingInstance;
+      setRecording(recordingInstance);
       setIsRecordingPaused(false);
       if (isWeeklyChallengeRef.current) {
         setWeeklySongCompleted(false);
       }
       hasStartedRecordingRef.current = true;
+
+      console.log("Starting recording and instrumental in sync...");
+      await Promise.all([
+        recordingInstance.startAsync(),
+        playInstrumental({ forcePlay: true, positionMillis: 0 }),
+      ]);
+      console.log("Recording and instrumental started");
     } catch (err) {
       console.error("Failed to start recording", err);
     } finally {
@@ -1472,10 +1505,52 @@ const MusicPlayer: React.FC = () => {
     }
 
     try {
-      await playInstrumental();
       const status = await activeRecording.getStatusAsync();
-      if (status.canRecord && !status.isRecording) {
-        await activeRecording.startAsync();
+      if (!status.canRecord) {
+        console.warn("Recording cannot be resumed: recorder not ready");
+        return;
+      }
+
+      let targetPositionMillis: number | null = null;
+      const instrumentSound = soundRef.current;
+      if (instrumentSound) {
+        try {
+          const instrumentStatus = await instrumentSound.getStatusAsync();
+          if (
+            instrumentStatus.isLoaded &&
+            typeof instrumentStatus.positionMillis === "number"
+          ) {
+            targetPositionMillis = instrumentStatus.positionMillis;
+          }
+        } catch (instrumentError) {
+          if (!isIgnorableAudioWarning(instrumentError)) {
+            console.warn(
+              "Failed to read instrumental position before resuming",
+              instrumentError
+            );
+          }
+        }
+      }
+
+      if (
+        targetPositionMillis === null &&
+        typeof status.durationMillis === "number"
+      ) {
+        targetPositionMillis = status.durationMillis;
+      }
+
+      const safePosition =
+        typeof targetPositionMillis === "number" && Number.isFinite(targetPositionMillis)
+          ? Math.max(0, targetPositionMillis)
+          : 0;
+
+      if (!status.isRecording) {
+        await Promise.all([
+          activeRecording.startAsync(),
+          playInstrumental({ forcePlay: true, positionMillis: safePosition }),
+        ]);
+      } else {
+        await playInstrumental({ forcePlay: true, positionMillis: safePosition });
       }
       setIsRecordingPaused(false);
     } catch (err) {
@@ -1594,7 +1669,9 @@ const MusicPlayer: React.FC = () => {
         if (size > MAX_RECORDING_UPLOAD_BYTES) {
           Alert.alert(
             "Recording Too Large",
-            "Your recording is too large to upload. Please record a shorter take and try again."
+            `Your recording exceeds the ${bytesToMegabytes(
+              MAX_RECORDING_UPLOAD_BYTES
+            ).toFixed(0)} MB upload limit. Please record a shorter take and try again.`
           );
           if (persistedUri !== uri) {
             await deleteFileIfExists(persistedUri);
