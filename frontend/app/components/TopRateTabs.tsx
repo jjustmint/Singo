@@ -43,7 +43,9 @@ interface Song {
 const FALLBACK_COVER = 'https://via.placeholder.com/150';
 
 const CACHE_KEY = 'toprate:global-v1';
-const CACHE_TTL_MS = 1000 * 60 * 30; // 30 minutes cache
+const CACHE_TTL_MS = 1000 * 30; // 30-second cache to keep listings fresh
+const REALTIME_REFRESH_INTERVAL_MS = 1000 * 15; // refresh roughly every 15 seconds while visible
+const REALTIME_PROBE_RANGE = 12; // how many new record ids to probe before a full recompute
 const INITIAL_RECORD_SEARCH_LIMIT = 20000;
 const MAX_RECORD_SCAN_RANGE = 40000;
 const MAX_TOTAL_SCAN_RANGE = MAX_RECORD_SCAN_RANGE * 5;
@@ -173,9 +175,12 @@ const TopRateScreen: React.FC<{ userKey?: string | null; refreshToken?: number }
   const [loadingPreviewId, setLoadingPreviewId] = useState<number | null>(null);
   const soundRef = useRef<Audio.Sound | null>(null);
   const previewCacheRef = useRef<Map<number, string>>(new Map());
+  const lastMaxRecordIdRef = useRef<number>(0);
 
   useEffect(() => {
     let cancelled = false;
+    let refreshTimer: ReturnType<typeof setInterval> | null = null;
+    let loadInFlight = false;
     const forceRefresh = typeof refreshToken === 'number' && refreshToken > 0;
 
     type CachePayload = {
@@ -468,9 +473,53 @@ const TopRateScreen: React.FC<{ userKey?: string | null; refreshToken?: number }
       return { songs: mappedSongs.slice(0, 10), maxRecordId: highestRecordId };
     };
 
-    const load = async () => {
+    const probeForNewRecords = async (baseline: number): Promise<boolean> => {
+      if (baseline <= 0) {
+        return true;
+      }
+
+      const startId = baseline + 1;
+      const ids = Array.from({ length: REALTIME_PROBE_RANGE }, (_, idx) => startId + idx);
+      const probes = await Promise.all(
+        ids.map(async (recordId) => {
+          try {
+            const res = await getRecordById(recordId, { suppressLog: true });
+            return Boolean(res?.success && res?.data);
+          } catch {
+            return false;
+          }
+        })
+      );
+
+      return probes.some(Boolean);
+    };
+
+    type LoadOptions = {
+      forceNetwork?: boolean;
+      probeForChanges?: boolean;
+      showSpinner?: boolean;
+    };
+
+    const load = async (options: LoadOptions = {}) => {
+      if (loadInFlight) {
+        return;
+      }
+
+      const { forceNetwork = false, probeForChanges = false, showSpinner = false } = options;
+      const shouldForceNetwork = forceRefresh || forceNetwork;
+      loadInFlight = true;
+
       try {
-        setLoading(true);
+        if (showSpinner) {
+          setLoading(true);
+        }
+
+        if (probeForChanges && lastMaxRecordIdRef.current > 0) {
+          const hasNewRecords = await probeForNewRecords(lastMaxRecordIdRef.current);
+          if (!hasNewRecords) {
+            return;
+          }
+        }
         setError(null);
 
         const cached = await loadCache();
@@ -503,6 +552,11 @@ const TopRateScreen: React.FC<{ userKey?: string | null; refreshToken?: number }
               previewCacheRef.current.set(item.id, item.preview);
             }
           });
+          const cachedMaxRecordId =
+            typeof cached.maxRecordId === 'number' && Number.isFinite(cached.maxRecordId)
+              ? cached.maxRecordId
+              : 0;
+          lastMaxRecordIdRef.current = cachedMaxRecordId;
           setTopSongs(sanitized);
           const cacheHasPreviews = sanitized.some((item) => item.preview || item.versionId != null);
           const cacheHasKeys = sanitized.some(
@@ -510,18 +564,18 @@ const TopRateScreen: React.FC<{ userKey?: string | null; refreshToken?: number }
               typeof item.keySignature === 'string' ||
               typeof item.key_signature === 'string'
           );
-          if (cacheIsFresh && cacheHasPreviews && cacheHasKeys && !forceRefresh) {
-            setLoading(false);
+          if (cacheIsFresh && cacheHasPreviews && cacheHasKeys && !shouldForceNetwork) {
             return;
           }
         }
 
-      const { songs, maxRecordId } = await computeGlobalTopSongs();
+        const { songs, maxRecordId } = await computeGlobalTopSongs();
 
-      if (!cancelled) {
-        setTopSongs(songs);
-        await saveCache({ timestamp: Date.now(), data: songs, maxRecordId });
-      }
+        if (!cancelled) {
+          lastMaxRecordIdRef.current = maxRecordId;
+          setTopSongs(songs);
+          await saveCache({ timestamp: Date.now(), data: songs, maxRecordId });
+        }
       } catch (err) {
         console.error('Top rate load error:', err);
         if (!cancelled) {
@@ -530,16 +584,32 @@ const TopRateScreen: React.FC<{ userKey?: string | null; refreshToken?: number }
           setError(message);
         }
       } finally {
-        if (!cancelled) {
+        loadInFlight = false;
+        if (showSpinner && !cancelled) {
           setLoading(false);
         }
       }
     };
 
-    load();
+    const initialOptions: LoadOptions = forceRefresh
+      ? { showSpinner: true, forceNetwork: true }
+      : { showSpinner: true };
+
+    load(initialOptions).catch(() => undefined);
+
+    if (REALTIME_REFRESH_INTERVAL_MS > 0) {
+      refreshTimer = setInterval(() => {
+        if (!cancelled) {
+          load({ forceNetwork: true, probeForChanges: true }).catch(() => undefined);
+        }
+      }, REALTIME_REFRESH_INTERVAL_MS);
+    }
 
     return () => {
       cancelled = true;
+      if (refreshTimer) {
+        clearInterval(refreshTimer);
+      }
     };
   }, [refreshToken]);
 

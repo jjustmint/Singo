@@ -72,8 +72,8 @@ const LYRICS_UNAVAILABLE_MESSAGE = "This song does not support lyrics yet.";
 const VOCAL_VOLUME = 0.6;
 const DEFAULT_RECORDING_EXTENSION = "m4a";
 const RECORDING_DIRECTORY_NAME = "recordings";
-const MAX_RECORDING_UPLOAD_BYTES = 24 * 1024 * 1024; // 24 MB local gate to match backend allowance
-const WEEKLY_CHALLENGE_LOOKBACK_DAYS = 14;
+const MAX_RECORDING_UPLOAD_BYTES = 1 * 1024 * 1024; // Upstream gateway enforces ~1 MB payload limit
+const WEEKLY_CHALLENGE_LOOKBACK_DAYS = 7;
 const WEEKLY_CHALLENGE_FALLBACK_START = "2025-09-26";
 const WEEKLY_CHALLENGE_CACHE_MAX_AGE_MS = 1000 * 60 * 5;
 
