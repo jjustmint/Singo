@@ -87,6 +87,17 @@ source .venv/bin/activate          # .\.venv\Scripts\activate on Windows
 pip install -r requirement.txt
 ```
 
+The `requirement.txt` file installs the exact Python libraries needed by the FastAPI microservices:
+
+- `fastapi`, `uvicorn`, `pydantic` – web framework, ASGI server, and schema validation.
+- `numpy`, `scipy`, `numba` – core scientific stack for signal processing.
+- `librosa`, `soundfile` – audio loading, STFT/chromagram helpers, and file IO.
+- `fastdtw` – efficient Dynamic Time Warping used in the vocal comparison service.
+- `noisereduce` – reduces background noise before feature extraction.
+- `spleeter` – separates vocals/instrumentals when generating stems.
+
+Some of these packages require system-level tooling (FFmpeg, libsndfile, C/C++ build tools). Install them via your OS package manager before running `pip install`.
+
 Run the individual apps (each can use a separate terminal/tab):
 
 | Service | File | Port | Used by |
