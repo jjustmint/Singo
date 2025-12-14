@@ -122,10 +122,47 @@ If you are not running the services via Docker with internal hostnames (`keydete
    ```
 3. **Run the app**
    ```bash
-   npm run start        # expo start
-   npm run ios          # launch iOS simulator
-   npm run android      # launch Android emulator
-   npm run web          # run in a browser
+   cd frontend
+   npx expo start
+   ```
+   You should see the familiar Expo Metro banner printed in your terminal:
+   ```
+   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+   █ ▄▄▄▄▄ █▀▀ ██▀█ ▄█ ▄▄▄▄▄ █
+   █ █   █ █▄▀██▀█▄▀ █ █   █ █
+   █ █▄▄▄█ █ ▄ █  ▀ ██ █▄▄▄█ █
+   █▄▄▄▄▄▄▄█ █ ▀▄█▄█▄█▄▄▄▄▄▄▄█
+   █  █▄▀▀▄▄▀▀█  ▄▀▄▄▀  ▄▀▄▄▀█
+   █ ▄█▀▀▄▄█▄▀▀  ▀ ▀▄▄▀ ▀▀█▄▄█
+   █▄███▀▀▄ ▄█▄ █  █▀█ ▄█ ██▀█
+   █▄▀ ▄▀▀▄█▀▀▄ █▀██ ▄▄ ▀▀██▄█
+   █▄▄▄███▄█ ▄██ ▀▄  ▄▄▄ █ ▄ █
+   █ ▄▄▄▄▄ █▄▄▄▄ █▄  █▄█  ▀ ▄█
+   █ █   █ █▀  ▀▄▄▀▀▄ ▄▄ █▀▄██
+   █ █▄▄▄█ █▀█ ██  █  █▄  ▄█▄█
+   █▄▄▄▄▄▄▄█▄▄▄██▄▄█▄███▄▄█▄▄█
+
+   › Metro waiting on exp://192.168.1.130:8081
+   › Scan the QR code above with Expo Go (Android) or the Camera app (iOS)
+
+   › Web is waiting on http://localhost:8081
+
+   › Using Expo Go
+   › Press s │ switch to development build
+
+   › Press a │ open Android
+   › Press i │ open iOS simulator
+   › Press w │ open web
+
+   › Press j │ open debugger
+   › Press r │ reload app
+   › Press m │ toggle menu
+   › shift+m │ more tools
+   › Press o │ open project code in your editor
+
+   › Press ? │ show all commands
+
+   Logs for your project will appear below. Press Ctrl+C to exit.
    ```
 
 Expo stores JWTs and IDs in `AsyncStorage` (`frontend/util/cookies.ts`). Make sure you log in at least once via `/auth/login` so subsequent `/private/*` requests include the `Authorization` header added by `AxiosInstance.ts`.
@@ -137,7 +174,11 @@ Expo stores JWTs and IDs in `AsyncStorage` (`frontend/util/cookies.ts`). Make su
    npm run start -- --tunnel   # easiest way for devices on other networks
    npm run start               # works if the device is on the same LAN
    ```
-3. Scan the QR code printed in the terminal or shown in the Expo dev tools to load the app in Expo Go.
+3. Choose how to open the app:
+   - Press `a` to launch the Android emulator.
+   - Press `i` to launch the iOS simulator.
+   - Press `w` to open the web build in your browser.
+   - Or, open the Camera/Expo Go app on a **physical device connected to the same network** as your computer and scan the QR code shown in the terminal/Expo UI.
 4. Ensure `GlobalConstant.API_URL` points to the deployed backend (default) or a LAN-accessible host so your phone can reach the API.
 
 ## Common Commands
