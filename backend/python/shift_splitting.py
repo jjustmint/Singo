@@ -112,13 +112,11 @@ def create_versions(input_audio: str, song_name: str, original_key: str):
         version_files.append((new_key, out_file, steps))
     return version_files
 
-
-separator = Separator("spleeter:2stems", MWF=True)
-
 def separate_audio(file_path: str, vocal_out: str, instru_out: str):
     """
     Separate audio into vocals and instrumental using a persistent Spleeter instance.
     """
+    separator = Separator("spleeter:2stems", MWF=True)
     temp_dir = os.path.dirname(vocal_out)
     os.makedirs(temp_dir, exist_ok=True)
 
@@ -148,7 +146,7 @@ async def upload_song(song: UploadFile, song_name: str = Form(...)):
             f.write(await song.read())
 
         # === Step 1: Call external FastAPI to detect original key ===
-        key_api = "http://keydetector-api:8083/keydetect"
+        key_api = "http://localhost:8083/keydetect"
         with open(input_path, "rb") as f:
             resp = requests.post(key_api, files={"file": (f"{song_name}.mp3", f, "audio/mpeg")})
         if resp.status_code != 200:
