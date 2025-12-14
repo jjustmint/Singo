@@ -88,6 +88,7 @@ All supporting services live under `backend/python`. They share the same depende
 cd backend/python
 python -m venv .venv
 source .venv/bin/activate          # .\.venv\Scripts\activate on Windows
+pip install --upgrade pip
 pip install -r requirement.txt
 ```
 
