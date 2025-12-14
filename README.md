@@ -65,7 +65,11 @@ Singo is a full-stack vocal training and performance challenge platform. The mob
    bunx prisma generate       # regenerates the client in src/generated/prisma
    ```
    Use `bunx prisma studio` if you want to inspect data.
-4. **Run the API**
+4. **Create Folders**
+5. ```bash
+   mkdir -p data/uploads/{users,song}
+   # for uploading song in local 
+6. **Run the API**
    ```bash
    bun run dev                # hot reloads on port 8000
    ```
