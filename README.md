@@ -102,7 +102,7 @@ Run the individual apps (each can use a separate terminal/tab):
 
 | Service | File | Port | Used by |
 | --- | --- | --- | --- |
-| Key detection | `KeyDetector.py` | `8083` | `shift_splitting.py` via `http://keydetector-api:8083/keydetect` to infer the tonic of uploaded masters. |
+| Key detection | `KeyDetector.py` | `8083` | `shift_splitting.py` via `http://localhost:8083/keydetect` to infer the tonic of uploaded masters. |
 | Stem splitting & pitch shifting | `shift_splitting.py` | `8085` | `CreateSongAndVersionController` uploads masters here, receives multi-key stems + metadata. |
 | Vocal comparison & scoring | `com5.py` | `8080` | `/private/comparevocal` and `/private/uploaduserrecord` send instrumental + user takes here for DTW-based scoring and mistake extraction. |
 
