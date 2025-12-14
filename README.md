@@ -66,14 +66,14 @@ Singo is a full-stack vocal training and performance challenge platform. The mob
    ```
    Use `bunx prisma studio` if you want to inspect data.
 4. **Create Folders**
-5. ```bash
+   ```bash
    mkdir -p data/uploads/{users,song}
    # for uploading song in local 
-6. **Run the API**
+5. **Run the API**
    ```bash
    bun run dev                # hot reloads on port 8000
    ```
-   Build & run the compiled bundle with:
+6. **Build & run the compiled bundle with:**
    ```bash
    bun run compile            # outputs dist/index.js
    bun run start
