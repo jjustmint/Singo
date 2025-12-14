@@ -2,6 +2,7 @@ fastapi
 uvicorn
 pydantic
 tensorflow==2.13.0
+spleeter
 numpy==1.24.3
 numba==0.57.1
 librosa
@@ -12,3 +13,4 @@ soundfile
 ffmpeg-python
 pandas
 typer
+python-multipart
