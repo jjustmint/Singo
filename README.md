@@ -73,11 +73,6 @@ Singo is a full-stack vocal training and performance challenge platform. The mob
    ```bash
    bun run dev                # hot reloads on port 8000
    ```
-6. **Build & run the compiled bundle with:**
-   ```bash
-   bun run compile            # outputs dist/index.js
-   bun run start
-   ```
 
 > The API serves static assets under `/uploads/*` from `backend/data` and `/song/*` from the repository root. Make sure those folders are writable (they store album art, stems, and user recordings).
 
