@@ -2,6 +2,31 @@
 
 Singo is a full-stack vocal training and performance challenge platform. The mobile app lets singers browse curated tracks, pick the key that best suits their voice, rehearse with on-device lyrics, record takes, and track progress through weekly challenges. A Bun/Hono API, Prisma/PostgreSQL datastore, and FastAPI-based audio services power automatic key detection, multi-key stem generation, and AI-assisted vocal scoring.
 
+## Member Information
+### Pathompong Chamchoy
+- Student Number: 65130000213
+- Home Address: 56 Moo 1, Tambon Narasingha, Pa Mok District
+- City: Ang Thong
+- Postal Code: 14130
+- Phone: 095-934-5322
+- Email: chamchoitawan55@gmail.com
+
+### Petchpailin Saringkareekul
+- Student Number: 65130500220
+- Home Address: 40/29, Yenchit 1, Thongwatdone, Sathon
+- City: Bangkok
+- Postal Code: 10120
+- Phone: 081-141-8233
+- Email: Petchpailin04@gmail.com
+
+### Variya Chaimongkoltrakul
+- Student Number: 65130500255
+- Home Address: 111/27, Sribumpen Road, Thung Maha Mek, Sathon
+- City: Bangkok
+- Postal Code: 10120
+- Phone: 085-360-1112
+- Email: mojivariya@gmail.com
+
 ## Features
 - **Song discovery & playback** – Browse trending releases, stream previews, cache stems, and follow time-synced lyrics from the Expo app (`frontend/app/page/Home.tsx`, `MusicPlayer.tsx`).
 - **Adaptive key workflow** – Upload masters once and let the backend create instrumental/vocal stems in multiple keys using librosa + Spleeter (`backend/python/shift_splitting.py`).
