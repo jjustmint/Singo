@@ -7,12 +7,10 @@ export const UpdateKeyController = async (c: Context) => {
       const userId = c.get("user_id");
       if (!userId) return c.json(ConstructResponse(false, "Missing user id"), 400);
   
-      // Get uploaded file from frontend request
       const formData = await c.req.formData();
       const file = formData.get("file") as File;
       if (!file) return c.json(ConstructResponse(false, "Missing audio file"), 400);
   
-      // Forward to FastAPI
       const forwardForm = new FormData();
       forwardForm.append("file", file, file.name);
   
@@ -23,7 +21,6 @@ export const UpdateKeyController = async (c: Context) => {
   
       const data = await res.json();
   
-      // Update in DB
       const update = await updateKey(userId, data?.detectedKey);
   
       return c.json(ConstructResponse(true, "Successfully Updated Key", update), 200);

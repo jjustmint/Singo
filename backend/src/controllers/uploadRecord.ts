@@ -5,8 +5,6 @@ import * as path from "path";
 import { randomUUID } from "crypto";
 import ffmpeg from "fluent-ffmpeg";
 import { tmpdir } from "os";
-
-// DB helpers
 import { createUserRecord, updateScore, uploadMistakes } from "../models/CompareVocal";
 
 export const uploadRecordAndScoreController = async (c: Context) => {
@@ -16,7 +14,6 @@ export const uploadRecordAndScoreController = async (c: Context) => {
       return c.json(ConstructResponse(false, "Missing userId"), 400);
     }
 
-    // Parse form data (file + versionId + key + original path)
     const formData = await c.req.formData();
     const file = formData.get("file") as File;
     const versionId = formData.get("versionId") as string;
@@ -26,19 +23,15 @@ export const uploadRecordAndScoreController = async (c: Context) => {
     if (!file) return c.json(ConstructResponse(false, "Missing file"), 400);
     if (!versionId) return c.json(ConstructResponse(false, "Missing versionId"), 400);
 
-    // Convert file into buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Ensure upload directory exists
     const uploadDir = path.join(process.cwd(), "data", "uploads", "users", String(userId));
     fs.mkdirSync(uploadDir, { recursive: true });
 
-    // Save temp WAV file
     const tempWavPath = path.join(tmpdir(), `${randomUUID()}.wav`);
     fs.writeFileSync(tempWavPath, buffer);
 
-    // Convert to MP3
     const mp3Name = `${randomUUID()}.mp3`;
     const mp3Path = path.join(uploadDir, mp3Name);
 
@@ -50,20 +43,17 @@ export const uploadRecordAndScoreController = async (c: Context) => {
         .save(mp3Path);
     });
 
-    // Delete temp WAV
     fs.unlinkSync(tempWavPath);
 
-    // Create DB entry with MP3 path
     const relativePath = path.relative(process.cwd(), mp3Path);
     const newRecord = await createUserRecord({
       user_id: Number(userId),
       version_id: Number(versionId),
       key: key || "",
       user_audio_path: relativePath,
-      accuracy_score: -1, // placeholder
+      accuracy_score: -1,
     });
 
-    // Call compare service
     const response = await fetch("http://com5-api:8080/compare", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -81,7 +71,6 @@ export const uploadRecordAndScoreController = async (c: Context) => {
       );
     }
 
-    // Update DB with score + mistakes
     await updateScore(newRecord.record_id, result?.data?.finalScore);
     await uploadMistakes(newRecord.record_id, result?.data?.mistakes);
 

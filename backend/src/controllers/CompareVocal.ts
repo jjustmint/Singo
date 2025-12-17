@@ -36,7 +36,6 @@ export const CompareVocalController = async (c: Context) => {
                 ConstructResponse(false, result.message || "Error from compare API", 400)
             )
         }
-        // Success response
         return c.json(
             ConstructResponse(true, "success at updating score", result.data)
         )

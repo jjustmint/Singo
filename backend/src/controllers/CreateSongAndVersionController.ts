@@ -18,7 +18,6 @@ export const CreateSongAndVersionController = async (c: Context) => {
     const baseUploadDir = path.join(process.cwd(), "data", "uploads", "song", song_name);
     fs.mkdirSync(baseUploadDir, { recursive: true });
 
-    // === Save album_cover if provided ===
     let album_cover: string | null = null;
     if (album_coverFile) {
       const albumDir = path.join(baseUploadDir, "albumCover");
@@ -29,7 +28,6 @@ export const CreateSongAndVersionController = async (c: Context) => {
       album_cover = albumPath.replace(path.join(process.cwd(), "data"), "data");
     }
 
-    // === Save previewsong if provided ===
     let previewsong: string | null = null;
     if (previewsongFile) {
       const previewDir = path.join(baseUploadDir, "preview");
@@ -40,7 +38,6 @@ export const CreateSongAndVersionController = async (c: Context) => {
       previewsong = previewPath.replace(path.join(process.cwd(), "data"), "data");
     }
 
-    // === Create extra folders for song versions ===
     const songBaseDir = path.join(process.cwd(), "song", song_name);
     const vocalDir = path.join(songBaseDir, "vocal");
     const instruDir = path.join(songBaseDir, "instru");
@@ -48,7 +45,6 @@ export const CreateSongAndVersionController = async (c: Context) => {
     fs.mkdirSync(vocalDir, { recursive: true });
     fs.mkdirSync(instruDir, { recursive: true });
 
-    // === Send main audio file to FastAPI ===
     const backendForm = new FormData();
     backendForm.append("song", song);
     backendForm.append("song_name", song_name);
@@ -76,7 +72,6 @@ export const CreateSongAndVersionController = async (c: Context) => {
       );
     }
 
-    // === Step 1: Create song record in DB ===
     const songRecord = await createSong(
       songName,
       result.original_key,
@@ -85,7 +80,6 @@ export const CreateSongAndVersionController = async (c: Context) => {
       previewsong
     );
 
-    // === Step 2: Save separated versions ===
     for (const item of result.separated) {
       if (item.status === "done") {
         // Save correct relative paths in DB (match the actual file extension)

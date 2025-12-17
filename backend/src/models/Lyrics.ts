@@ -1,6 +1,5 @@
 import { prisma } from "..";
 
-//old version
 export const FindLyricsBySongId = async(songId: number) => {
     const lyrics = await prisma.song.findUnique({
         where:{
