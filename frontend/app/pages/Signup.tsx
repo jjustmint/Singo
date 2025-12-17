@@ -58,7 +58,6 @@ const SignupScreen: React.FC = () => {
     passwordValidation.hasNumber &&
     passwordValidation.hasMinLength;
 
-  // Function to handle signup
   const handleSignup = async () => {
     setSubmitError(null);
     const nextErrors: typeof fieldErrors = {};
@@ -137,19 +136,15 @@ const SignupScreen: React.FC = () => {
   return (
     <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={{ flex: 1 }}>
-        {/* Status bar */}
         <StatusBar translucent backgroundColor="transparent" style="light" />
 
-        {/* Top Gradient Background */}
         <LinearGradient
           colors={["#6D5DFB", "#C56FFF"]}
           style={styles.topBackground}
         />
 
-        {/* Bottom White Background */}
         <View style={styles.bottomBackground} />
 
-        {/* Scrollable Form */}
         <KeyboardAwareScrollView
           style={{ flex: 1, position: "absolute", width: "100%", height: "100%" }}
           contentContainerStyle={{ flexGrow: 1 }}
@@ -159,7 +154,6 @@ const SignupScreen: React.FC = () => {
           keyboardShouldPersistTaps="handled"
         >
           <View style={{ flex: 1, justifyContent: "flex-end" }}>
-            {/* White form container */}
             <View style={styles.formContainer}>
               <TouchableOpacity
                 style={styles.backArrow}
@@ -170,7 +164,6 @@ const SignupScreen: React.FC = () => {
 
               <Text style={styles.signupText}>Sign Up</Text>
 
-              {/* Username input */}
               <View style={styles.inputWrapper}>
                 <Ionicons name="person-outline" size={20} color="#aaa" />
                 <TextInput
@@ -188,7 +181,6 @@ const SignupScreen: React.FC = () => {
                 <Text style={styles.errorText}>{fieldErrors.username}</Text>
               ) : null}
 
-              {/* Password input */}
               <View style={styles.inputWrapper}>
                 <Ionicons name="lock-closed-outline" size={20} color="#aaa" />
                 <TextInput
@@ -216,7 +208,6 @@ const SignupScreen: React.FC = () => {
                 <Text style={styles.errorText}>{fieldErrors.password}</Text>
               ) : null}
 
-              {/* Confirm Password input */}
               <View style={styles.inputWrapper}>
                 <Ionicons name="lock-closed-outline" size={20} color="#aaa" />
                 <TextInput
@@ -295,7 +286,6 @@ const SignupScreen: React.FC = () => {
                 </View>
               </View>
 
-              {/* Signup Button */}
               <TouchableOpacity
                 style={styles.signupButton}
                 onPress={handleSignup}
@@ -306,7 +296,6 @@ const SignupScreen: React.FC = () => {
                 <Text style={styles.submitErrorText}>{submitError}</Text>
               ) : null}
 
-              {/* Login link */}
               <View style={styles.Login}>
                 <Text style={{ color: "#666", fontFamily: "Kanit_500Medium" }}>
                   Already have an account?{" "}
@@ -346,11 +335,11 @@ export default SignupScreen;
 const styles = StyleSheet.create({
   topBackground: {
     flex: 1,
-    height: "40%", // top 40% gradient
+    height: "40%",
   },
   bottomBackground: {
     flex: 1,
-    height: "60%", // bottom 60% white
+    height: "60%",
     backgroundColor: "#F7F7F7",
   },
   formContainer: {

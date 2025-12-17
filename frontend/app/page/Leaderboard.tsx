@@ -1,4 +1,3 @@
-// ---------------- Leaderboard.tsx ----------------
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   View,
@@ -21,14 +20,13 @@ import SongChallenge from "../components/SongChalleng";
 import { resolveProfileImage } from "../components/ProfileInfo";
 
 const { height } = Dimensions.get("window");
-const CHALLENGE_DEFAULT_START = "2025-09-26"; //comment: replace with actual default start date
+const CHALLENGE_DEFAULT_START = "2025-09-26";
 const CHALLENGE_LOOKBACK_DAYS = 14;
 const LEADERBOARD_CACHE_KEY = "leaderboard:weekly-cache:v1";
 const LEADERBOARD_CACHE_MAX_AGE_MS = 1000 * 60 * 5;
 
-// ---------------- Types ----------------
 interface User {
-  recordId: string; // convert to string
+  recordId: string;
   userName: string;
   accuracyScore: number;
   profilePicture?: string;
@@ -41,7 +39,6 @@ type LeaderboardCachePayload = {
   challengeVersionId?: number | null;
 };
 
-// ---------------- Leaderboard Screen ----------------
 export default function Leaderboard() {
   const [weeklyRanking, setWeeklyRanking] = useState<User[] | null>(null);
   const [challengeVersionId, setChallengeVersionId] = useState<number | null>(null);
@@ -230,11 +227,9 @@ export default function Leaderboard() {
     setIsRefreshing(false);
   }, [fetchLeaderboard]);
 
-  // ---------------- UI ----------------
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: "#131313" }} edges={["left", "right"]}>
       <View style={{ flex: 1, position: "relative" }}>
-        {/* Background Shapes */}
         <View style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 0 }}>
           <View
             style={{
@@ -271,8 +266,6 @@ export default function Leaderboard() {
           />
           <BlurView intensity={100} tint="dark" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} />
         </View>
-
-        {/* Content */}
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 40 }}
@@ -285,29 +278,24 @@ export default function Leaderboard() {
             />
           }
         >
-          {/* Title */}
           <View style={{ padding: 20 }}>
             <Text style={{ fontSize: 32, fontWeight: "bold", color: "white", textAlign: "center", marginTop: 40 }}>
               Leaderboard
             </Text>
           </View>
 
-          {/* Top 3 Score Chart */}
           <ScoreChart
             top3={weeklyRanking ? weeklyRanking.slice(0, 3) : []}
           />
 
-          {/* Weekly Challenge Song */}
           <View style={{ marginTop: 30, paddingHorizontal: 20 }}>
             <Text style={{ fontSize: 18, fontWeight: "bold", color: "white", marginBottom: 10 }}>
               Weekly Challenge Song
             </Text>
 
-            {/* Use the modular SongChallenge component */}
             <SongChallenge audioId={challengeVersionId} />
           </View>
 
-          {/* Top 10 Weekly Ranking */}
           <View style={{ marginTop: 30, paddingHorizontal: 20, marginBottom: 20 }}>
             <Text style={{ fontSize: 18, fontWeight: "bold", color: "white", marginBottom: 10 }}>
               Top 10 Weekly Ranking
@@ -327,7 +315,6 @@ export default function Leaderboard() {
   );
 }
 
-// ---------------- Styles ----------------
 const styles = StyleSheet.create({
   card: {
     flexDirection: "row",

@@ -64,7 +64,7 @@ export default function Home() {
       null
     );
   const hasBroadcastInitialRefreshRef = useRef(false);
-  const STALE_THRESHOLD_MS = 1000 * 60; // 1 minute
+  const STALE_THRESHOLD_MS = 1000 * 60;
   const BACKGROUND_REFRESH_DELAY_MS = 400;
 
   const sectionPositions = useRef<{ [key: string]: number }>({});
@@ -233,8 +233,8 @@ export default function Home() {
     section: "New Release" | "Trending" | "All Songs"
   ) => {
     const y = sectionPositions.current[section] || 0;
-    const offsetBefore = 60; // space above section in pixels
-    const targetY = Math.max(0, y - offsetBefore); // prevent negative offset
+    const offsetBefore = 60;
+    const targetY = Math.max(0, y - offsetBefore);
     listRef.current?.scrollToOffset({ offset: targetY, animated: true });
   };
 
@@ -308,7 +308,6 @@ export default function Home() {
           contentContainerStyle={{ paddingBottom: 150 }}
           renderItem={() => (
             <View style={{ zIndex: 2 }}>
-              {/* Profile */}
               <View style={{ padding: 20, marginTop: 50 }}>
                 <View style={{ flexDirection: "row", alignItems: "center" }}>
                   {photoUrl ? (
@@ -365,7 +364,6 @@ export default function Home() {
                 }
               />
 
-              {/* New Release Section */}
               <View
                 onLayout={(event) => onLayoutSection("New Release", event)}
                 ref={newReleaseRef}
@@ -384,7 +382,6 @@ export default function Home() {
                 <NewReleaseTabs userKey={userKey} refreshToken={refreshCounter} />
               </View>
 
-              {/* Top Rate Section */}
               <View
                 onLayout={(event) => onLayoutSection("Trending", event)}
                 ref={topRateRef}
@@ -405,7 +402,6 @@ export default function Home() {
                 </View>
               </View>
 
-              {/* Trending Section */}
               <View
                 onLayout={(event) => onLayoutSection("All Songs", event)}
                 ref={trendingRef}

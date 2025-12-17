@@ -1,4 +1,3 @@
-// app/screens/Summary.tsx
 import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import {
   View,
@@ -20,7 +19,7 @@ import { getRecordById } from "@/api/getRecordById";
 import { RootStackParamList } from "@/types/Navigation";
 import { getMistakes, MistakeSummaryPayload } from "@/api/getMistakes";
 import { getSong } from "@/api/song/getSong";
-import { SongType as ApiSongType } from "@/api/types/song"; // API version
+import { SongType as ApiSongType } from "@/api/types/song";
 import { MistakeType } from "@/api/types/mistakes";
 import { Audio, AVPlaybackStatus, AVPlaybackStatusToSet } from "expo-av";
 import { Directory, File, Paths } from "expo-file-system";
@@ -30,7 +29,6 @@ import { getAudioVerById } from "@/api/song/getAudioById";
 import { buildAssetUri } from "@/util/assetUri";
 import { previewBus } from "@/util/previewBus";
 
-// ------------------- APP TYPES -------------------
 export type SongType = {
   id: string;
   songName: string;
@@ -52,10 +50,9 @@ type UserRecord = {
   user_audio_path: string;
   user_id: number;
   version_id: number;
-  fullPath?: string; // add this
+  fullPath?: string;
 };
 
-// ------------------- MAPPER -------------------
 function buildAlbumCoverUri(cover: string | null): string {
   const resolved = buildAssetUri(cover);
   return resolved ?? "https://placehold.co/300x300";
@@ -105,7 +102,6 @@ const MISTAKE_COLOR_MAP: Record<string, string> = {
 
 const FALLBACK_MISTAKE_COLOR = "#ff7abf";
 
-// ------------------- SUMMARY SCREEN -------------------
 type SummaryRouteProp = RouteProp<RootStackParamList, "Summary">;
 
 export default function SummaryScreen() {
@@ -253,8 +249,6 @@ useEffect(() => {
     },
     [ensureLocalAudioFile]
   );
-
-  // ------------------- FETCH SONG -------------------
   useEffect(() => {
     const fetchSong = async () => {
       try {
@@ -820,9 +814,6 @@ useEffect(() => {
       console.warn("Failed to toggle instrumental", error);
     }
   }, []);
-
-  // ------------------- CLEANUP -------------------
-  // ------------------- FETCH MISTAKES -------------------
   useEffect(() => {
     const fetchMistakes = async () => {
       if (!recordId) {
@@ -912,8 +903,6 @@ useEffect(() => {
       instrumentEnabledRef.current = false;
     };
   }, []);
-
-  // ------------------- RENDER -------------------
   if (isLoading) {
     return (
       <LinearGradient colors={["#8C5BFF", "#120a1a"]} style={{ flex: 1 }}>
@@ -932,7 +921,6 @@ useEffect(() => {
       <SafeAreaView style={{ flex: 1 }}>
         <StatusBar barStyle="light-content" />
 
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             onPress={() =>
@@ -960,7 +948,6 @@ useEffect(() => {
           contentContainerStyle={{ paddingBottom: 28 }}
           showsVerticalScrollIndicator={false}
         >
-          {/* Top card */}
           <View style={styles.topRow}>
             <Image source={{ uri: theTrack.image }} style={styles.art} />
             <View style={{ flex: 1, marginLeft: 14 }}>
@@ -970,7 +957,6 @@ useEffect(() => {
             <Text style={styles.scoreText}>{theScore}%</Text>
           </View>
 
-          {/* Slider */}
           <View style={{ marginTop: 18, paddingHorizontal: 22 }}>
             <Slider
               minimumValue={0}
@@ -995,7 +981,6 @@ useEffect(() => {
             </View>
           </View>
 
-          {/* Play User Recording */}
           {userRecord?.user_audio_path && (
             <View style={styles.playbackControlsRow}>
               <TouchableOpacity
@@ -1031,7 +1016,6 @@ useEffect(() => {
         </View>
           )}
 
-          {/* Missing Part */}
           <Text style={styles.sectionTitle}>
             {shouldShowQualityTier ? "Something wrong!" : "Performance Insight"}
           </Text>
@@ -1071,7 +1055,6 @@ useEffect(() => {
   );
 }
 
-// ------------------- HELPERS -------------------
 function mistakeToIssue(m: MistakeType): Issue {
   const rawStart = m.timestamp_start ?? 0;
   const atSeconds =
@@ -1162,8 +1145,6 @@ function buildPitchDetail(diff?: number, reasonKey?: string) {
 
   return ` (+${formatted} Hz)`;
 }
-
-// ------------------- STYLES -------------------
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 16,

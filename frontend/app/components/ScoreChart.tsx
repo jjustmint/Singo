@@ -12,20 +12,16 @@ type ScoreChartProps = {
 };
 
 export default function ScoreChart({ top3 = [] }: ScoreChartProps) {
-  // Fill defaults if fewer than 3 users
   const first = top3[0] || { userName: "N/A", accuracyScore: 0 };
   const second = top3[1] || { userName: "N/A", accuracyScore: 0 };
   const third = top3[2] || { userName: "N/A", accuracyScore: 0 };
 
-  // Get maximum score to scale bars
   const maxScore = Math.max(first.accuracyScore, second.accuracyScore, third.accuracyScore, 1);
 
-  // Function to scale height (max bar height = 180)
   const scaleHeight = (score: number) => (score / maxScore) * 180;
 
   return (
     <View style={{ flexDirection: "row", justifyContent: "center", alignItems: "flex-end", marginTop: 10 }}>
-      {/* 2nd place */}
       <View style={{ alignItems: "center", marginHorizontal: 10 }}>
         <FontAwesome6 name="medal" size={24} color="#C0C0C0" />
         <Text style={{ color: "white", fontWeight: "bold", fontSize: 35, marginBottom: 4 }}>2</Text>
@@ -45,7 +41,6 @@ export default function ScoreChart({ top3 = [] }: ScoreChartProps) {
         </View>
       </View>
 
-      {/* 1st place */}
       <View style={{ alignItems: "center", marginHorizontal: 10 }}>
         <FontAwesome6 name="crown" size={30} color="#facc15" />
         <Text style={{ color: "#FFD700", fontWeight: "bold", fontSize: 50, marginBottom: 4 }}>1</Text>
@@ -65,7 +60,6 @@ export default function ScoreChart({ top3 = [] }: ScoreChartProps) {
         </View>
       </View>
 
-      {/* 3rd place */}
       <View style={{ alignItems: "center", marginHorizontal: 10 }}>
         <FontAwesome6 name="medal" size={24} color="#CD7F32" />
         <Text style={{ color: "white", fontWeight: "bold", fontSize: 25, marginBottom: 4 }}>3</Text>

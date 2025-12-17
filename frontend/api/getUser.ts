@@ -7,7 +7,7 @@ type UserResponse = BaseResponse<UserType>;
 export const getUser = async (): Promise<UserResponse> => {
     try {
         const response = await Axios.get<UserResponse>(
-            "/private/getuser",  // body (empty if not needed)
+            "/private/getuser",
         );
         return response.data;
 

@@ -8,7 +8,7 @@ import type { TabKey } from "../index";
 const TABS: TabKey[] = ["home", "stats", "profile"];
 
 export default function BottomNav({ active, onTabPress }: { active: TabKey; onTabPress: (k: TabKey) => void; }) {
-  const insets = useSafeAreaInsets();                       // ⬅ safe bottom
+  const insets = useSafeAreaInsets();
   const indicatorX = useRef(new Animated.Value(0)).current;
   const buttonLayouts = useRef<{ [key in TabKey]?: number }>({}).current;
 
@@ -40,7 +40,6 @@ export default function BottomNav({ active, onTabPress }: { active: TabKey; onTa
 }
 
 const styles = StyleSheet.create({
-  // absolute wrapper to float above content
   wrap: {
     position: "absolute",
     left: 16,

@@ -32,13 +32,12 @@ import { getUser } from "@/api/getUser";
 import Svg, { Ellipse, SvgUri } from "react-native-svg";
 
 const CARD_RADIUS = 26;
-const ROOT_BG = "#ECECEC"; // original root color (behind everything)
-const CARD_BG = "#F3F3F3"; // original card color
-const HEADER_HEIGHT = 320;  // original gradient/header height
-const OVERLAP = 26;         // card overlaps gradient by 26px
+const ROOT_BG = "#ECECEC";
+const CARD_BG = "#F3F3F3";
+const HEADER_HEIGHT = 320;
+const OVERLAP = 26;
 
 const { height: SCREEN_H } = Dimensions.get("window");
-// Ensure the sheet covers the rest of the screen visually
 const SHEET_MIN_HEIGHT = SCREEN_H - (HEADER_HEIGHT - OVERLAP);
 
 const MICROPHONE_ASSET = require("@/assets/images/microphone.svg");
@@ -96,10 +95,10 @@ const LoginScreen: React.FC = () => {
   index: 0,
   routes: [
     {
-      name: "MainTabs" as never, // must match your Stack.Screen
+      name: "MainTabs" as never,
       state: {
         index: 0,
-        routes: [{ name: "Home" as never }], // a tab inside MainTabs
+        routes: [{ name: "Home" as never }],
       },
     },
   ],
@@ -134,21 +133,18 @@ const LoginScreen: React.FC = () => {
 
   return (
     <View style={{ flex: 1, backgroundColor: ROOT_BG }}>
-      {/* Layer 1: FULL CARD_BG so bottom always matches the sheet */}
       <View style={[StyleSheet.absoluteFillObject, { backgroundColor: CARD_BG }]} />
 
-      {/* Layer 2: gradient only behind the header (+ extra to sit under the overlap curve) */}
       <LinearGradient
         colors={["#5A62FF", "#C56FFF"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[
           StyleSheet.absoluteFillObject,
-          { height: HEADER_HEIGHT + OVERLAP + 80 } // +20 buffer ensures no tiny gap
+          { height: HEADER_HEIGHT + OVERLAP + 80 }
         ]}
       />
 
-      {/* Status bar over gradient */}
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
 
       <SafeAreaView style={{ flex: 1, backgroundColor: "transparent" }}>
@@ -164,11 +160,10 @@ const LoginScreen: React.FC = () => {
             showsVerticalScrollIndicator={false}
             
           >
-            {/* Transparent header content (gradient shows through) */}
             <View
               style={{
                 height: HEADER_HEIGHT,
-                paddingTop: 24,    // keep original spacing
+                paddingTop: 24,
                 paddingHorizontal: 28,
                 justifyContent: "center",
                 backgroundColor: "transparent",
@@ -178,7 +173,6 @@ const LoginScreen: React.FC = () => {
               <Text style={styles.hello}>Hello!</Text>
               <Text style={styles.subtitle}>Welcome to Singo</Text>
 
-              {/* Microphone illustration */}
               <View style={styles.microphoneContainer} pointerEvents="none">
                 {MICROPHONE_URI ? (
                   <SvgUri
@@ -192,24 +186,21 @@ const LoginScreen: React.FC = () => {
                 </View>
               </View>
 
-            {/* The sheet/card that overlaps gradient and fills to bottom */}
             <View
               style={[
                 styles.cardSheet,
                 {
                   minHeight: SHEET_MIN_HEIGHT,
                   backgroundColor: CARD_BG,
-                  marginTop: -OVERLAP, // overlap exactly like original
+                  marginTop: -OVERLAP,
                 },
               ]}
             >
               <Text style={styles.cardTitle}>Login</Text>
-
-              {/* Username */}
               <View style={styles.inputRow}>
                 <Ionicons name="person-outline" size={20} color="#B7BAC5" />
                 <TextInput
-                  style={[styles.input, { minHeight: 40 }]} // Added minHeight to ensure proper measurement
+                  style={[styles.input, { minHeight: 40 }]}
                   placeholder="Username"
                   placeholderTextColor="#B7BAC5"
                   value={username}
@@ -225,7 +216,6 @@ const LoginScreen: React.FC = () => {
                 <Text style={styles.errorText}>{fieldErrors.username}</Text>
               ) : null}
 
-              {/* Password */}
               <View style={styles.inputRow}>
                 <Ionicons name="lock-closed-outline" size={20} color="#B7BAC5" />
                 <TextInput
@@ -254,7 +244,6 @@ const LoginScreen: React.FC = () => {
               {fieldErrors.password ? (
                 <Text style={styles.errorText}>{fieldErrors.password}</Text>
               ) : null}
-              {/* Login */}
               <TouchableOpacity style={styles.cta} onPress={handleLogin} activeOpacity={0.9}>
                 {loading ? (
                   <ActivityIndicator color="#fff" />
@@ -263,7 +252,6 @@ const LoginScreen: React.FC = () => {
                 )}
               </TouchableOpacity>
 
-              {/* Signup */}
               <View style={styles.signupRow}>
                 <Text style={styles.signupText}>Don’t have an account? </Text>
                 <TouchableOpacity onPress={() => navigation.navigate("Signup" as never)}>
@@ -308,8 +296,6 @@ const styles = StyleSheet.create({
   microphoneSvg: {
     alignSelf: "center",
   },
-
-  // The full-width sheet that matches the card background and fills to bottom
   cardSheet: {
     borderTopLeftRadius: CARD_RADIUS,
     borderTopRightRadius: CARD_RADIUS,

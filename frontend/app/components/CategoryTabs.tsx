@@ -23,7 +23,7 @@ const CategoryTabs: React.FC<CategoryTabsProps> = ({ scrollToSection }) => {
             <TouchableOpacity
               onPress={() => {
                 setSelected(item);
-                scrollToSection(item); // Call the scrollToSection function
+                scrollToSection(item);
               }}
               style={{
                 backgroundColor: isSelected ? '#6C63FF' : '#333',
@@ -53,4 +53,3 @@ const CategoryTabs: React.FC<CategoryTabsProps> = ({ scrollToSection }) => {
 };
 
 export default CategoryTabs;
-

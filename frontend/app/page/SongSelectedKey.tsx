@@ -1,5 +1,3 @@
-
-// SongSelectedKey.tsx
 import React, { useState } from "react";
 import {
   View,
@@ -40,27 +38,23 @@ const SongSelectedKey = () => {
 
   return (
     <SafeAreaView className="flex-1 bg-black">
-      {/* Background Image */}
       <ImageBackground
         source={image}
         className="flex-1 justify-between"
         resizeMode="cover"
         blurRadius={4}
       >
-        {/* Header */}
         <View className="flex-row items-center p-4">
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
         </View>
 
-        {/* Song Info */}
         <View className="px-6">
           <Text className="text-white text-2xl font-bold">{title}</Text>
           <Text className="text-gray-300 text-lg mt-1">{artist}</Text>
         </View>
 
-        {/* Key Selector */}
         <View className="items-center pb-12">
           <View className="flex-row items-center space-x-8">
             <TouchableOpacity onPress={handlePrev}>
@@ -78,7 +72,6 @@ const SongSelectedKey = () => {
 
           <Text className="text-gray-400 text-base mt-2">Suggested</Text>
 
-          {/* Confirm Button */}
           <TouchableOpacity
             onPress={() =>
               console.log("Selected Key:", keys[currentIndex])

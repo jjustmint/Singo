@@ -72,7 +72,7 @@ const LYRICS_UNAVAILABLE_MESSAGE = "This song does not support lyrics yet.";
 const VOCAL_VOLUME = 0.6;
 const DEFAULT_RECORDING_EXTENSION = "m4a";
 const RECORDING_DIRECTORY_NAME = "recordings";
-const MAX_RECORDING_UPLOAD_BYTES = 1 * 1024 * 1024; // Upstream gateway enforces ~1 MB payload limit
+const MAX_RECORDING_UPLOAD_BYTES = 1 * 1024 * 1024;
 const WEEKLY_CHALLENGE_LOOKBACK_DAYS = 7;
 const WEEKLY_CHALLENGE_FALLBACK_START = "2025-09-26";
 const WEEKLY_CHALLENGE_CACHE_MAX_AGE_MS = 1000 * 60 * 5;
@@ -731,18 +731,14 @@ const MusicPlayer: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       return () => {
-        cleanupAudioResources().catch(() => {
-          /* noop */
-        });
+        cleanupAudioResources().catch(() => undefined);
       };
     }, [cleanupAudioResources])
   );
 
   useEffect(() => {
     return () => {
-      cleanupAudioResources().catch(() => {
-        /* noop */
-      });
+      cleanupAudioResources().catch(() => undefined);
     };
   }, [cleanupAudioResources]);
 
@@ -1208,7 +1204,6 @@ const MusicPlayer: React.FC = () => {
     if (lyricsContainerHeight <= 0) {
       return 0;
     }
-    // Allow enough trailing space for centre alignment without keeping the highlight stuck when nearing the end
     return Math.max(lyricsContainerHeight * 0.45, 140);
   }, [lyricsContainerHeight]);
 
@@ -1917,7 +1912,6 @@ const MusicPlayer: React.FC = () => {
         </View>
 
         <View style={styles.controls}>
-          {/* Placeholder button (left) */}
           <View style={styles.vocalToggle}>
             <MaterialIcons
               name="record-voice-over"
@@ -2113,7 +2107,6 @@ const styles = StyleSheet.create({
     marginBottom: 80,
   },
   vocalToggle: {
-    // backgroundColor: "rgba(107, 107, 107, 0.5)",
     padding: 12,
     borderRadius: 30,
     justifyContent: "center",
