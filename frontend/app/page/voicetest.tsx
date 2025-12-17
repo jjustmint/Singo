@@ -149,8 +149,6 @@ const VoiceTestScreen = ({ navigation }: any) => {
       }
     }, 1000);
   };
-
-  // ---------- Handlers ----------
   const startRecording = async () => {
     if (recordingRef.current || recording || isPreparingRef.current) return;
     const newRecording = new Audio.Recording();
@@ -184,7 +182,6 @@ const VoiceTestScreen = ({ navigation }: any) => {
       try {
         await newRecording.stopAndUnloadAsync();
       } catch {
-        /* noop */
       }
       stopPulse();
       clearRecordingTimer();
@@ -208,9 +205,6 @@ const VoiceTestScreen = ({ navigation }: any) => {
       setRecording(null);
       stopPulse();
       setUploading(true);
-
-      // upload here if needed...
-
       setUploading(false);
       setStep(3);
     } catch (err) {
@@ -231,12 +225,10 @@ const VoiceTestScreen = ({ navigation }: any) => {
         try {
           await activeSound.stopAsync();
         } catch {
-          /* ignore */
         }
         try {
           await activeSound.unloadAsync();
         } catch {
-          /* ignore */
         }
         setSound(null);
         soundRef.current = null;
@@ -361,8 +353,6 @@ const VoiceTestScreen = ({ navigation }: any) => {
       }
     };
   }, []);
-
-  // ---------- UI model ----------
   const stepStyles = [
     { titleSize: 24, buttonSize: 60 },
     { titleSize: 48, buttonSize: 60 },
@@ -407,14 +397,12 @@ const VoiceTestScreen = ({ navigation }: any) => {
   return (
     <SafeAreaView style={{ flex: 1 }} edges={["left", "right"]}>
       <View style={{ flex: 1 }}>
-        {/* Full-bleed gradient background */}
         <LinearGradient
           colors={["#ff7eb3", "#6c5ce7"]}
           style={StyleSheet.absoluteFill}
         />
 
         <View style={styles.container}>
-          {/* Header lines (skip on step 4 for a custom centered layout) */}
           {shouldShowHeader &&
             screens[step].lines.map((line, index) => (
               <Text
@@ -433,7 +421,6 @@ const VoiceTestScreen = ({ navigation }: any) => {
               </Text>
             ))}
 
-          {/* Arrow button for step 0 & 1 */}
           {step < 2 && (
             <TouchableOpacity
               style={{
@@ -449,7 +436,6 @@ const VoiceTestScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           )}
 
-          {/* Step 2: Recording */}
           {step === 2 && (
             <View style={styles.countdownWrap}>
               {isCountingDown && countdownValue !== null && (
@@ -481,7 +467,6 @@ const VoiceTestScreen = ({ navigation }: any) => {
             </View>
           )}
 
-          {/* Step 3: After recording finished */}
           {step === 3 && recordedUri && (
             <View style={{ flex: 1, width: "100%" }}>
               <View style={styles.centerWrap}>
@@ -528,7 +513,6 @@ const VoiceTestScreen = ({ navigation }: any) => {
             </View>
           )}
 
-          {/* Step 4: Show detected key result (center text, bottom button) */}
           {step === 4 && (
             <View style={styles.step4}>
               <View style={styles.step4Center}>

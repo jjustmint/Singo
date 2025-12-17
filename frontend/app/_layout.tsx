@@ -1,4 +1,3 @@
-// MainNavigator.tsx
 import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
@@ -11,7 +10,7 @@ import Profile from "./page/Profile";
 import EditProfile from "./page/EditProfile";
 import BottomNav from "./components/BottomNav";
 import ChooseKey from "./page/ChooseKey";
-import MusicPlayer from "./page/MusicPlayer";   // (keep if used elsewhere)         // (keep if used elsewhere)
+import MusicPlayer from "./page/MusicPlayer";
 import LoginScreen from "./pages/Login";
 import SignupScreen from "./pages/Signup";
 import VoiceTestScreen from "./page/voicetest";

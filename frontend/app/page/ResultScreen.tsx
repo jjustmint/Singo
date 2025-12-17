@@ -5,7 +5,6 @@ import { useNavigation, RouteProp } from "@react-navigation/native";
 import { StackNavigationProp } from "@react-navigation/stack";
 import { RootStackParamList } from "@/types/Navigation";
 
-// ✅ Type navigation and route props
 type ResultNavProp = StackNavigationProp<RootStackParamList, "Result">;
 type ResultRouteProp = RouteProp<RootStackParamList, "Result">;
 
@@ -19,7 +18,6 @@ const ResultScreen: React.FC<Props> = ({ route }) => {
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      // Navigate to Summary with all params
       navigation.navigate("Summary", {
         score,
         recordId,

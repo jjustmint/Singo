@@ -2,8 +2,6 @@ import React from "react";
 import { View, Text, Image, StyleSheet, FlatList } from "react-native";
 import AntDesign from "@expo/vector-icons/AntDesign";
 import { resolveProfileImage } from "./ProfileInfo";
-
-// ---------------- Types ----------------
 interface User {
   recordId: string;
   userName: string;
@@ -14,15 +12,13 @@ interface User {
 interface WeeklyRankingProps {
   data: User[];
 }
-
-// ---------------- SongCard Component ----------------
 interface SongCardProps {
   user: User;
   index: number;
 }
 
 const SongCard: React.FC<SongCardProps> = ({ user, index }) => {
-  const rankColors = ["#FFD700", "#C0C0C0", "#CD7F32"]; // gold, silver, bronze
+  const rankColors = ["#FFD700", "#C0C0C0", "#CD7F32"];
   const rankColor = rankColors[index] || "#fff";
   const rankSize = index < 3 ? 50 - index * 4 : 25;
   const accuracy = Number(user.accuracyScore ?? 0);
@@ -50,25 +46,23 @@ const SongCard: React.FC<SongCardProps> = ({ user, index }) => {
   );
 };
 
-// ---------------- WeeklyRanking Component ----------------
 const WeeklyRanking: React.FC<WeeklyRankingProps> = ({ data }) => {
   return (
     <FlatList
-      data={data.slice(0, 10)} // Top 10 users
+      data={data.slice(0, 10)}
       keyExtractor={(item) => item.recordId}
       renderItem={({ item, index }) => (
         <SongCard user={item} index={index} />
       )}
       contentContainerStyle={{ paddingBottom: 20 }}
       scrollEnabled={false}
-      nestedScrollEnabled={true} // Allows it to scroll inside parent ScrollView
+      nestedScrollEnabled={true}
     />
   );
 };
 
 export default WeeklyRanking;
 
-// ---------------- Styles ----------------
 const styles = StyleSheet.create({
   card: {
     flexDirection: "row",

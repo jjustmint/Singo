@@ -7,7 +7,7 @@ type GetAllSongResponse = BaseResponse<SongType[]>;
 export const getAllsongs = async (): Promise<GetAllSongResponse> => {
     try {
         const response = await Axios.get<GetAllSongResponse>(
-            "/private/findallsong",  // body (empty if not needed)
+            "/private/findallsong",
         );
         return response.data;
 

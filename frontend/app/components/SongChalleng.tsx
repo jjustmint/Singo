@@ -1,4 +1,3 @@
-// ---------------- SongChallenge.tsx ----------------
 import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
@@ -160,7 +159,6 @@ export default function SongChallenge({ audioId }: Props) {
   );
 }
 
-// ---------------- Styles ----------------
 const styles = StyleSheet.create({
   container: {
     paddingVertical: 20,

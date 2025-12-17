@@ -29,7 +29,6 @@ export default function Profile() {
     userKey: string | null;
   }>({ name: "", photo: null, userKey: null });
   
-  // Animation values
   const dropdownHeight = useRef(new Animated.Value(0)).current;
   const dropdownOpacity = useRef(new Animated.Value(0)).current;
 
@@ -94,7 +93,6 @@ export default function Profile() {
 
   const toggleDropdown = () => {
     if (isDropdownOpen) {
-      // Close animation
       Animated.parallel([
         Animated.timing(dropdownHeight, {
           toValue: 0,
@@ -108,7 +106,6 @@ export default function Profile() {
         }),
       ]).start(() => setIsDropdownOpen(false));
     } else {
-      // Open animation
       setIsDropdownOpen(true);
       Animated.parallel([
         Animated.timing(dropdownHeight, {
@@ -164,7 +161,6 @@ export default function Profile() {
       edges={["left", "right"]}
     >
       <View style={{ flex: 1, position: "relative" }}>
-        {/* Background blur effect */}
         <View
           style={{
             position: "absolute",
@@ -221,8 +217,6 @@ export default function Profile() {
             }}
           />
         </View>
-
-        {/* Settings Icon */}
         <TouchableOpacity
           onPress={toggleDropdown}
           style={{
@@ -240,8 +234,6 @@ export default function Profile() {
         >
           <Ionicons name="settings-outline" size={24} color="white" />
         </TouchableOpacity>
-
-        {/* Dropdown Menu */}
         {isDropdownOpen && (
           <Animated.View
             style={{
@@ -308,7 +300,6 @@ export default function Profile() {
             </Animated.View>
           )}
 
-        {/* Use FlatList as wrapper instead of ScrollView */}
         <FlatList
           data={sections}
           keyExtractor={(item) => item.key}
@@ -324,7 +315,6 @@ export default function Profile() {
           }
           renderItem={() => (
             <View style={{ zIndex: 2 }}>
-              {/* Profile */}
               <View style={{ padding: 20, marginTop: 50 }}>
                 <ProfileInfo
                   songCount={history.length}

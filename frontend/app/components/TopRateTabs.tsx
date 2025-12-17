@@ -43,15 +43,15 @@ interface Song {
 const FALLBACK_COVER = 'https://via.placeholder.com/150';
 
 const CACHE_KEY = 'toprate:global-v1';
-const CACHE_TTL_MS = 1000 * 30; // 30-second cache to keep listings fresh
-const REALTIME_REFRESH_INTERVAL_MS = 1000 * 15; // refresh roughly every 15 seconds while visible
-const REALTIME_PROBE_RANGE = 12; // how many new record ids to probe before a full recompute
+const CACHE_TTL_MS = 1000 * 30;
+const REALTIME_REFRESH_INTERVAL_MS = 1000 * 15;
+const REALTIME_PROBE_RANGE = 12;
 const INITIAL_RECORD_SEARCH_LIMIT = 20000;
 const MAX_RECORD_SCAN_RANGE = 40000;
 const MAX_TOTAL_SCAN_RANGE = MAX_RECORD_SCAN_RANGE * 5;
 const RECORD_FETCH_BATCH_SIZE = 25;
 const VERSION_FETCH_BATCH_SIZE = 25;
-const MAX_TRAILING_GAP = 2000; // stop after this many missing ids beyond last success
+const MAX_TRAILING_GAP = 2000;
 
 type RecordSummary = {
   record_id: number;
@@ -63,8 +63,6 @@ const isIgnorableAudioError = (err: unknown) =>
   err instanceof Error && /seeking interrupted/i.test(err.message);
 
 type NavigationProp = StackNavigationProp<RootStackParamList, 'MainTabs'>;
-
-// --- Card Component ---
 export const TopRateTabs: React.FC<{
   song: Song;
   index: number;
@@ -74,10 +72,9 @@ export const TopRateTabs: React.FC<{
   userKey?: string | null;
 }> = ({ song, index, onToggle, isPlaying, isLoading, userKey }) => {
   const navigation = useNavigation<NavigationProp>();
-  // Rank styling
-  const rankColors = ['#FFD700', '#C0C0C0', '#CD7F32']; // gold, silver, bronze
+  const rankColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
   const rankColor = rankColors[index] || '#fff';
-  const rankSize = index < 3 ? 50 - index * 4 : 25; // 1=50, others=25
+  const rankSize = index < 3 ? 50 - index * 4 : 25;
   const imageUri = useMemo(() => song.image || FALLBACK_COVER, [song.image]);
 
   const handleCardPress = useCallback(() => {
@@ -117,7 +114,6 @@ export const TopRateTabs: React.FC<{
       onPress={handleCardPress}
       activeOpacity={0.85}
     >
-      {/* Rank Number */}
       <Text style={[styles.rank, { color: rankColor, fontSize: rankSize }]}>
         {index + 1}
       </Text>
@@ -163,7 +159,6 @@ export const TopRateTabs: React.FC<{
   );
 };
 
-// --- Screen Component ---
 const TopRateScreen: React.FC<{ userKey?: string | null; refreshToken?: number }> = ({
   userKey,
   refreshToken,
@@ -809,14 +804,13 @@ const TopRateScreen: React.FC<{ userKey?: string | null; refreshToken?: number }
         />
       )}
       contentContainerStyle={{ paddingBottom: 20 }}
-      nestedScrollEnabled={true} // Enable nested scrolling
+      nestedScrollEnabled={true}
       ListEmptyComponent={listEmptyComponent}
       showsVerticalScrollIndicator={false}
     />
   );
 };
 
-// --- Styles ---
 const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',

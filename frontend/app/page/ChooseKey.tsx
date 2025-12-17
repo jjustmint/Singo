@@ -167,15 +167,12 @@ const ChooseKey: React.FC = () => {
   const [coverUri, setCoverUri] = useState<string>(
     buildAssetUri(image) ?? FALLBACK_COVER
   );
-
-  // === Fetch keys and set initial index ===
   useEffect(() => {
     if (Number.isNaN(numericSongId)) {
       console.warn("Invalid song id:", song_id);
       return;
     }
 
-    // Weekly challenge case
     if (hasInitialPrefetch) {
       return;
     }
@@ -213,8 +210,6 @@ const ChooseKey: React.FC = () => {
 
     fetchKeys();
   }, [numericSongId, selectedKey, versionId, userKey, song_id, hasInitialPrefetch]);
-
-  // === Fetch cover ===
   useEffect(() => {
     const resolvedCover = buildAssetUri(image) ?? FALLBACK_COVER;
     setCoverUri(resolvedCover);
@@ -232,8 +227,6 @@ const ChooseKey: React.FC = () => {
     };
     fetchCover();
   }, [image, numericSongId]);
-
-  // === Navigation buttons ===
   useEffect(() => {
     const currentVersion = songList[currentIndex];
     if (currentVersion) {
@@ -324,7 +317,6 @@ const ChooseKey: React.FC = () => {
         </TouchableOpacity>
       </View>
 
-      {/* === Key status text (Original, Recommended, Weekly, or both) === */}
       {isLockedWeekly ? (
         <Text style={styles.suggested}>Weekly challenge key</Text>
       ) : (
@@ -332,7 +324,6 @@ const ChooseKey: React.FC = () => {
           const normalizedCurrent = keys[currentIndex]?.toUpperCase().trim();
           const normalizedOriginal = song.key_signature?.toUpperCase().trim();
 
-          // Check if this is the original key
           const isOriginal =
             normalizedCurrent && normalizedOriginal
               ? normalizedCurrent === normalizedOriginal
@@ -341,7 +332,6 @@ const ChooseKey: React.FC = () => {
           const isSuggested =
             keys.length > 0 && currentIndex === suggestedIndex;
 
-          // Decide what to display
           if (isOriginal && isSuggested)
             return <Text style={styles.suggested}>Original (Suggested)</Text>;
           if (isOriginal) return <Text style={styles.suggested}>Original</Text>;

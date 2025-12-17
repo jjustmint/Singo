@@ -9,7 +9,7 @@ export const getSongkey = async (audio_id: number): Promise<SongKeyResponse> => 
         const response = await Axios.post<SongKeyResponse>(
             "/private/getsongkey",{
                 song_id: audio_id
-            } // body (empty if not needed)
+            }
         );
         return response.data;
 

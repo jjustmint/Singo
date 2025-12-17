@@ -1,18 +1,15 @@
-// navigation.ts
 import type { NavigatorScreenParams } from "@react-navigation/native";
 import { SongType } from "./Song";
 import { SongKeyType } from "./SongKey";
 
-// Bottom tabs live in their own param list
 export type TabParamList = {
   Home: undefined;
   Leaderboard: undefined;
   Profile: undefined;
 };
 
-// Root stack references the tabs via NavigatorScreenParams
 export type RootStackParamList = {
-  MainTabs: NavigatorScreenParams<TabParamList>; // <-- important
+  MainTabs: NavigatorScreenParams<TabParamList>;
   ChooseKey: { song: SongType; selectedKey?: string | null; versionId?: number; userKey?: string | null; };
   SettingScreen: undefined;
   SignIn: undefined;

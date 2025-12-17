@@ -1,7 +1,7 @@
 import { Axios } from "@/util/AxiosInstance";
 import { BaseResponse } from "./types/baseResponse";
 
-type UpdateKeyResponse = BaseResponse<string>; // adjust `any` if backend returns a specific shape
+type UpdateKeyResponse = BaseResponse<string>;
 
 export const updateKey = async (uri: string): Promise<UpdateKeyResponse> => {
   try {
